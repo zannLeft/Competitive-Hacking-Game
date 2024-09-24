@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 
-public class PlayerLook : MonoBehaviour
+public class PlayerLook : NetworkBehaviour
 {
     public Camera cam;
     private float xRotation = 0f;
@@ -12,6 +13,9 @@ public class PlayerLook : MonoBehaviour
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
+        if (!IsOwner) {
+            cam.gameObject.SetActive(false);
+        }
     }
 
     public void ProcessLook(Vector2 input)

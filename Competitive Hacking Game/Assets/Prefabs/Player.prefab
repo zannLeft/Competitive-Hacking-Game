@@ -102,6 +102,11 @@ GameObject:
   m_Component:
   - component: {fileID: 5810578972082535375}
   - component: {fileID: 3605762724651901077}
+  - component: {fileID: 368688436218571757}
+  - component: {fileID: 4268099303277880832}
+  - component: {fileID: 52327711554441371}
+  - component: {fileID: 2516337391780063677}
+  - component: {fileID: 5808954152207513636}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -152,6 +157,102 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &368688436218571757
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2897901417925903397}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  GlobalObjectIdHash: 1531950383
+  InScenePlacedSourceGlobalObjectIdHash: 1531950383
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+--- !u!114 &4268099303277880832
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2897901417925903397}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e6d2ed725f005b4fb38f929c1a737e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &52327711554441371
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2897901417925903397}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 313a456ca0cb51543ab67979438a5768, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  speed: 2
+  sprintSpeed: 5
+  jumpHeight: 0.7
+  crouchHeight: 0.1
+  standHeight: 2
+--- !u!114 &2516337391780063677
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2897901417925903397}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d27cd7a084ec3c40bfa2059e177a639, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cam: {fileID: 6511939616478623845}
+  xSensitivity: 30
+  ySensitivity: 30
+--- !u!114 &5808954152207513636
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2897901417925903397}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9c53998d785378b48a802ff53214a65c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  UseUnreliableDeltas: 0
+  SyncPositionX: 1
+  SyncPositionY: 1
+  SyncPositionZ: 1
+  SyncRotAngleX: 0
+  SyncRotAngleY: 1
+  SyncRotAngleZ: 0
+  SyncScaleX: 0
+  SyncScaleY: 0
+  SyncScaleZ: 0
+  PositionThreshold: 0.001
+  RotAngleThreshold: 0.01
+  ScaleThreshold: 0.01
+  UseQuaternionSynchronization: 0
+  UseQuaternionCompression: 0
+  UseHalfFloatPrecision: 0
+  InLocalSpace: 0
+  Interpolate: 1
+  SlerpPosition: 0
 --- !u!1 &7586606506958820351
 GameObject:
   m_ObjectHideFlags: 0
@@ -163,9 +264,9 @@ GameObject:
   - component: {fileID: 2479905183696501194}
   - component: {fileID: 4565042604915972975}
   - component: {fileID: 8301384236020803647}
-  m_Layer: 7
+  m_Layer: 0
   m_Name: Face
-  m_TagString: EditorOnly
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -179,8 +280,8 @@ Transform:
   m_GameObject: {fileID: 7586606506958820351}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.59, z: 0.362}
-  m_LocalScale: {x: 0.69121, y: 0.26351142, z: 0.35266548}
+  m_LocalPosition: {x: 0, y: 0.59, z: 0.202}
+  m_LocalScale: {x: 0.69121, y: 0.26351142, z: 0.7592183}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5602191335484081788}

@@ -1,97 +1,129 @@
+using System;
 using System.Collections;
-using System.Collections.Generic;
-using Unity.VisualScripting;
+using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.SocialPlatforms;
 
-public class PlayerMotor : MonoBehaviour
+public class PlayerMotor : NetworkBehaviour
 {
     private CharacterController controller;
     private Vector3 playerVelocity;
     private Vector3 moveDirection = Vector3.zero;
+
     private bool isGrounded;
-    public float speed = 5;
-    public float sprintSpeed = 5;
-    public float gravity = -9.8f;
-    public float jumpHeight = 3;
+
+    [SerializeField] private float speed = 5;
+    private float speedLerpTime = 5f;
+    [SerializeField] private float sprintSpeed = 5;
     private bool sprinting = false;
+    float smoothSpeed = 7.5f;
+    float targetSpeed = 0f;
+
+
+
+    [SerializeField] private float jumpHeight = 3;
+
+
+    [SerializeField] private float crouchHeight = 0.1f;
+    [SerializeField] private float standHeight = 2f;
     private bool crouching = false;
     private float crouchTimer = 1;
     private bool lerpCrouch = false;
+    
 
-    void Start()
-    {
+    private bool sprintButtonHeld = false;
+    private bool wasGrounded = false;
+
+
+    void Start() {
         controller = GetComponent<CharacterController>();
     }
 
-    void Update()
-    {
+    void Update() {
         isGrounded = controller.isGrounded;
-
-        if (lerpCrouch)
+        if (isGrounded && !wasGrounded)
         {
+            Land();
+        }
+
+        wasGrounded = isGrounded;
+
+        if (lerpCrouch) {
             crouchTimer += Time.deltaTime;
-            float p = crouchTimer / 1 ;
-            p *= p;
-            if (crouching)
-                controller.height = Mathf.Lerp(controller.height, 0.1f, p);
-            else
-                controller.height = Mathf.Lerp(controller.height, 2, p);
-            
-            if (p > 1)
-            {
+            float p = crouchTimer / 1;
+            controller.height = Mathf.Lerp(controller.height, crouching ? crouchHeight : standHeight, p * p);
+
+            if (p > 1) {
                 lerpCrouch = false;
                 crouchTimer = 0f;
             }
         }
     }
-
-    // receive the vector2 inputs from InputManager.cs and apply them to the character controller.
-    public void ProcessMove(Vector2 input)
-    {
-        if (isGrounded)
-        {
-            moveDirection.x = input.x;
-            moveDirection.z = input.y;
-
-            moveDirection = transform.TransformDirection(moveDirection);
-        }
+    
+    #region Movement
+    public void ProcessMove(Vector2 input) {
+        playerVelocity.y += Physics.gravity.y * Time.deltaTime;
         
-        controller.Move(moveDirection * speed * Time.deltaTime);
-        
-
-        playerVelocity.y += gravity * Time.deltaTime;
-        if (isGrounded && playerVelocity.y < 0)
-        {
-            playerVelocity.y = -2f;
+        if (isGrounded) {
+            smoothSpeed = 7.5f;
+        } else {
+            smoothSpeed = 1f;
         }
-        controller.Move(playerVelocity * Time.deltaTime);
 
-        if (isGrounded)
-        {
-            if (sprinting)
-            {
-                speed = sprintSpeed;
-            }
-            else
-            {
-                speed = 2;
+        Vector3 targetDirection = transform.TransformDirection(new Vector3(input.x, 0, input.y));
+
+        moveDirection = Vector3.Lerp(moveDirection, targetDirection, Time.deltaTime * smoothSpeed);
+        
+        if (isGrounded) {
+            if (input.y > 0 && sprinting) {
+                targetSpeed = sprintSpeed;
+                speedLerpTime = 12;
+            } else if (input.x != 0 || input.y != 0) {
+                targetSpeed = 2f;
+                speedLerpTime = 8f;
+            } else {
+                speedLerpTime = 8f;
             }
         }
-    } 
 
-    public void Jump()
-    {
-        if (isGrounded)
-        {
-            playerVelocity.y = Mathf.Sqrt(jumpHeight * -3.0f * gravity);
+        speed = Mathf.Lerp(speed, targetSpeed, Time.deltaTime * speedLerpTime);
+
+        Vector3 move = moveDirection * speed + playerVelocity;
+
+        // Debug.Log("Move direction: " + moveDirection);
+        // Debug.Log("speed: " + speed);
+        // Debug.Log("move: " + move);
+        controller.Move(move * Time.deltaTime);
+
+        if (isGrounded) {       
+            if (playerVelocity.y < 0) {
+                playerVelocity.y = -2f;
+            }
         }
     }
 
-    public void Sprint()
-    {
-        sprinting = !sprinting;
+    #endregion
+
+    public void Jump() {
+        if (isGrounded) {
+            playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
+        }
     }
+
+    public void Sprint(bool value) {
+        sprintButtonHeld = value;
+
+        if (isGrounded) {
+            sprinting = value;
+        }
+    }
+
+    public void Land() {
+    if (!sprintButtonHeld) {
+        sprinting = false;
+    } else {
+        sprinting = true;
+    }
+}
 
     public void Crouch()
     {

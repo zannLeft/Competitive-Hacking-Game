@@ -1,9 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class InputManager : MonoBehaviour
+public class InputManager : NetworkBehaviour
 {
     private PlayerInput playerInput;
     private PlayerInput.OnFootActions onFoot;
@@ -19,19 +20,25 @@ public class InputManager : MonoBehaviour
         look = GetComponent<PlayerLook>();
 
         onFoot.Jump.performed += ctx => motor.Jump();
-        onFoot.Sprint.performed += ctx => motor.Sprint();
+        onFoot.Sprint.started += ctx => motor.Sprint(true);
+        onFoot.Sprint.canceled += ctx => motor.Sprint(false);
         onFoot.Crouch.performed += ctx => motor.Crouch();
 
     }
 
-    void FixedUpdate()
+    void Update()
     {
-        // tell playermotor to move using the value from our movement action
+        if (!IsOwner) {
+            return;
+        }
         motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
     }
 
     void LateUpdate()
     {
+        if (!IsOwner) {
+            return;
+        }
         look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
 
