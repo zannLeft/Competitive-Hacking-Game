@@ -6,6 +6,7 @@ using UnityEngine;
 public class PlayerMotor : NetworkBehaviour
 {
     private CharacterController controller;
+    
     private Vector3 playerVelocity;
     private Vector3 moveDirection = Vector3.zero;
 
@@ -23,22 +24,48 @@ public class PlayerMotor : NetworkBehaviour
     [SerializeField] private float jumpHeight = 3;
 
 
-    [SerializeField] private float crouchHeight = 0.1f;
-    [SerializeField] private float standHeight = 2f;
-    private bool crouching = false;
-    private float crouchTimer = 1;
-    private bool lerpCrouch = false;
+
+    private float crouchHeight = 1f;
+    private float standHeight = 2f;
+    public float crouchCenterY = -0.5f;
+    public float standCenterY = 0f;
+    
+    public bool crouching = false;
+    private float currentHeight;
+    private Vector3 currentCenter;
+    public float crouchTransitionSpeed = 5.0f; // Speed of the transition
+
     
 
     private bool sprintButtonHeld = false;
     private bool wasGrounded = false;
 
 
+
+    [SerializeField] private GameObject playerMesh;
+    private Animator animator;
+
+
     void Start() {
+
         controller = GetComponent<CharacterController>();
+
+        animator = playerMesh.GetComponent<Animator>();
+
+        currentHeight = standHeight;
+        controller.height = currentHeight;
+        controller.center = new Vector3(controller.center.x, standCenterY, controller.center.z);
     }
 
     void Update() {
+
+        if (!IsOwner) {
+            return;
+        }
+
+
+
+
         isGrounded = controller.isGrounded;
         if (isGrounded && !wasGrounded)
         {
@@ -47,24 +74,26 @@ public class PlayerMotor : NetworkBehaviour
 
         wasGrounded = isGrounded;
 
-        if (lerpCrouch) {
-            crouchTimer += Time.deltaTime;
-            float p = crouchTimer / 1;
-            controller.height = Mathf.Lerp(controller.height, crouching ? crouchHeight : standHeight, p * p);
+        float targetCenterY = crouching ? crouchCenterY : standCenterY;
+        float targetHeight = crouching ? crouchHeight : standHeight;
+         if (Mathf.Abs(controller.height - targetHeight) > 0.01f || Mathf.Abs(controller.center.y - targetCenterY) > 0.01f)
+        {
+            currentHeight = Mathf.Lerp(controller.height, targetHeight, crouchTransitionSpeed * Time.deltaTime);
+            controller.height = currentHeight;
 
-            if (p > 1) {
-                lerpCrouch = false;
-                crouchTimer = 0f;
-            }
+            Vector3 targetCenter = new Vector3(controller.center.x, targetCenterY, controller.center.z);
+            currentCenter = Vector3.Lerp(controller.center, targetCenter, crouchTransitionSpeed * Time.deltaTime);
+            controller.center = currentCenter;
         }
     }
     
     #region Movement
     public void ProcessMove(Vector2 input) {
+
         playerVelocity.y += Physics.gravity.y * Time.deltaTime;
         
         if (isGrounded) {
-            smoothSpeed = 7.5f;
+            smoothSpeed = 9f;
         } else {
             smoothSpeed = 1f;
         }
@@ -125,10 +154,9 @@ public class PlayerMotor : NetworkBehaviour
     }
 }
 
-    public void Crouch()
-    {
+    public void Crouch() {
         crouching = !crouching;
-        crouchTimer = 0;
-        lerpCrouch = true;
-    }
+        animator.SetBool("Crouching", crouching);
+        }
 }
+

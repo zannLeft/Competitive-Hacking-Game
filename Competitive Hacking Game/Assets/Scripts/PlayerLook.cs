@@ -5,10 +5,17 @@ using UnityEngine;
 
 public class PlayerLook : NetworkBehaviour
 {
+    private PlayerMotor motor;
+    private Vector3 standingPosition;
+    private Vector3 crouchingPosition;
+
+
+
     public Camera cam;
     private float xRotation = 0f;
     public float xSensitivity = 30f;
     public float ySensitivity = 30f;
+
     
     void Start()
     {
@@ -16,7 +23,19 @@ public class PlayerLook : NetworkBehaviour
         if (!IsOwner) {
             cam.gameObject.SetActive(false);
         }
+
+        motor = GetComponent<PlayerMotor>();
+        standingPosition = cam.transform.localPosition;
+        crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 0.7f, standingPosition.z);
     }
+
+    void Update() {
+        
+        
+        Vector3 targetHeight = motor.crouching ? crouchingPosition : standingPosition;
+        cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetHeight, Time.deltaTime * 5f);
+    }
+
 
     public void ProcessLook(Vector2 input)
     {
