@@ -1,88 +1,105 @@
 using System;
-using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
 public class PlayerMotor : NetworkBehaviour
 {
     private CharacterController controller;
-    
+    private Animator animator;
+
     private Vector3 playerVelocity;
     private Vector3 moveDirection = Vector3.zero;
 
     private bool isGrounded;
-
-    [SerializeField] private float speed = 5;
-    private float speedLerpTime = 5f;
-    [SerializeField] private float sprintSpeed = 5;
+    private bool wasGrounded = false;
     private bool sprinting = false;
-    float smoothSpeed = 7.5f;
-    float targetSpeed = 0f;
-
-
-
-    [SerializeField] private float jumpHeight = 3;
-
-
-
-    private float crouchHeight = 1f;
-    private float standHeight = 2f;
-    public float crouchCenterY = -0.5f;
-    public float standCenterY = 0f;
-    
     public bool crouching = false;
+    public bool sliding = false;
+    private bool sprintButtonHeld = false;
+
+    [SerializeField] private float speed = 5f;
+    [SerializeField] private float sprintSpeed = 7.5f;
+    [SerializeField] private float jumpHeight = 3f;
+    [SerializeField] private float crouchHeight = 1f;
+    [SerializeField] private float standHeight = 2f;
+    [SerializeField] private float slideSpeed = 6f;
+    [SerializeField] private GameObject playerMesh;
+    
+    private float crouchCenterY = -0.5f;
+    private float standCenterY = 0f;
     private float currentHeight;
     private Vector3 currentCenter;
-    public float crouchTransitionSpeed = 5.0f; // Speed of the transition
+    private float currentSpeed;
+    private float speedLerpTime = 8f;
+    private float targetSpeed = 0f;
+    private float smoothSpeed = 7.5f;
+    private float slideTimer;
+    private const float slideTimerMax = 1f;
+    private const float crouchTransitionSpeed = 5.0f;
+    private Vector2 inputDirection;
 
-    
-
-    private bool sprintButtonHeld = false;
-    private bool wasGrounded = false;
-
-
-
-    [SerializeField] private GameObject playerMesh;
-    private Animator animator;
-
-
-    void Start() {
-
+    void Start()
+    {
         controller = GetComponent<CharacterController>();
-
         animator = playerMesh.GetComponent<Animator>();
+        ResetCrouchAndSlide();
+    }
 
+    void Update()
+    {
+        if (!IsOwner) return;
+
+        HandleSliding();
+        UpdateGroundStatus();
+        UpdateCharacterDimensions();
+        Debug.Log(sprinting + ", " + crouching + ", " + sliding + ", " + currentSpeed);
+    }
+
+    private void ResetCrouchAndSlide()
+    {
         currentHeight = standHeight;
         controller.height = currentHeight;
         controller.center = new Vector3(controller.center.x, standCenterY, controller.center.z);
+        slideTimer = slideTimerMax;
     }
 
-    void Update() {
+    private void HandleSliding()
+    {
+        if (!sliding) return;
 
-        if (!IsOwner) {
-            return;
+        slideTimer -= Time.deltaTime;
+        if (slideTimer <= 0f)
+        {
+            crouching = !sprintButtonHeld;
+            sprinting = sprintButtonHeld;
+            sliding = false;
+            animator.SetBool("Sliding", sliding);
+            slideTimer = slideTimerMax;
+            animator.SetBool("Crouching", crouching);
         }
+    }
 
-
-
-
+    private void UpdateGroundStatus()
+    {
         isGrounded = controller.isGrounded;
         if (isGrounded && !wasGrounded)
         {
             Land();
         }
-
         wasGrounded = isGrounded;
+    }
 
-        float targetCenterY = crouching ? crouchCenterY : standCenterY;
-        float targetHeight = crouching ? crouchHeight : standHeight;
-         if (Mathf.Abs(controller.height - targetHeight) > 0.01f || Mathf.Abs(controller.center.y - targetCenterY) > 0.01f)
+    private void UpdateCharacterDimensions()
+    {
+        float targetHeight = crouching || sliding ? crouchHeight : standHeight;
+        float targetCenterY = crouching || sliding ? crouchCenterY : standCenterY;
+
+        if (Mathf.Abs(controller.height - targetHeight) > 0.01f)
         {
             currentHeight = Mathf.Lerp(controller.height, targetHeight, crouchTransitionSpeed * Time.deltaTime);
             controller.height = currentHeight;
 
-            Vector3 targetCenter = new Vector3(controller.center.x, targetCenterY, controller.center.z);
-            currentCenter = Vector3.Lerp(controller.center, targetCenter, crouchTransitionSpeed * Time.deltaTime);
+            currentCenter = Vector3.Lerp(controller.center, new Vector3(controller.center.x, targetCenterY, controller.center.z), crouchTransitionSpeed * Time.deltaTime);
             controller.center = currentCenter;
         }
     }
@@ -90,10 +107,15 @@ public class PlayerMotor : NetworkBehaviour
     #region Movement
     public void ProcessMove(Vector2 input) {
 
+        inputDirection = input;
+        currentSpeed = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+
         playerVelocity.y += Physics.gravity.y * Time.deltaTime;
         
-        if (isGrounded) {
+        if (isGrounded && !sliding) {
             smoothSpeed = 9f;
+        } else if (sliding) {
+            smoothSpeed = 0.5f;
         } else {
             smoothSpeed = 1f;
         }
@@ -103,9 +125,11 @@ public class PlayerMotor : NetworkBehaviour
         moveDirection = Vector3.Lerp(moveDirection, targetDirection, Time.deltaTime * smoothSpeed);
         
         if (isGrounded) {
-            if (input.y > 0 && sprinting) {
+            if (sliding) {
+                targetSpeed = slideSpeed;
+            } else if (input.y > 0 && sprinting) {
                 targetSpeed = sprintSpeed;
-                speedLerpTime = 12;
+                speedLerpTime = 6f;
             } else if (input.x != 0 || input.y != 0) {
                 targetSpeed = 2f;
                 speedLerpTime = 8f;
@@ -132,31 +156,70 @@ public class PlayerMotor : NetworkBehaviour
 
     #endregion
 
-    public void Jump() {
-        if (isGrounded) {
+    public void Jump()
+    {
+        if (isGrounded)
+        {
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
         }
     }
 
-    public void Sprint(bool value) {
+    public void Sprint(bool value)
+    {
         sprintButtonHeld = value;
 
-        if (isGrounded) {
+        if (!crouching && isGrounded)
+        {
             sprinting = value;
         }
-    }
-
-    public void Land() {
-    if (!sprintButtonHeld) {
-        sprinting = false;
-    } else {
-        sprinting = true;
-    }
-}
-
-    public void Crouch() {
-        crouching = !crouching;
-        animator.SetBool("Crouching", crouching);
+        else if (crouching && isGrounded)
+        {
+            sprinting = value;
+            crouching = !value;
+            animator.SetBool("Crouching", !value);
         }
-}
+        else
+        {
+            sprinting = false;
+        }
+    }
 
+    public void Land()
+    {
+        if (sprintButtonHeld && !crouching)
+        {
+            sprinting = true;
+        }
+        else if (sprintButtonHeld && currentSpeed > 4.75f && crouching)
+        {
+            crouching = false;
+            animator.SetBool("Crouching", false);
+            Slide();
+        }
+        else
+        {
+            sprinting = false;
+        }
+    }
+
+    public void Crouch()
+    {
+        if (sprinting && isGrounded && !crouching && currentSpeed > 4.75f && inputDirection.x == 0)
+        {
+            Slide();
+        }
+        else
+        {
+            crouching = !crouching;
+            sprinting = !crouching && sprintButtonHeld;
+            animator.SetBool("Crouching", crouching);
+        }
+    }
+
+    private void Slide()
+    {
+        sliding = true;
+        animator.SetBool("Sliding", sliding);
+        sprinting = false;
+    }
+}

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
@@ -8,6 +9,7 @@ public class PlayerLook : NetworkBehaviour
     private PlayerMotor motor;
     private Vector3 standingPosition;
     private Vector3 crouchingPosition;
+    private Vector3 slidingPosition;
 
 
 
@@ -27,12 +29,19 @@ public class PlayerLook : NetworkBehaviour
         motor = GetComponent<PlayerMotor>();
         standingPosition = cam.transform.localPosition;
         crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 0.7f, standingPosition.z);
+        slidingPosition = new Vector3(standingPosition.x, standingPosition.y - 1f, standingPosition.z);
     }
 
     void Update() {
         
-        
-        Vector3 targetHeight = motor.crouching ? crouchingPosition : standingPosition;
+        Vector3 targetHeight;
+        if (motor.sliding) {
+            targetHeight = slidingPosition;
+        } else if (motor.crouching) {
+            targetHeight = crouchingPosition;
+        } else {
+            targetHeight = standingPosition;
+        }
         cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetHeight, Time.deltaTime * 5f);
     }
 
