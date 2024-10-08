@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -12,17 +13,22 @@ public class PlayerMotor : NetworkBehaviour
 
     private bool isGrounded;
     private bool wasGrounded = false;
-    private bool sprinting = false;
+    private bool couldStand = true;
+    private bool canStand = true;
+    public bool sprinting = false;
     public bool crouching = false;
     public bool sliding = false;
     private bool sprintButtonHeld = false;
+    private bool jumpButtonHeld = false;
 
     [SerializeField] private float speed = 5f;
     [SerializeField] private float sprintSpeed = 7.5f;
-    [SerializeField] private float jumpHeight = 3f;
-    [SerializeField] private float crouchHeight = 1f;
+    [SerializeField] private float jumpHeight = 2f;
+    [SerializeField] private float crouchHeight = 0.95f;
     [SerializeField] private float standHeight = 2f;
-    [SerializeField] private float slideSpeed = 6f;
+    [SerializeField] private float slideSpeed = 8f;
+    [SerializeField] private float slideSpeedDecay = 6f;  // How fast the sliding speed decreases
+    [SerializeField] private float minSlideSpeed = 2f;    // Minimum sliding speed
     [SerializeField] private GameObject playerMesh;
     
     private float crouchCenterY = -0.5f;
@@ -30,12 +36,14 @@ public class PlayerMotor : NetworkBehaviour
     private float currentHeight;
     private Vector3 currentCenter;
     private float currentSpeed;
+    private float currentSpeedVertical;
     private float speedLerpTime = 8f;
     private float targetSpeed = 0f;
     private float smoothSpeed = 7.5f;
     private float slideTimer;
-    private const float slideTimerMax = 1f;
-    private const float crouchTransitionSpeed = 5.0f;
+    private float fallSpeed = 1.5f;
+    private const float slideTimerMax = 1.3f;
+    private const float crouchTransitionSpeed = 20.0f;
     private Vector2 inputDirection;
 
     void Start()
@@ -50,9 +58,13 @@ public class PlayerMotor : NetworkBehaviour
         if (!IsOwner) return;
 
         HandleSliding();
+        HandleJumping();
+        UpdateStandStatus();
         UpdateGroundStatus();
         UpdateCharacterDimensions();
-        Debug.Log(sprinting + ", " + crouching + ", " + sliding + ", " + currentSpeed);
+        //Debug.Log(sprinting + ", " + crouching + ", " + sliding + ", " + currentSpeed);
+        //Debug.Log(currentSpeedVertical);
+        
     }
 
     private void ResetCrouchAndSlide()
@@ -68,14 +80,53 @@ public class PlayerMotor : NetworkBehaviour
         if (!sliding) return;
 
         slideTimer -= Time.deltaTime;
+
+        if (currentSpeed < 2f) slideTimer = 0f;
+        if (currentSpeedVertical > 1f) slideTimer = 0f;
+
+        // Gradually reduce the sliding speed over time
+        slideSpeed = Mathf.Max(slideSpeed - slideSpeedDecay * Time.deltaTime, minSlideSpeed);
+
         if (slideTimer <= 0f)
         {
-            crouching = !sprintButtonHeld;
-            sprinting = sprintButtonHeld;
+            if (sprintButtonHeld && CanStand()) {
+                sprinting = true;
+                crouching = false;
+            } else {
+                crouching = true;
+                sprinting = false;
+            }
             sliding = false;
+            slideSpeed = 8f;
             animator.SetBool("Sliding", sliding);
             slideTimer = slideTimerMax;
             animator.SetBool("Crouching", crouching);
+        }
+    }
+
+
+    private void UpdateStandStatus()
+    {
+        canStand = CanStand();
+        if (canStand && !couldStand)
+        {
+            if (crouching && sprintButtonHeld && CanStand()) {
+                sprinting = true;
+                crouching = false;
+                animator.SetBool("Crouching", false);
+            }
+        }
+        couldStand = canStand;
+    }
+
+    private void HandleJumping() {
+        if (jumpButtonHeld && isGrounded && CanStand())
+        {   
+            Debug.Log("ASS");
+            playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
+            if (sliding) {
+                    slideTimer = 0;
+            }
         }
     }
 
@@ -109,8 +160,9 @@ public class PlayerMotor : NetworkBehaviour
 
         inputDirection = input;
         currentSpeed = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        currentSpeedVertical = controller.velocity.y;
 
-        playerVelocity.y += Physics.gravity.y * Time.deltaTime;
+        playerVelocity.y += Physics.gravity.y * Time.deltaTime * fallSpeed;
         
         if (isGrounded && !sliding) {
             smoothSpeed = 9f;
@@ -126,7 +178,7 @@ public class PlayerMotor : NetworkBehaviour
         
         if (isGrounded) {
             if (sliding) {
-                targetSpeed = slideSpeed;
+                targetSpeed = slideSpeed;  // Use the decaying slide speed
             } else if (input.y > 0 && sprinting) {
                 targetSpeed = sprintSpeed;
                 speedLerpTime = 6f;
@@ -156,23 +208,37 @@ public class PlayerMotor : NetworkBehaviour
 
     #endregion
 
-    public void Jump()
+    private bool CanStand()
     {
-        if (isGrounded)
-        {
-            playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
-        }
+        Vector3 start = transform.position;
+        Vector3 end = transform.position + Vector3.up * (standHeight / 2);
+
+        bool canStand = !Physics.CheckCapsule(start, end, controller.radius, LayerMask.GetMask("Default"));
+
+        //Debug.DrawLine(start, end, canStand ? Color.green : Color.red, 0.1f);
+
+    return canStand;
+    }
+
+
+    public void Jump(bool value)
+    {
+        jumpButtonHeld = value;
     }
 
     public void Sprint(bool value)
     {
         sprintButtonHeld = value;
 
+        if (sliding && sprintButtonHeld) {
+            slideTimer = 0f;
+        }
+
         if (!crouching && isGrounded)
         {
             sprinting = value;
         }
-        else if (crouching && isGrounded)
+        else if (crouching && isGrounded && CanStand())
         {
             sprinting = value;
             crouching = !value;
@@ -204,13 +270,16 @@ public class PlayerMotor : NetworkBehaviour
 
     public void Crouch()
     {
-        if (sprinting && isGrounded && !crouching && currentSpeed > 4.75f && inputDirection.x == 0)
-        {
+        if (sliding) {
+            slideTimer = 0;
+        } else if (sprinting && isGrounded && !crouching && currentSpeed > 4.75f && inputDirection.x == 0) {
             Slide();
-        }
-        else
-        {
-            crouching = !crouching;
+        } else {
+            if (crouching && CanStand()) {
+                crouching = false;
+            } else {
+                crouching = true;
+            }
             sprinting = !crouching && sprintButtonHeld;
             animator.SetBool("Crouching", crouching);
         }
@@ -223,3 +292,4 @@ public class PlayerMotor : NetworkBehaviour
         sprinting = false;
     }
 }
+

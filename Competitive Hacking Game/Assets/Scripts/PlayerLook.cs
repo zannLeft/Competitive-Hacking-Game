@@ -11,14 +11,16 @@ public class PlayerLook : NetworkBehaviour
     private Vector3 crouchingPosition;
     private Vector3 slidingPosition;
 
-
-
     public Camera cam;
     private float xRotation = 0f;
     public float xSensitivity = 30f;
     public float ySensitivity = 30f;
 
-    
+    // FOV settings
+    private float defaultFOV = 90f;
+    private float sprintFOV = 100f;  // Adjust this value to your preference
+    private float fovTransitionSpeed = 5f;
+
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
@@ -28,13 +30,17 @@ public class PlayerLook : NetworkBehaviour
 
         motor = GetComponent<PlayerMotor>();
         standingPosition = cam.transform.localPosition;
-        crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 0.7f, standingPosition.z);
-        slidingPosition = new Vector3(standingPosition.x, standingPosition.y - 1f, standingPosition.z);
+        crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z);
+        slidingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.3f, standingPosition.z);
+
+        // Set the default FOV
+        cam.fieldOfView = defaultFOV;
     }
 
     void Update() {
-        
         Vector3 targetHeight;
+
+        // Handle camera position based on player state
         if (motor.sliding) {
             targetHeight = slidingPosition;
         } else if (motor.crouching) {
@@ -42,9 +48,14 @@ public class PlayerLook : NetworkBehaviour
         } else {
             targetHeight = standingPosition;
         }
-        cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetHeight, Time.deltaTime * 5f);
-    }
+        cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetHeight, Time.deltaTime * 7f);
 
+        // Smooth FOV transition between sprinting and non-sprinting
+        float targetFOV = (motor.sprinting || motor.sliding) ? sprintFOV : defaultFOV;
+        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovTransitionSpeed);
+
+        // Log the sprinting status (for debugging purposes)
+    }
 
     public void ProcessLook(Vector2 input)
     {

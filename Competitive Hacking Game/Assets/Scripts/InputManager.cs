@@ -27,7 +27,8 @@ public class InputManager : NetworkBehaviour
         if (IsOwner)
         {
             // Set up input actions for the local player
-            onFoot.Jump.performed += ctx => motor.Jump();
+            onFoot.Jump.started += ctx => motor.Jump(true);
+            onFoot.Jump.canceled += ctx => motor.Jump(false);
             onFoot.Sprint.started += ctx => motor.Sprint(true);
             onFoot.Sprint.canceled += ctx => motor.Sprint(false);
             onFoot.Crouch.performed += ctx => motor.Crouch();
@@ -58,7 +59,8 @@ public class InputManager : NetworkBehaviour
         // Disable input when the object is destroyed or disabled, preventing memory leaks
         if (IsOwner)
         {
-            onFoot.Jump.performed -= ctx => motor.Jump();
+            onFoot.Jump.started += ctx => motor.Jump(true);
+            onFoot.Jump.canceled += ctx => motor.Jump(false);
             onFoot.Sprint.started -= ctx => motor.Sprint(true);
             onFoot.Sprint.canceled -= ctx => motor.Sprint(false);
             onFoot.Crouch.performed -= ctx => motor.Crouch();
