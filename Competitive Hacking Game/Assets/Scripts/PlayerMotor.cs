@@ -20,6 +20,7 @@ public class PlayerMotor : NetworkBehaviour
     public bool sliding = false;
     private bool sprintButtonHeld = false;
     private bool jumpButtonHeld = false;
+    private bool jumpedFromSlide = false;
 
     [SerializeField] private float speed = 5f;
     [SerializeField] private float sprintSpeed = 7.5f;
@@ -122,10 +123,10 @@ public class PlayerMotor : NetworkBehaviour
     private void HandleJumping() {
         if (jumpButtonHeld && isGrounded && CanStand())
         {   
-            Debug.Log("ASS");
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
             if (sliding) {
                     slideTimer = 0;
+                    jumpedFromSlide = true;
             }
         }
     }
@@ -233,6 +234,10 @@ public class PlayerMotor : NetworkBehaviour
         if (sliding && sprintButtonHeld) {
             slideTimer = 0f;
         }
+        if (jumpedFromSlide && crouching && !isGrounded) {
+            crouching = false;
+            jumpedFromSlide = false;
+        }
 
         if (!crouching && isGrounded)
         {
@@ -256,7 +261,7 @@ public class PlayerMotor : NetworkBehaviour
         {
             sprinting = true;
         }
-        else if (sprintButtonHeld && currentSpeed > 4.75f && crouching)
+        else if (sprintButtonHeld && currentSpeed > 5.85f && crouching)
         {
             crouching = false;
             animator.SetBool("Crouching", false);
@@ -272,7 +277,7 @@ public class PlayerMotor : NetworkBehaviour
     {
         if (sliding) {
             slideTimer = 0;
-        } else if (sprinting && isGrounded && !crouching && currentSpeed > 4.75f && inputDirection.x == 0) {
+        } else if (sprinting && isGrounded && !crouching && currentSpeed > 5.85f && inputDirection.x == 0) {
             Slide();
         } else {
             if (crouching && CanStand()) {
