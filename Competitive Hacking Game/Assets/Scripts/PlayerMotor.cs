@@ -21,6 +21,7 @@ public class PlayerMotor : NetworkBehaviour
     private bool sprintButtonHeld = false;
     private bool jumpButtonHeld = false;
     private bool jumpedFromSlide = false;
+    private bool startedCrouchingInAir = false;
 
     [SerializeField] private float speed = 5f;
     [SerializeField] private float sprintSpeed = 7.5f;
@@ -45,7 +46,7 @@ public class PlayerMotor : NetworkBehaviour
     private float fallSpeed = 1.5f;
     private const float slideTimerMax = 1.3f;
     private const float crouchTransitionSpeed = 20.0f;
-    private Vector2 inputDirection;
+    public Vector2 inputDirection;
 
     void Start()
     {
@@ -237,20 +238,24 @@ public class PlayerMotor : NetworkBehaviour
         if (jumpedFromSlide && crouching && !isGrounded) {
             crouching = false;
             jumpedFromSlide = false;
+            animator.SetBool("Crouching", false);
         }
 
-        if (!crouching && isGrounded)
-        {
+        if (!crouching && isGrounded) {
             sprinting = value;
         }
-        else if (crouching && isGrounded && CanStand())
-        {
-            sprinting = value;
-            crouching = !value;
-            animator.SetBool("Crouching", !value);
-        }
-        else
-        {
+        else if (crouching && CanStand()) {
+            if (isGrounded) {
+                sprinting = value;
+                crouching = !value;
+                animator.SetBool("Crouching", !value);
+            } else {
+                if (!startedCrouchingInAir) {
+                    crouching = !value;
+                    animator.SetBool("Crouching", !value);
+                }
+            }
+        } else {
             sprinting = false;
         }
     }
@@ -261,16 +266,24 @@ public class PlayerMotor : NetworkBehaviour
         {
             sprinting = true;
         }
-        else if (sprintButtonHeld && currentSpeed > 5.85f && crouching)
+        else if (sprintButtonHeld && crouching)
         {
-            crouching = false;
-            animator.SetBool("Crouching", false);
-            Slide();
+            if (currentSpeed > 5.85f) {
+                crouching = false;
+                animator.SetBool("Crouching", false);
+                Slide();
+            } else {
+                crouching = false;
+                animator.SetBool("Crouching", false);
+                sprinting = true;
+            }
+            
         }
         else
         {
             sprinting = false;
         }
+        startedCrouchingInAir = false;
     }
 
     public void Crouch()
@@ -284,6 +297,9 @@ public class PlayerMotor : NetworkBehaviour
                 crouching = false;
             } else {
                 crouching = true;
+                if (!isGrounded) {
+                    startedCrouchingInAir = true;
+                }
             }
             sprinting = !crouching && sprintButtonHeld;
             animator.SetBool("Crouching", crouching);
