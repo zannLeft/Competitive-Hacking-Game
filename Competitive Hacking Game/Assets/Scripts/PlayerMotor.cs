@@ -48,11 +48,18 @@ public class PlayerMotor : NetworkBehaviour
     private const float crouchTransitionSpeed = 20.0f;
     public Vector2 inputDirection;
 
+
+    private int xVelHash;
+    private int zVelHash;
+
     void Start()
     {
         controller = GetComponent<CharacterController>();
         animator = playerMesh.GetComponent<Animator>();
         ResetCrouchAndSlide();
+
+        xVelHash = Animator.StringToHash("X_Velocity");
+        zVelHash = Animator.StringToHash("Z_Velocity");
     }
 
     void Update()
@@ -206,6 +213,14 @@ public class PlayerMotor : NetworkBehaviour
                 playerVelocity.y = -2f;
             }
         }
+
+        Vector3 localVelocity = transform.InverseTransformDirection(controller.velocity);
+
+        // localVelocity.x is the movement along the local right (strafing)
+        // localVelocity.z is the movement along the local forward (walking forward/backward)
+        animator.SetFloat(xVelHash, localVelocity.x); // Strafing
+        animator.SetFloat(zVelHash, localVelocity.z); // Forward/Backward
+
     }
 
     #endregion
