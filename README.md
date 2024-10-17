@@ -22,4 +22,7 @@ The development is still at an early stage, but here are some sneak peeks of the
 ### In-Game Screenshot 2
 ![Ss2](https://i.ibb.co/p3zW2db/Screenshot-2024-10-15-010927.png)
 
+### In-Game Screenshot 3
+![Ss3](https://i.ibb.co/Qpj06Cm/Untitled.png)
+
 Stay tuned for more updates as the game evolves!
