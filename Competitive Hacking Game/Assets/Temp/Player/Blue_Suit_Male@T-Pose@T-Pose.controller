@@ -228,6 +228,12 @@ AnimatorController:
   m_Name: Blue_Suit_Male@T-Pose@T-Pose
   serializedVersion: 5
   m_AnimatorParameters:
+  - m_Name: PhoneUp
+    m_Type: 4
+    m_DefaultFloat: 0
+    m_DefaultInt: 0
+    m_DefaultBool: 0
+    m_Controller: {fileID: 9100000}
   - m_Name: Crouching
     m_Type: 4
     m_DefaultFloat: 0

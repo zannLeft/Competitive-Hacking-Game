@@ -8,17 +8,23 @@ public class InputManager : NetworkBehaviour
 {
     private PlayerInput playerInput;
     private PlayerInput.OnFootActions onFoot;
+    private PlayerInput.HandItemsActions handItems;
     private PlayerMotor motor;
     private PlayerLook look;
+    private HandItems items;
+    
 
     void Awake()
     {
         // Initialize input system and references
         playerInput = new PlayerInput();
         onFoot = playerInput.OnFoot;
+        handItems = playerInput.HandItems;
+        
 
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
+        items = GetComponent<HandItems>();
     }
 
     // This method is called after the object has been spawned and network ownership is established
@@ -33,8 +39,11 @@ public class InputManager : NetworkBehaviour
             onFoot.Sprint.canceled += ctx => motor.Sprint(false);
             onFoot.Crouch.performed += ctx => motor.Crouch();
 
+            handItems.PhoneScreen.performed += ctx => items.Equip(0);
+
             // Enable input for the local player
             onFoot.Enable();
+            handItems.Enable();
         }
     }
 
@@ -66,6 +75,7 @@ public class InputManager : NetworkBehaviour
             onFoot.Crouch.performed -= ctx => motor.Crouch();
 
             onFoot.Disable();
+            handItems.Disable();
         }
     }
 }

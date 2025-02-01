@@ -21,6 +21,12 @@ public class PlayerLook : NetworkBehaviour
     private float sprintFOV = 100f;  // Adjust this value to your preference
     private float fovTransitionSpeed = 5f;
 
+    public Transform phone;
+
+    // Variables to introduce smooth delay in rotation
+    private Quaternion targetPhoneRotation;
+    private float targetYaw; // Delayed yaw for smoothness
+
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
@@ -35,9 +41,14 @@ public class PlayerLook : NetworkBehaviour
 
         // Set the default FOV
         cam.fieldOfView = defaultFOV;
+
+        // Initialize target yaw to match player's starting yaw
+        targetYaw = transform.eulerAngles.y;
+        targetPhoneRotation = cam.transform.localRotation;
     }
 
-    void Update() {
+    void Update()
+    {
         Vector3 targetHeight;
 
         if (motor.sliding) {
@@ -59,8 +70,6 @@ public class PlayerLook : NetworkBehaviour
         // Smooth FOV transition between sprinting and non-sprinting
         float targetFOV = ((motor.sprinting && motor.inputDirection.y > 0) || motor.sliding) ? sprintFOV : defaultFOV;
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovTransitionSpeed);
-
-        // Log the sprinting status (for debugging purposes)
     }
 
     public void ProcessLook(Vector2 input)
@@ -68,8 +77,7 @@ public class PlayerLook : NetworkBehaviour
         float mouseX = input.x;
         float mouseY = input.y;
 
-        // calculate camera rotation
-        
+        // Calculate camera rotation (pitch)
         if (motor.sliding && xRotation > 0) {
             if (mouseY > 0) {
                 xRotation -= mouseY * Time.deltaTime * ySensitivity;
@@ -78,9 +86,20 @@ public class PlayerLook : NetworkBehaviour
             xRotation -= mouseY * Time.deltaTime * ySensitivity;
         }
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
-        // apply to camera transform
-        cam.transform.localRotation = Quaternion.Euler(xRotation, 0 , 0);
-        // rotate player to look left and right
+
+        // Apply vertical rotation to the camera
+        cam.transform.localRotation = Quaternion.Euler(xRotation, 0, 0);
+
+        // Update player's rotation (yaw)
         transform.Rotate(Vector3.up * (mouseX * Time.deltaTime) * xSensitivity);
+
+        // Smoothly update the target yaw to create a delayed effect
+        targetYaw = Mathf.LerpAngle(targetYaw, transform.eulerAngles.y, Time.deltaTime * 8f); // Adjust "5f" for delay smoothness
+
+        // Determine the target rotation for the phone using both delayed yaw and camera pitch
+        targetPhoneRotation = Quaternion.Euler(xRotation, targetYaw, 0);
+
+        // Apply consistent smoothness to all axes
+        phone.rotation = Quaternion.Slerp(phone.rotation, targetPhoneRotation, Time.deltaTime * 8f);  // Adjust "5f" for desired smoothness
     }
 }

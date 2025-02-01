@@ -251,6 +251,34 @@
                     "isPartOfComposite": false
                 }
             ]
+        },
+        {
+            "name": "HandItems",
+            "id": "77023b0c-54fc-4ece-8b0a-9fa33c73eb26",
+            "actions": [
+                {
+                    "name": "PhoneScreen",
+                    "type": "Button",
+                    "id": "7a93e117-c1b7-4707-a7c9-0a52676a9ad7",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "967f7d15-e4a5-4ab4-bfee-0a1114d41aa2",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "PhoneScreen",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
         }
     ],
     "controlSchemes": []
