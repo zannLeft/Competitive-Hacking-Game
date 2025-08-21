@@ -17,6 +17,6 @@ public class HandItems : MonoBehaviour
         isEquipped = !isEquipped;
 
         phone.SetActive(isEquipped);
-        rigBuilder.enabled = isEquipped;
+        //rigBuilder.enabled = isEquipped;
     }
 }
