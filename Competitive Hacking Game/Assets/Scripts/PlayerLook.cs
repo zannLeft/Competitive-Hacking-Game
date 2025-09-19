@@ -21,10 +21,10 @@ public class PlayerLook : NetworkBehaviour
     private float sprintFOV = 100f;  // Adjust this value to your preference
     private float fovTransitionSpeed = 5f;
 
-    public Transform phone;
+    //public Transform phone;
 
     // Variables to introduce smooth delay in rotation
-    private Quaternion targetPhoneRotation;
+    //private Quaternion targetPhoneRotation;
     private float targetYaw; // Delayed yaw for smoothness
 
     void Start()
@@ -44,7 +44,7 @@ public class PlayerLook : NetworkBehaviour
 
         // Initialize target yaw to match player's starting yaw
         targetYaw = transform.eulerAngles.y;
-        targetPhoneRotation = cam.transform.localRotation;
+        //targetPhoneRotation = cam.transform.localRotation;
     }
 
     void Update()
@@ -97,9 +97,9 @@ public class PlayerLook : NetworkBehaviour
         targetYaw = Mathf.LerpAngle(targetYaw, transform.eulerAngles.y, Time.deltaTime * 8f); // Adjust "5f" for delay smoothness
 
         // Determine the target rotation for the phone using both delayed yaw and camera pitch
-        targetPhoneRotation = Quaternion.Euler(xRotation, targetYaw, 0);
+        //targetPhoneRotation = Quaternion.Euler(xRotation, targetYaw, 0);
 
         // Apply consistent smoothness to all axes
-        phone.rotation = Quaternion.Slerp(phone.rotation, targetPhoneRotation, Time.deltaTime * 8f);  // Adjust "5f" for desired smoothness
+        //phone.rotation = Quaternion.Slerp(phone.rotation, targetPhoneRotation, Time.deltaTime * 8f);  // Adjust "5f" for desired smoothness
     }
 }

@@ -807,11 +807,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 1
   windowsGamepadBackendHint: 0
-  cloudProjectId: 7e0f9a59-b1cc-4785-b6b3-e5f15410b170
+  cloudProjectId: 222e9887-cff4-49d3-834f-4462d5c402a8
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
   projectName: Competitive Hacking Game
-  organizationId: unity_29174d93999bd315fc52
+  organizationId: zanql
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}
