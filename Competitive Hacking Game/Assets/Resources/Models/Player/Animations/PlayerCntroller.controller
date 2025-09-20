@@ -104,6 +104,62 @@ BlendTree:
     m_CycleOffset: 0
     m_DirectBlendParameter: Blend
     m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: -203655887218126122, guid: fc438940d7a0e3a4086cd6f6cb3d6c6b, type: 3}
+    m_Threshold: 0.14285715
+    m_Position: {x: 0, y: -2}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: -203655887218126122, guid: a703914bd2ccfa94297279398715dcd8, type: 3}
+    m_Threshold: 0.2857143
+    m_Position: {x: 0, y: 2}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: -203655887218126122, guid: 8c98b469f32d69d49a00253ed8ef32a5, type: 3}
+    m_Threshold: 0.42857143
+    m_Position: {x: 0, y: 6}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: -203655887218126122, guid: b5083e1f78a91644eab386d1f3bbd844, type: 3}
+    m_Threshold: 0.5714286
+    m_Position: {x: 2, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: -203655887218126122, guid: 68786b0b337152848b8bd7f2632fa65f, type: 3}
+    m_Threshold: 0.71428573
+    m_Position: {x: 6, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: -203655887218126122, guid: debf6774870f4b84e978f3c510518676, type: 3}
+    m_Threshold: 0.85714287
+    m_Position: {x: -2, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
+  - serializedVersion: 2
+    m_Motion: {fileID: -203655887218126122, guid: 6927c55fd144f5940b8d1f4a4d181cde, type: 3}
+    m_Threshold: 1
+    m_Position: {x: -6, y: 0}
+    m_TimeScale: 1
+    m_CycleOffset: 0
+    m_DirectBlendParameter: Blend
+    m_Mirror: 0
   m_BlendParameter: X_Velocity
   m_BlendParameterY: Z_Velocity
   m_MinThreshold: 0

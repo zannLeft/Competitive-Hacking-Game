@@ -6,7 +6,7 @@ using UnityEngine;
 public class PlayerMotor : NetworkBehaviour
 {
     private CharacterController controller;
-    //private Animator animator;
+    private Animator animator;
 
     private Vector3 playerVelocity;
     private Vector3 moveDirection = Vector3.zero;
@@ -34,7 +34,6 @@ public class PlayerMotor : NetworkBehaviour
     [SerializeField] private float slideSpeed = 8f;
     [SerializeField] private float slideSpeedDecay = 6f;  // How fast the sliding speed decreases
     [SerializeField] private float minSlideSpeed = 2f;    // Minimum sliding speed
-    [SerializeField] private GameObject playerMesh;
     
     // stand center unchanged. crouchCenterY will be recomputed in Start().
     [SerializeField] private float crouchCenterY = 0.47814538f; // initial guess
@@ -54,21 +53,21 @@ public class PlayerMotor : NetworkBehaviour
     public Vector2 inputDirection;
 
 
-    //private int xVelHash;
-    //private int zVelHash;
+    private int xVelHash;
+    private int zVelHash;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
-        //animator = playerMesh.GetComponent<Animator>();
+        animator = GetComponent<Animator>();
 
         // Ensure crouchCenterY is consistent if someone adjusted stand/crouch heights in inspector
         crouchCenterY = standCenterY - (standHeight - crouchHeight) / 2f;
 
         ResetCrouchAndSlide();
 
-        //xVelHash = Animator.StringToHash("X_Velocity");
-        //zVelHash = Animator.StringToHash("Z_Velocity");
+        xVelHash = Animator.StringToHash("X_Velocity");
+        zVelHash = Animator.StringToHash("Z_Velocity");
     }
 
     void Update()
@@ -233,8 +232,8 @@ public class PlayerMotor : NetworkBehaviour
 
         // localVelocity.x is the movement along the local right (strafing)
         // localVelocity.z is the movement along the local forward (walking forward/backward)
-        //animator.SetFloat(xVelHash, localVelocity.x); // Strafing
-        //animator.SetFloat(zVelHash, localVelocity.z); // Forward/Backward
+        animator.SetFloat(xVelHash, localVelocity.x); // Strafing
+        animator.SetFloat(zVelHash, localVelocity.z); // Forward/Backward
 
     }
 
