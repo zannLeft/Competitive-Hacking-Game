@@ -56,6 +56,8 @@ public class PlayerMotor : NetworkBehaviour
     private int xVelHash;
     private int zVelHash;
 
+    private bool useMirror;
+
     void Start()
     {
         controller = GetComponent<CharacterController>();
@@ -81,7 +83,6 @@ public class PlayerMotor : NetworkBehaviour
         UpdateCharacterDimensions();
         //Debug.Log(sprinting + ", " + crouching + ", " + sliding + ", " + currentSpeed);
         //Debug.Log(currentSpeedVertical);
-        Debug.Log(isGrounded);
         
     }
 
@@ -123,7 +124,7 @@ public class PlayerMotor : NetworkBehaviour
             slideSpeed = 8f;
             //animator.SetBool("Sliding", sliding);
             slideTimer = slideTimerMax;
-            //animator.SetBool("Crouching", crouching);
+            animator.SetBool("Crouching", crouching);
         }
     }
 
@@ -136,7 +137,7 @@ public class PlayerMotor : NetworkBehaviour
             if (crouching && sprintButtonHeld && CanStand()) {
                 sprinting = true;
                 crouching = false;
-                //animator.SetBool("Crouching", false);
+                animator.SetBool("Crouching", false);
             }
         }
         couldStand = canStand;
@@ -146,9 +147,13 @@ public class PlayerMotor : NetworkBehaviour
         if (jumpButtonHeld && isGrounded && CanStand())
         {   
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
-            if (sliding) {
-                    slideTimer = 0;
-                    jumpedFromSlide = true;
+            animator.SetTrigger("Jump");
+            animator.SetBool("useMirror", useMirror);
+            
+            if (sliding)
+            {
+                slideTimer = 0;
+                jumpedFromSlide = true;
             }
         }
     }
@@ -156,8 +161,11 @@ public class PlayerMotor : NetworkBehaviour
     private void UpdateGroundStatus()
     {
         isGrounded = controller.isGrounded;
+        animator.SetBool("IsGrounded", isGrounded);
+        
         if (isGrounded && !wasGrounded)
         {
+            useMirror = !useMirror;
             Land();
         }
         wasGrounded = isGrounded;
@@ -177,38 +185,52 @@ public class PlayerMotor : NetworkBehaviour
             controller.center = currentCenter;
         }
     }
-    
+
     #region Movement
-    public void ProcessMove(Vector2 input) {
+    public void ProcessMove(Vector2 input)
+    {
 
         inputDirection = input;
         currentSpeed = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
         currentSpeedVertical = controller.velocity.y;
 
         playerVelocity.y += Physics.gravity.y * Time.deltaTime * fallSpeed;
-        
-        if (isGrounded && !sliding) {
+
+        if (isGrounded && !sliding)
+        {
             smoothSpeed = 9f;
-        } else if (sliding) {
+        }
+        else if (sliding)
+        {
             smoothSpeed = 0.5f;
-        } else {
+        }
+        else
+        {
             smoothSpeed = 1f;
         }
 
         Vector3 targetDirection = transform.TransformDirection(new Vector3(input.x, 0, input.y));
 
         moveDirection = Vector3.Lerp(moveDirection, targetDirection, Time.deltaTime * smoothSpeed);
-        
-        if (isGrounded) {
-            if (sliding) {
+
+        if (isGrounded)
+        {
+            if (sliding)
+            {
                 targetSpeed = slideSpeed;  // Use the decaying slide speed
-            } else if (input.y > 0 && sprinting) {
+            }
+            else if (input.y > 0 && sprinting)
+            {
                 targetSpeed = sprintSpeed;
                 speedLerpTime = 6f;
-            } else if (input.x != 0 || input.y != 0) {
+            }
+            else if (input.x != 0 || input.y != 0)
+            {
                 targetSpeed = 2f;
                 speedLerpTime = 8f;
-            } else {
+            }
+            else
+            {
                 speedLerpTime = 8f;
             }
         }
@@ -222,18 +244,41 @@ public class PlayerMotor : NetworkBehaviour
         // Debug.Log("move: " + move);
         controller.Move(move * Time.deltaTime);
 
-        if (isGrounded) {       
-            if (playerVelocity.y < 0) {
+        if (isGrounded)
+        {
+            if (playerVelocity.y < 0)
+            {
                 playerVelocity.y = -2f;
             }
         }
 
+        // compute localVelocity (keep this for actual movement)
         Vector3 localVelocity = transform.InverseTransformDirection(controller.velocity);
 
-        // localVelocity.x is the movement along the local right (strafing)
-        // localVelocity.z is the movement along the local forward (walking forward/backward)
-        animator.SetFloat(xVelHash, localVelocity.x); // Strafing
-        animator.SetFloat(zVelHash, localVelocity.z); // Forward/Backward
+        // use the smoothed localVelocity but scale it so the largest component equals the current speed
+        float animX = localVelocity.x;
+        float animZ = localVelocity.z;
+
+        // current horizontal speed (already computed earlier in ProcessMove as 'currentSpeed')
+        float desiredMax = Mathf.Max(currentSpeed, 0.001f); // avoid div by zero
+
+        float maxComp = Mathf.Max(Mathf.Abs(animX), Mathf.Abs(animZ));
+
+        // only scale when the player is actually providing input / moving
+        if (maxComp > 0.001f)
+        {
+            float scale = desiredMax / maxComp;
+            animX *= scale;
+            animZ *= scale;
+        }
+
+        // set animator floats with slight damping so transitions remain smooth
+        float dampTime = 0.08f; // tweak between 0.02 - 0.15 for snappier or smoother
+
+        //Debug.Log(localVelocity.x + ", " + localVelocity.z);
+
+        animator.SetFloat(xVelHash, animX, dampTime, Time.deltaTime);
+        animator.SetFloat(zVelHash, animZ, dampTime, Time.deltaTime);
 
     }
 
@@ -276,7 +321,7 @@ public class PlayerMotor : NetworkBehaviour
         if (jumpedFromSlide && crouching && !isGrounded) {
             crouching = false;
             jumpedFromSlide = false;
-            //animator.SetBool("Crouching", false);
+            animator.SetBool("Crouching", false);
         }
 
         if (!crouching && isGrounded) {
@@ -286,11 +331,11 @@ public class PlayerMotor : NetworkBehaviour
             if (isGrounded) {
                 sprinting = value;
                 crouching = !value;
-                //animator.SetBool("Crouching", !value);
+                animator.SetBool("Crouching", !value);
             } else {
                 if (!startedCrouchingInAir) {
                     crouching = !value;
-                    //animator.SetBool("Crouching", !value);
+                    animator.SetBool("Crouching", !value);
                 }
             }
         } else {
@@ -308,11 +353,11 @@ public class PlayerMotor : NetworkBehaviour
         {
             if (currentSpeed > 5.85f) {
                 crouching = false;
-                //animator.SetBool("Crouching", false);
+                animator.SetBool("Crouching", false);
                 Slide();
             } else {
                 crouching = false;
-                //animator.SetBool("Crouching", false);
+                animator.SetBool("Crouching", false);
                 sprinting = true;
             }
             
@@ -340,7 +385,7 @@ public class PlayerMotor : NetworkBehaviour
                 }
             }
             sprinting = !crouching && sprintButtonHeld;
-            //animator.SetBool("Crouching", crouching);
+            animator.SetBool("Crouching", crouching);
         }
     }
 

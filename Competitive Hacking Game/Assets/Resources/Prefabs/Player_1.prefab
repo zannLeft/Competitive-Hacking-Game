@@ -830,7 +830,7 @@ Transform:
   m_GameObject: {fileID: 4543584590317319789}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0.058}
+  m_LocalPosition: {x: 0, y: 0, z: 0.202}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1012,7 +1012,7 @@ Transform:
   m_GameObject: {fileID: 5065480775021633320}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.652, z: 0.144}
+  m_LocalPosition: {x: 0, y: 1.652, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1227,7 +1227,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 1182312238
+  GlobalObjectIdHash: 2057213198
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -1271,7 +1271,7 @@ MonoBehaviour:
   speed: 3
   sprintSpeed: 6
   jumpHeight: 2
-  crouchHeight: 0.80129075
+  crouchHeight: 0.5
   standHeight: 1.685
   slideSpeed: 9
   slideSpeedDecay: 6.3
@@ -1338,7 +1338,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d79bda58f64ae5044b11d1852e40589e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  TransitionStateInfoList: []
+  TransitionStateInfoList:
+  - IsCrossFadeExit: 0
+    Layer: 0
+    OriginatingState: 1783681257
+    DestinationState: 1137391654
+    TransitionDuration: 0.09
+    TriggerNameHash: 125937960
+    TransitionIndex: 0
+  - IsCrossFadeExit: 0
+    Layer: 0
+    OriginatingState: 1783681257
+    DestinationState: 933656280
+    TransitionDuration: 0.25
+    TriggerNameHash: 125937960
+    TransitionIndex: 2
+  - IsCrossFadeExit: 0
+    Layer: 0
+    OriginatingState: 1783681257
+    DestinationState: -844543045
+    TransitionDuration: 0.25
+    TriggerNameHash: 125937960
+    TransitionIndex: 3
   m_Animator: {fileID: 7898741019774491149}
 --- !u!114 &667075037438137217
 MonoBehaviour:

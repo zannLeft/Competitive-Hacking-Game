@@ -36,7 +36,7 @@ public class PlayerLook : NetworkBehaviour
 
         motor = GetComponent<PlayerMotor>();
         standingPosition = cam.transform.localPosition;
-        crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 0.95f, standingPosition.z + 0.2f);
+        crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z);
         slidingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z - 0.5f);
 
         // Set the default FOV
