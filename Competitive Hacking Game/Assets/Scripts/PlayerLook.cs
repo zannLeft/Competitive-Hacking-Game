@@ -1,105 +1,219 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
 public class PlayerLook : NetworkBehaviour
 {
     private PlayerMotor motor;
+
+    [Header("References")]
+    public Camera cam;
+    [Tooltip("Parent pivot of the main camera (your empty 'Camera' object in the middle of the player).")]
+    public Transform cameraRoot;
+
+    // Camera local positions by state
     private Vector3 standingPosition;
     private Vector3 crouchingPosition;
     private Vector3 slidingPosition;
+    private Vector3 sprintingPosition;
 
-    public Camera cam;
-    private float xRotation = 0f;
+
+    [Header("Sensitivity")]
     public float xSensitivity = 30f;
     public float ySensitivity = 30f;
 
-    // FOV settings
-    private float defaultFOV = 90f;
-    private float sprintFOV = 100f;  // Adjust this value to your preference
-    private float fovTransitionSpeed = 5f;
+    // Pitch
+    private float xRotation = 0f;
 
-    //public Transform phone;
+    [Header("FOV")]
+    [SerializeField] private float defaultFOV = 90f;
+    [SerializeField] private float sprintFOV = 100f;
+    [SerializeField] private float fovTransitionSpeed = 5f;
 
-    // Variables to introduce smooth delay in rotation
-    //private Quaternion targetPhoneRotation;
-    private float targetYaw; // Delayed yaw for smoothness
+    [Header("Shoulder Look (Yaw Decoupling)")]
+    [Tooltip("Max degrees camera can twist left/right while stationary/crouched.")]
+    public float maxShoulderYaw = 90f;
+    [Tooltip("When the offset reaches this, the body starts turning to align.")]
+    public float catchUpThreshold = 90f;
+    [Tooltip("How fast the body turns when catching up while stationary (deg/sec).")]
+    public float bodyCatchUpSpeed = 720f;
+
+    [Tooltip("Allow shoulder look when crouching (not sliding/sprinting).")]
+    public bool shoulderWhileCrouching = true;
+
+    [Header("Catch-up on Move")]
+    [Tooltip("If true, as soon as movement input starts, the body instantly matches the camera.")]
+    public bool instantCatchUpOnMove = true;
+    [Tooltip("If instantCatchUpOnMove is false, use this smooth speed (deg/sec).")]
+    public float catchUpOnMoveSpeed = 1080f;
+
+    // Internal yaw state (camera pivot offset)
+    private float yawOffset = 0f;              // local yaw on cameraRoot (degrees)
+    private bool catchingUpStationary = false; // true after threshold reached while stationary
+    private bool wasMoving = false;
 
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
-        if (!IsOwner) {
-            cam.gameObject.SetActive(false);
+
+        if (!IsOwner)
+        {
+            if (cam != null) cam.gameObject.SetActive(false);
+            return;
         }
 
         motor = GetComponent<PlayerMotor>();
+
+        // Cache camera local positions
         standingPosition = cam.transform.localPosition;
         crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z);
-        slidingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z - 0.5f);
+        slidingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z - 0.1f);
+        sprintingPosition = new Vector3(standingPosition.x, standingPosition.y - 0.15f, standingPosition.z + 0.15f);
 
-        // Set the default FOV
         cam.fieldOfView = defaultFOV;
 
-        // Initialize target yaw to match player's starting yaw
-        targetYaw = transform.eulerAngles.y;
-        //targetPhoneRotation = cam.transform.localRotation;
+        if (cameraRoot == null && cam != null)
+            cameraRoot = cam.transform.parent; // auto-fill
     }
 
     void Update()
     {
-        Vector3 targetHeight;
+        if (!IsOwner) return;
 
-        if (motor.sliding) {
-            if (xRotation > 0f) {
-                xRotation = Mathf.Lerp(xRotation, 0f, Time.deltaTime * 5f);
-            }
-        }
+        // Slide: gently bring pitch to neutral if needed
+        if (motor.sliding && xRotation > 0f)
+            xRotation = Mathf.Lerp(xRotation, 0f, Time.deltaTime * 3.5f);
 
-        // Handle camera position based on player state
-        if (motor.sliding) {
-            targetHeight = slidingPosition;
-        } else if (motor.crouching) {
-            targetHeight = crouchingPosition;
-        } else {
-            targetHeight = standingPosition;
-        }
-        cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetHeight, Time.deltaTime * 7f);
+        // Camera height by state
+        Vector3 targetPos =
+            motor.sprinting ? sprintingPosition :
+            motor.sliding ? slidingPosition :
+            motor.crouching ? crouchingPosition : standingPosition;
 
-        // Smooth FOV transition between sprinting and non-sprinting
+
+        cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetPos, Time.deltaTime * 7f);
+
+        // FOV by state
         float targetFOV = ((motor.sprinting && motor.inputDirection.y > 0) || motor.sliding) ? sprintFOV : defaultFOV;
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovTransitionSpeed);
+
+        // Apply the current yaw offset to the camera pivot every frame
+        if (cameraRoot != null)
+            cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
     }
 
     public void ProcessLook(Vector2 input)
     {
+        if (!IsOwner) return;
+
         float mouseX = input.x;
         float mouseY = input.y;
 
-        // Calculate camera rotation (pitch)
-        if (motor.sliding && xRotation > 0) {
-            if (mouseY > 0) {
+        // ---------- PITCH on the camera ----------
+        if (motor.sliding && xRotation > 0f)
+        {
+            if (mouseY > 0f)
                 xRotation -= mouseY * Time.deltaTime * ySensitivity;
-            }
-        } else {
+        }
+        else
+        {
             xRotation -= mouseY * Time.deltaTime * ySensitivity;
         }
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+        cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        // Apply vertical rotation to the camera
-        cam.transform.localRotation = Quaternion.Euler(xRotation, 0, 0);
+        // ---------- YAW logic ----------
+        bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
+        bool shoulderModeActive =
+            !hasMoveInput &&
+            !motor.sliding &&
+            !motor.sprinting &&
+            (motor.crouching ? shoulderWhileCrouching : true);
 
-        // Update player's rotation (yaw)
-        transform.Rotate(Vector3.up * (mouseX * Time.deltaTime) * xSensitivity);
+        if (shoulderModeActive)
+        {
+            // Accumulate yaw on the camera pivot (look-over-shoulder)
+            yawOffset += mouseX * xSensitivity * Time.deltaTime;
+            yawOffset = Mathf.Clamp(yawOffset, -maxShoulderYaw, maxShoulderYaw);
 
-        // Smoothly update the target yaw to create a delayed effect
-        targetYaw = Mathf.LerpAngle(targetYaw, transform.eulerAngles.y, Time.deltaTime * 8f); // Adjust "5f" for delay smoothness
+            // Begin catch-up once threshold is reached
+            if (!catchingUpStationary && Mathf.Abs(yawOffset) >= (catchUpThreshold - 0.01f))
+                catchingUpStationary = true;
 
-        // Determine the target rotation for the phone using both delayed yaw and camera pitch
-        //targetPhoneRotation = Quaternion.Euler(xRotation, targetYaw, 0);
+            // Turn in place until aligned
+            if (catchingUpStationary)
+            {
+                float step = bodyCatchUpSpeed * Time.deltaTime;
+                CatchUp(step);
 
-        // Apply consistent smoothness to all axes
-        //phone.rotation = Quaternion.Slerp(phone.rotation, targetPhoneRotation, Time.deltaTime * 8f);  // Adjust "5f" for desired smoothness
+                if (Mathf.Abs(yawOffset) <= 0.01f)
+                    catchingUpStationary = false;
+            }
+        }
+        else
+        {
+            // Movement (or sliding/sprinting): ensure body matches camera if there is any offset
+            if (hasMoveInput && !wasMoving && Mathf.Abs(yawOffset) > 0.01f)
+            {
+                if (instantCatchUpOnMove)
+                {
+                    // Snap the body to the camera direction and clear offset
+                    transform.Rotate(0f, yawOffset, 0f);
+                    yawOffset = 0f;
+                }
+                else
+                {
+                    // Smooth catch-up starting on move
+                    float step = catchUpOnMoveSpeed * Time.deltaTime;
+                    CatchUp(step);
+                }
+            }
+
+            // While moving, body yaw follows mouse input normally
+            transform.Rotate(Vector3.up * (mouseX * Time.deltaTime) * xSensitivity);
+
+            // If smoothing is enabled, keep catching up during movement until aligned
+            if (!instantCatchUpOnMove && hasMoveInput && Mathf.Abs(yawOffset) > 0.01f)
+            {
+                float step = catchUpOnMoveSpeed * Time.deltaTime;
+                CatchUp(step);
+            }
+
+            catchingUpStationary = false; // moving cancels stationary catch-up
+        }
+
+        // Apply offset immediately so there is no 1-frame visual lag
+        if (cameraRoot != null)
+            cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
+
+        wasMoving = hasMoveInput;
     }
+
+    /// <summary>
+    /// Rotate the body toward the camera's world yaw by up to 'stepDegrees'.
+    /// Subtracts the same delta from yawOffset so the camera view doesn't jump.
+    /// </summary>
+    private void CatchUp(float stepDegrees)
+    {
+        if (Mathf.Abs(yawOffset) <= 0.0001f) return;
+
+        float delta = Mathf.Clamp(yawOffset, -stepDegrees, stepDegrees); // yawOffset is signed in degrees
+        transform.Rotate(0f, delta, 0f);
+        yawOffset -= delta;
+
+        if (Mathf.Abs(yawOffset) <= 0.01f)
+            yawOffset = 0f;
+    }
+    
+    // Add inside PlayerLook class
+    public Quaternion MoveSpaceRotation
+    {
+        get
+        {
+            // Body rotation + current camera yaw offset (ignores pitch/roll).
+            return transform.rotation * Quaternion.Euler(0f, yawOffset, 0f);
+        }
+    }
+
 }
+

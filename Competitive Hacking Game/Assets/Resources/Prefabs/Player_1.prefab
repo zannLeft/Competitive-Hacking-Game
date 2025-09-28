@@ -1227,7 +1227,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 2057213198
+  GlobalObjectIdHash: 1182312238
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -1251,8 +1251,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cam: {fileID: 2272284346070443280}
+  cameraRoot: {fileID: 2698562056828817307}
   xSensitivity: 30
   ySensitivity: 30
+  defaultFOV: 90
+  sprintFOV: 100
+  fovTransitionSpeed: 5
+  maxShoulderYaw: 90
+  catchUpThreshold: 90
+  bodyCatchUpSpeed: 250
+  shoulderWhileCrouching: 1
+  instantCatchUpOnMove: 0
+  catchUpOnMoveSpeed: 250
 --- !u!114 &4708886749802310030
 MonoBehaviour:
   m_ObjectHideFlags: 0

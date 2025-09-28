@@ -7,6 +7,7 @@ public class PlayerMotor : NetworkBehaviour
 {
     private CharacterController controller;
     private Animator animator;
+    private PlayerLook look;  
 
     private Vector3 playerVelocity;
     private Vector3 moveDirection = Vector3.zero;
@@ -62,6 +63,7 @@ public class PlayerMotor : NetworkBehaviour
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
+        look = GetComponent<PlayerLook>();
 
         // Ensure crouchCenterY is consistent if someone adjusted stand/crouch heights in inspector
         crouchCenterY = standCenterY - (standHeight - crouchHeight) / 2f;
@@ -122,7 +124,7 @@ public class PlayerMotor : NetworkBehaviour
             }
             sliding = false;
             slideSpeed = 8f;
-            //animator.SetBool("Sliding", sliding);
+            animator.SetBool("Sliding", sliding);
             slideTimer = slideTimerMax;
             animator.SetBool("Crouching", crouching);
         }
@@ -209,7 +211,8 @@ public class PlayerMotor : NetworkBehaviour
             smoothSpeed = 1f;
         }
 
-        Vector3 targetDirection = transform.TransformDirection(new Vector3(input.x, 0, input.y));
+        Quaternion moveSpace = (look != null) ? look.MoveSpaceRotation : transform.rotation;
+        Vector3 targetDirection = moveSpace * new Vector3(input.x, 0f, input.y);
 
         moveDirection = Vector3.Lerp(moveDirection, targetDirection, Time.deltaTime * smoothSpeed);
 
@@ -392,7 +395,7 @@ public class PlayerMotor : NetworkBehaviour
     private void Slide()
     {
         sliding = true;
-        //animator.SetBool("Sliding", sliding);
+        animator.SetBool("Sliding", sliding);
         sprinting = false;
     }
 }
