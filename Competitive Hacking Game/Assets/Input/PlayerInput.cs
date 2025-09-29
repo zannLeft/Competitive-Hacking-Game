@@ -340,14 +340,14 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             ]
         },
         {
-            ""name"": ""HandItems"",
-            ""id"": ""77023b0c-54fc-4ece-8b0a-9fa33c73eb26"",
+            ""name"": ""UI"",
+            ""id"": ""8c08a56d-8a8a-4116-b652-e153cb28555c"",
             ""actions"": [
                 {
-                    ""name"": ""PhoneScreen"",
+                    ""name"": ""Pause"",
                     ""type"": ""Button"",
-                    ""id"": ""7a93e117-c1b7-4707-a7c9-0a52676a9ad7"",
-                    ""expectedControlType"": ""Button"",
+                    ""id"": ""0f442392-c152-4415-823d-d4ec1865d77b"",
+                    ""expectedControlType"": """",
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
@@ -356,12 +356,23 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             ""bindings"": [
                 {
                     ""name"": """",
-                    ""id"": ""967f7d15-e4a5-4ab4-bfee-0a1114d41aa2"",
-                    ""path"": ""<Mouse>/rightButton"",
+                    ""id"": ""0f632e74-9638-4704-b6c3-6ce55d27e959"",
+                    ""path"": ""<Keyboard>/escape"",
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""PhoneScreen"",
+                    ""action"": ""Pause"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""a3fcdef8-062b-4498-8184-4a67fe01a475"",
+                    ""path"": ""<Keyboard>/p"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Pause"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -377,15 +388,15 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         m_OnFoot_Look = m_OnFoot.FindAction("Look", throwIfNotFound: true);
         m_OnFoot_Sprint = m_OnFoot.FindAction("Sprint", throwIfNotFound: true);
         m_OnFoot_Crouch = m_OnFoot.FindAction("Crouch", throwIfNotFound: true);
-        // HandItems
-        m_HandItems = asset.FindActionMap("HandItems", throwIfNotFound: true);
-        m_HandItems_PhoneScreen = m_HandItems.FindAction("PhoneScreen", throwIfNotFound: true);
+        // UI
+        m_UI = asset.FindActionMap("UI", throwIfNotFound: true);
+        m_UI_Pause = m_UI.FindAction("Pause", throwIfNotFound: true);
     }
 
     ~@PlayerInput()
     {
         UnityEngine.Debug.Assert(!m_OnFoot.enabled, "This will cause a leak and performance issues, PlayerInput.OnFoot.Disable() has not been called.");
-        UnityEngine.Debug.Assert(!m_HandItems.enabled, "This will cause a leak and performance issues, PlayerInput.HandItems.Disable() has not been called.");
+        UnityEngine.Debug.Assert(!m_UI.enabled, "This will cause a leak and performance issues, PlayerInput.UI.Disable() has not been called.");
     }
 
     /// <summary>
@@ -598,29 +609,29 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
     /// </summary>
     public OnFootActions @OnFoot => new OnFootActions(this);
 
-    // HandItems
-    private readonly InputActionMap m_HandItems;
-    private List<IHandItemsActions> m_HandItemsActionsCallbackInterfaces = new List<IHandItemsActions>();
-    private readonly InputAction m_HandItems_PhoneScreen;
+    // UI
+    private readonly InputActionMap m_UI;
+    private List<IUIActions> m_UIActionsCallbackInterfaces = new List<IUIActions>();
+    private readonly InputAction m_UI_Pause;
     /// <summary>
-    /// Provides access to input actions defined in input action map "HandItems".
+    /// Provides access to input actions defined in input action map "UI".
     /// </summary>
-    public struct HandItemsActions
+    public struct UIActions
     {
         private @PlayerInput m_Wrapper;
 
         /// <summary>
         /// Construct a new instance of the input action map wrapper class.
         /// </summary>
-        public HandItemsActions(@PlayerInput wrapper) { m_Wrapper = wrapper; }
+        public UIActions(@PlayerInput wrapper) { m_Wrapper = wrapper; }
         /// <summary>
-        /// Provides access to the underlying input action "HandItems/PhoneScreen".
+        /// Provides access to the underlying input action "UI/Pause".
         /// </summary>
-        public InputAction @PhoneScreen => m_Wrapper.m_HandItems_PhoneScreen;
+        public InputAction @Pause => m_Wrapper.m_UI_Pause;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
-        public InputActionMap Get() { return m_Wrapper.m_HandItems; }
+        public InputActionMap Get() { return m_Wrapper.m_UI; }
         /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Enable()" />
         public void Enable() { Get().Enable(); }
         /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Disable()" />
@@ -628,9 +639,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.enabled" />
         public bool enabled => Get().enabled;
         /// <summary>
-        /// Implicitly converts an <see ref="HandItemsActions" /> to an <see ref="InputActionMap" /> instance.
+        /// Implicitly converts an <see ref="UIActions" /> to an <see ref="InputActionMap" /> instance.
         /// </summary>
-        public static implicit operator InputActionMap(HandItemsActions set) { return set.Get(); }
+        public static implicit operator InputActionMap(UIActions set) { return set.Get(); }
         /// <summary>
         /// Adds <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
         /// </summary>
@@ -638,14 +649,14 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// <remarks>
         /// If <paramref name="instance" /> is <c>null</c> or <paramref name="instance"/> have already been added this method does nothing.
         /// </remarks>
-        /// <seealso cref="HandItemsActions" />
-        public void AddCallbacks(IHandItemsActions instance)
+        /// <seealso cref="UIActions" />
+        public void AddCallbacks(IUIActions instance)
         {
-            if (instance == null || m_Wrapper.m_HandItemsActionsCallbackInterfaces.Contains(instance)) return;
-            m_Wrapper.m_HandItemsActionsCallbackInterfaces.Add(instance);
-            @PhoneScreen.started += instance.OnPhoneScreen;
-            @PhoneScreen.performed += instance.OnPhoneScreen;
-            @PhoneScreen.canceled += instance.OnPhoneScreen;
+            if (instance == null || m_Wrapper.m_UIActionsCallbackInterfaces.Contains(instance)) return;
+            m_Wrapper.m_UIActionsCallbackInterfaces.Add(instance);
+            @Pause.started += instance.OnPause;
+            @Pause.performed += instance.OnPause;
+            @Pause.canceled += instance.OnPause;
         }
 
         /// <summary>
@@ -654,21 +665,21 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// <remarks>
         /// Calling this method when <paramref name="instance" /> have not previously been registered has no side-effects.
         /// </remarks>
-        /// <seealso cref="HandItemsActions" />
-        private void UnregisterCallbacks(IHandItemsActions instance)
+        /// <seealso cref="UIActions" />
+        private void UnregisterCallbacks(IUIActions instance)
         {
-            @PhoneScreen.started -= instance.OnPhoneScreen;
-            @PhoneScreen.performed -= instance.OnPhoneScreen;
-            @PhoneScreen.canceled -= instance.OnPhoneScreen;
+            @Pause.started -= instance.OnPause;
+            @Pause.performed -= instance.OnPause;
+            @Pause.canceled -= instance.OnPause;
         }
 
         /// <summary>
-        /// Unregisters <param cref="instance" /> and unregisters all input action callbacks via <see cref="HandItemsActions.UnregisterCallbacks(IHandItemsActions)" />.
+        /// Unregisters <param cref="instance" /> and unregisters all input action callbacks via <see cref="UIActions.UnregisterCallbacks(IUIActions)" />.
         /// </summary>
-        /// <seealso cref="HandItemsActions.UnregisterCallbacks(IHandItemsActions)" />
-        public void RemoveCallbacks(IHandItemsActions instance)
+        /// <seealso cref="UIActions.UnregisterCallbacks(IUIActions)" />
+        public void RemoveCallbacks(IUIActions instance)
         {
-            if (m_Wrapper.m_HandItemsActionsCallbackInterfaces.Remove(instance))
+            if (m_Wrapper.m_UIActionsCallbackInterfaces.Remove(instance))
                 UnregisterCallbacks(instance);
         }
 
@@ -678,21 +689,21 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// <remarks>
         /// If <paramref name="instance" /> is <c>null</c>, calling this method will only unregister all existing callbacks but not register any new callbacks.
         /// </remarks>
-        /// <seealso cref="HandItemsActions.AddCallbacks(IHandItemsActions)" />
-        /// <seealso cref="HandItemsActions.RemoveCallbacks(IHandItemsActions)" />
-        /// <seealso cref="HandItemsActions.UnregisterCallbacks(IHandItemsActions)" />
-        public void SetCallbacks(IHandItemsActions instance)
+        /// <seealso cref="UIActions.AddCallbacks(IUIActions)" />
+        /// <seealso cref="UIActions.RemoveCallbacks(IUIActions)" />
+        /// <seealso cref="UIActions.UnregisterCallbacks(IUIActions)" />
+        public void SetCallbacks(IUIActions instance)
         {
-            foreach (var item in m_Wrapper.m_HandItemsActionsCallbackInterfaces)
+            foreach (var item in m_Wrapper.m_UIActionsCallbackInterfaces)
                 UnregisterCallbacks(item);
-            m_Wrapper.m_HandItemsActionsCallbackInterfaces.Clear();
+            m_Wrapper.m_UIActionsCallbackInterfaces.Clear();
             AddCallbacks(instance);
         }
     }
     /// <summary>
-    /// Provides a new <see cref="HandItemsActions" /> instance referencing this action map.
+    /// Provides a new <see cref="UIActions" /> instance referencing this action map.
     /// </summary>
-    public HandItemsActions @HandItems => new HandItemsActions(this);
+    public UIActions @UI => new UIActions(this);
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "OnFoot" which allows adding and removing callbacks.
     /// </summary>
@@ -737,18 +748,18 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         void OnCrouch(InputAction.CallbackContext context);
     }
     /// <summary>
-    /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "HandItems" which allows adding and removing callbacks.
+    /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "UI" which allows adding and removing callbacks.
     /// </summary>
-    /// <seealso cref="HandItemsActions.AddCallbacks(IHandItemsActions)" />
-    /// <seealso cref="HandItemsActions.RemoveCallbacks(IHandItemsActions)" />
-    public interface IHandItemsActions
+    /// <seealso cref="UIActions.AddCallbacks(IUIActions)" />
+    /// <seealso cref="UIActions.RemoveCallbacks(IUIActions)" />
+    public interface IUIActions
     {
         /// <summary>
-        /// Method invoked when associated input action "PhoneScreen" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// Method invoked when associated input action "Pause" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
         /// </summary>
         /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
-        void OnPhoneScreen(InputAction.CallbackContext context);
+        void OnPause(InputAction.CallbackContext context);
     }
 }

@@ -1,4 +1,5 @@
 {
+    "version": 1,
     "name": "PlayerInput",
     "maps": [
         {
@@ -253,14 +254,14 @@
             ]
         },
         {
-            "name": "HandItems",
-            "id": "77023b0c-54fc-4ece-8b0a-9fa33c73eb26",
+            "name": "UI",
+            "id": "8c08a56d-8a8a-4116-b652-e153cb28555c",
             "actions": [
                 {
-                    "name": "PhoneScreen",
+                    "name": "Pause",
                     "type": "Button",
-                    "id": "7a93e117-c1b7-4707-a7c9-0a52676a9ad7",
-                    "expectedControlType": "Button",
+                    "id": "0f442392-c152-4415-823d-d4ec1865d77b",
+                    "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
@@ -269,12 +270,23 @@
             "bindings": [
                 {
                     "name": "",
-                    "id": "967f7d15-e4a5-4ab4-bfee-0a1114d41aa2",
-                    "path": "<Mouse>/rightButton",
+                    "id": "0f632e74-9638-4704-b6c3-6ce55d27e959",
+                    "path": "<Keyboard>/escape",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "PhoneScreen",
+                    "action": "Pause",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "a3fcdef8-062b-4498-8184-4a67fe01a475",
+                    "path": "<Keyboard>/p",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Pause",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

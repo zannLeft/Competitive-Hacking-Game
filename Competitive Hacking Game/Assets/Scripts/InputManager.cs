@@ -8,19 +8,19 @@ public class InputManager : NetworkBehaviour
 {
     private PlayerInput playerInput;
     private PlayerInput.OnFootActions onFoot;
+    private PlayerInput.UIActions ui; // <-- added
+
     //private PlayerInput.HandItemsActions handItems;
     private PlayerMotor motor;
     private PlayerLook look;
     //private HandItems items;
-    
 
     void Awake()
     {
         // Initialize input system and references
         playerInput = new PlayerInput();
         onFoot = playerInput.OnFoot;
-        //handItems = playerInput.HandItems;
-        
+        ui = playerInput.UI; // <-- added
 
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
@@ -33,25 +33,40 @@ public class InputManager : NetworkBehaviour
         if (IsOwner)
         {
             // Set up input actions for the local player
-            onFoot.Jump.started += ctx => motor.Jump(true);
-            onFoot.Jump.canceled += ctx => motor.Jump(false);
-            onFoot.Sprint.started += ctx => motor.Sprint(true);
-            onFoot.Sprint.canceled += ctx => motor.Sprint(false);
-            onFoot.Crouch.performed += ctx => motor.Crouch();
+            onFoot.Jump.started += OnJumpStarted;
+            onFoot.Jump.canceled += OnJumpCanceled;
+            onFoot.Sprint.started += OnSprintStarted;
+            onFoot.Sprint.canceled += OnSprintCanceled;
+            onFoot.Crouch.performed += OnCrouchPerformed;
 
             //handItems.PhoneScreen.performed += ctx => items.Equip(0);
 
-            // Enable input for the local player
+            // Enable gameplay + UI maps (UI kept on so Pause works while gameplay is disabled)
             onFoot.Enable();
             //handItems.Enable();
+
+            ui.Pause.performed += OnPausePerformed; // <-- added
+            ui.Enable();                             // <-- added
         }
     }
+
+    private void OnPausePerformed(InputAction.CallbackContext ctx)
+    {
+        PauseMenuUI.Instance?.Toggle();
+    }
+
+    private void OnJumpStarted(InputAction.CallbackContext ctx) => motor.Jump(true);
+    private void OnJumpCanceled(InputAction.CallbackContext ctx) => motor.Jump(false);
+    private void OnSprintStarted(InputAction.CallbackContext ctx) => motor.Sprint(true);
+    private void OnSprintCanceled(InputAction.CallbackContext ctx) => motor.Sprint(false);
+    private void OnCrouchPerformed(InputAction.CallbackContext ctx) => motor.Crouch();
 
     void Update()
     {
         // Only allow the owner of the player object to control movement
         if (!IsOwner) return;
 
+        // Keep calling ProcessMove even when paused so gravity continues to apply.
         motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
     }
 
@@ -68,14 +83,25 @@ public class InputManager : NetworkBehaviour
         // Disable input when the object is destroyed or disabled, preventing memory leaks
         if (IsOwner)
         {
-            onFoot.Jump.started += ctx => motor.Jump(true);
-            onFoot.Jump.canceled += ctx => motor.Jump(false);
-            onFoot.Sprint.started -= ctx => motor.Sprint(true);
-            onFoot.Sprint.canceled -= ctx => motor.Sprint(false);
-            onFoot.Crouch.performed -= ctx => motor.Crouch();
+            // Properly unsubscribe (fixed the accidental += you had on Jump)
+            onFoot.Jump.started -= OnJumpStarted;
+            onFoot.Jump.canceled -= OnJumpCanceled;
+            onFoot.Sprint.started -= OnSprintStarted;
+            onFoot.Sprint.canceled -= OnSprintCanceled;
+            onFoot.Crouch.performed -= OnCrouchPerformed;
+
+            ui.Pause.performed -= OnPausePerformed;
 
             onFoot.Disable();
+            ui.Disable();
             //handItems.Disable();
         }
+    }
+
+    // Called by PauseMenuUI to toggle gameplay input
+    public void SetGameplayEnabled(bool enabled)
+    {
+        if (!IsOwner) return;
+        if (enabled) onFoot.Enable(); else onFoot.Disable();
     }
 }
