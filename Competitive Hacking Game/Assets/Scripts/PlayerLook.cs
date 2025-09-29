@@ -52,6 +52,15 @@ public class PlayerLook : NetworkBehaviour
     private bool catchingUpStationary = false; // true after threshold reached while stationary
     private bool wasMoving = false;
 
+
+    public float Pitch => xRotation;          // [-90, +90] from your clamp
+    public float YawOffset => yawOffset;      // [-maxShoulderYaw, +maxShoulderYaw] 
+
+    public Quaternion WorldLookRotation =>
+        transform.rotation * Quaternion.Euler(0f, yawOffset, 0f) * Quaternion.Euler(Pitch, 0f, 0f);
+
+    public Vector3 WorldLookDirection => WorldLookRotation * Vector3.forward;
+
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;

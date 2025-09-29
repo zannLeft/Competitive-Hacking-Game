@@ -1165,6 +1165,7 @@ GameObject:
   - component: {fileID: 7898741019774491149}
   - component: {fileID: 3788420408615085539}
   - component: {fileID: 667075037438137217}
+  - component: {fileID: 119657160423194826}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1227,7 +1228,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 1182312238
+  GlobalObjectIdHash: 2057213198
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -1402,6 +1403,30 @@ MonoBehaviour:
   InLocalSpace: 0
   Interpolate: 1
   SlerpPosition: 0
+--- !u!114 &119657160423194826
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 482c6fba7a86d2b498ec3b350fcd78e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeadLookIK
+  look: {fileID: 6487965562487473033}
+  headOverride: {fileID: 0}
+  lookDistance: 8
+  headWeight: 0.85
+  bodyWeight: 0.15
+  eyesWeight: 0.3
+  clampWeight: 0.6
+  maxHeadYaw: 80
+  maxHeadPitchUp: 60
+  maxHeadPitchDown: 45
+  sendRateHz: 15
+  remoteSmoothing: 12
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0
