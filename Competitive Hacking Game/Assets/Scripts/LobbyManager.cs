@@ -35,6 +35,17 @@ public class LobbyManager : MonoBehaviour
     public static LobbyManager Instance { get; private set; }
     private bool callbacksRegistered = false;
 
+    [Header("Shirt materials (assign in inspector)")]
+    // list of predefined shirt materials. assign a material per color in the inspector.
+    [SerializeField] public List<Material> shirtMaterials = new List<Material>();
+
+    // special black material for the bad guy. assign in inspector.
+    [SerializeField] public Material blackShirtMaterial;
+
+    // internal set of used indices
+    private HashSet<int> usedShirtIndices = new HashSet<int>();
+
+
     private void Awake()
     {
         Instance = this;
@@ -294,21 +305,30 @@ public class LobbyManager : MonoBehaviour
 
     public async void LeaveToLobbySelect()
     {
-        try {
-            if (joinedLobby != null) {
-                if (IsLobbyHost()) {
+        try
+        {
+            if (joinedLobby != null)
+            {
+                if (IsLobbyHost())
+                {
                     await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
-                } else {
+                }
+                else
+                {
                     await LobbyService.Instance.RemovePlayerAsync(joinedLobby.Id, AuthenticationService.Instance.PlayerId);
                 }
             }
-        } catch (LobbyServiceException e) {
+        }
+        catch (LobbyServiceException e)
+        {
             Debug.Log(e);
         }
 
-        if (NetworkManager.Singleton != null) {
+        if (NetworkManager.Singleton != null)
+        {
             UnregisterNetworkCallbacks();
-            if (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient) {
+            if (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient)
+            {
                 NetworkManager.Singleton.Shutdown();
             }
         }
@@ -332,8 +352,9 @@ public class LobbyManager : MonoBehaviour
         lobbyUI.SetActive(false);
         cam.SetActive(false);
     }
-    
-    private void RegisterNetworkCallbacks() {
+
+    private void RegisterNetworkCallbacks()
+    {
         if (callbacksRegistered) return;
         if (NetworkManager.Singleton == null) return;
 
@@ -341,7 +362,8 @@ public class LobbyManager : MonoBehaviour
         callbacksRegistered = true;
     }
 
-    private void UnregisterNetworkCallbacks() {
+    private void UnregisterNetworkCallbacks()
+    {
         if (!callbacksRegistered) return;
         if (NetworkManager.Singleton == null) { callbacksRegistered = false; return; }
 
@@ -349,7 +371,8 @@ public class LobbyManager : MonoBehaviour
         callbacksRegistered = false;
     }
 
-    private void OnClientDisconnected(ulong clientId) {
+    private void OnClientDisconnected(ulong clientId)
+    {
         // Clients only: if *we* got disconnected (e.g., host left), go back to the lobby UI.
         if (NetworkManager.Singleton != null &&
             !NetworkManager.Singleton.IsServer &&                          // we're not the host
@@ -363,14 +386,62 @@ public class LobbyManager : MonoBehaviour
     }
 
     // Best-effort: if host closes the app, try to delete the lobby so it doesn't linger.
-    private async void OnApplicationQuit() {
-        try {
-            if (IsLobbyHost() && joinedLobby != null) {
+    private async void OnApplicationQuit()
+    {
+        try
+        {
+            if (IsLobbyHost() && joinedLobby != null)
+            {
                 await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
             }
-        } catch (LobbyServiceException e) {
+        }
+        catch (LobbyServiceException e)
+        {
             Debug.Log(e);
         }
     }
+    
+        // Called by PlayerSetup on server when a player object spawns
+    public int AssignColorIndex()
+    {
+        if (shirtMaterials == null || shirtMaterials.Count == 0)
+        {
+            Debug.LogWarning("[LobbyManager] No shirt materials configured. returning index 0");
+            return 0;
+        }
+
+        // pick first unused index
+        for (int i = 0; i < shirtMaterials.Count; i++)
+        {
+            if (!usedShirtIndices.Contains(i))
+            {
+                usedShirtIndices.Add(i);
+                return i;
+            }
+        }
+
+        // If all used, fallback to picking a random index (or you could loop)
+        int fallback = UnityEngine.Random.Range(0, shirtMaterials.Count);
+        Debug.LogWarning($"[LobbyManager] All shirt indices used, falling back to {fallback}");
+        return fallback;
+    }
+
+    public void ReleaseColorIndex(int index)
+    {
+        if (usedShirtIndices.Contains(index))
+            usedShirtIndices.Remove(index);
+    }
+
+    public Material GetShirtMaterial(int index)
+    {
+        if (shirtMaterials == null || shirtMaterials.Count == 0)
+            return null;
+
+        if (index < 0 || index >= shirtMaterials.Count)
+            return shirtMaterials[0];
+
+        return shirtMaterials[index];
+    }
+
 
 }

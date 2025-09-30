@@ -1314,7 +1314,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 86fcf5d157e12f54e944e42ff9556bd0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  headMesh: {fileID: 4497644615690059943}
+  headRenderer: {fileID: 9103178378047289684}
+  bodyRenderer: {fileID: 3643557171636159750}
+  ShirtIndex:
+    m_InternalValue: 0
+  IsBadGuy:
+    m_InternalValue: 0
 --- !u!95 &7898741019774491149
 Animator:
   serializedVersion: 7
@@ -1415,18 +1420,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 482c6fba7a86d2b498ec3b350fcd78e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HeadLookIK
-  look: {fileID: 6487965562487473033}
-  headOverride: {fileID: 0}
-  lookDistance: 8
-  headWeight: 0.85
-  bodyWeight: 0.15
-  eyesWeight: 0.3
-  clampWeight: 0.6
-  maxHeadYaw: 80
-  maxHeadPitchUp: 60
-  maxHeadPitchDown: 45
-  sendRateHz: 15
-  remoteSmoothing: 12
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

@@ -16004,6 +16004,13 @@ MonoBehaviour:
   pregameUI: {fileID: 2078672026}
   lobbyCreateUI: {fileID: 502618968}
   cam: {fileID: 1547934318}
+  shirtMaterials:
+  - {fileID: 2100000, guid: 53b02a6a1bcabff4a99b370f4e61838e, type: 2}
+  - {fileID: 2100000, guid: b4f4ad7bf5a0dc346a7c874b36f46932, type: 2}
+  - {fileID: 2100000, guid: caa3fd0d51947f94b86506f77e81ba30, type: 2}
+  - {fileID: 2100000, guid: 09bc943622489e44f86dfc75d3f54092, type: 2}
+  - {fileID: 2100000, guid: 50329d88a8be50648b35f80efb7f768b, type: 2}
+  blackShirtMaterial: {fileID: 2100000, guid: c871faa8fb13d69479f5fc6b8bf83afb, type: 2}
 --- !u!4 &1773646425
 Transform:
   m_ObjectHideFlags: 0
