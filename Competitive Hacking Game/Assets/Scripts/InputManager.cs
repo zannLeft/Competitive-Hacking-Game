@@ -45,6 +45,7 @@ public class InputManager : NetworkBehaviour
             onFoot.Enable();
             //handItems.Enable();
 
+            ui.Start.performed += OnStartPerformed;
             ui.Pause.performed += OnPausePerformed; // <-- added
             ui.Enable();                             // <-- added
         }
@@ -54,6 +55,17 @@ public class InputManager : NetworkBehaviour
     {
         PauseMenuUI.Instance?.Toggle();
     }
+
+    private void OnStartPerformed(UnityEngine.InputSystem.InputAction.CallbackContext ctx)
+    {
+        // Forward to server only if the pregame controller exists in the game
+        if (PregameLobbyNetwork.Instance != null)
+        {
+            // This calls a ServerRpc on the networked object; ServerRpc has RequireOwnership=false.
+            PregameLobbyNetwork.Instance.ToggleStartServerRpc();
+        }
+    }
+
 
     private void OnJumpStarted(InputAction.CallbackContext ctx) => motor.Jump(true);
     private void OnJumpCanceled(InputAction.CallbackContext ctx) => motor.Jump(false);
@@ -91,6 +103,7 @@ public class InputManager : NetworkBehaviour
             onFoot.Crouch.performed -= OnCrouchPerformed;
 
             ui.Pause.performed -= OnPausePerformed;
+            ui.Start.performed -= OnStartPerformed;
 
             onFoot.Disable();
             ui.Disable();

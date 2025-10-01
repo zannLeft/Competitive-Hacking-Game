@@ -199,6 +199,8 @@ public class LobbyManager : MonoBehaviour
 
             NetworkManager.Singleton.StartHost();
 
+            SpawnPregameNetworkObject();
+
             RegisterNetworkCallbacks();
 
             HideUI();
@@ -443,5 +445,28 @@ public class LobbyManager : MonoBehaviour
         return shirtMaterials[index];
     }
 
+    private void SpawnPregameNetworkObject()
+    {
+        // only host (server) should spawn the network object
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
+
+        GameObject prefab = Resources.Load<GameObject>("PregameNetwork");
+        if (prefab == null)
+        {
+            Debug.LogWarning("[LobbyManager] PregameNetwork prefab not found in Resources/PregameNetwork");
+            return;
+        }
+
+        GameObject go = Instantiate(prefab);
+        var netObj = go.GetComponent<Unity.Netcode.NetworkObject>();
+        if (netObj != null)
+        {
+            netObj.Spawn();
+        }
+        else
+        {
+            Debug.LogWarning("[LobbyManager] PregameNetwork prefab missing NetworkObject component");
+        }
+    }
 
 }
