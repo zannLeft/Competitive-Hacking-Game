@@ -26,10 +26,10 @@ public class PregameUI : MonoBehaviour
         if (lobby != null && lobbyCodeText != null)
             lobbyCodeText.text = lobby.Name + ": " + lobby.LobbyCode;
 
-        // If the networked pregame object already exists, push its state to UI now
         PregameLobbyNetwork.Instance?.PushStateToUI();
 
-        Show();
+        if (lobby != null && PregameLobbyNetwork.Instance != null)
+            Show();
     }
 
     public void Show()

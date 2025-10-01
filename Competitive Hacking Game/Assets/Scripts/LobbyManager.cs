@@ -36,11 +36,12 @@ public class LobbyManager : MonoBehaviour
     private bool callbacksRegistered = false;
 
     [Header("Shirt materials (assign in inspector)")]
-    // list of predefined shirt materials. assign a material per color in the inspector.
     [SerializeField] public List<Material> shirtMaterials = new List<Material>();
-
-    // special black material for the bad guy. assign in inspector.
     [SerializeField] public Material blackShirtMaterial;
+
+    private Coroutine showPregameRoutine;
+    public int MaxPlayers => MAX_PLAYER_AMOUNT;   // (optional) expose to others
+
 
     // internal set of used indices
     private HashSet<int> usedShirtIndices = new HashSet<int>();
@@ -177,6 +178,9 @@ public class LobbyManager : MonoBehaviour
 
     public async void CreateLobby(string lobbyName, bool isPrivate)
     {
+        ConnectingOverlayUI.Instance?.Show("Creating lobby...");
+        HideUI();
+
         try
         {
             joinedLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, MAX_PLAYER_AMOUNT, new CreateLobbyOptions
@@ -203,20 +207,23 @@ public class LobbyManager : MonoBehaviour
 
             RegisterNetworkCallbacks();
 
-            HideUI();
-            lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
+            ShowPregameUIWhenReady();
+
 
         }
         catch (LobbyServiceException e)
         {
             Debug.Log(e);
+            ConnectingOverlayUI.Instance?.Hide();
+            ShowUI();
         }
     }
 
     public async void QuickJoin()
     {
+        ConnectingOverlayUI.Instance?.Show("Quick joining...");
+        HideUI();
+
         try
         {
             joinedLobby = await LobbyService.Instance.QuickJoinLobbyAsync();
@@ -231,16 +238,15 @@ public class LobbyManager : MonoBehaviour
 
             NetworkManager.Singleton.StartClient();
             RegisterNetworkCallbacks();
+            ShowPregameUIWhenReady();
 
-            HideUI();
-            lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
 
         }
         catch (LobbyServiceException e)
         {
             Debug.Log(e);
+            ConnectingOverlayUI.Instance?.Hide();
+            ShowUI();
         }
     }
 
@@ -251,6 +257,9 @@ public class LobbyManager : MonoBehaviour
 
     public async void JoinWithId(string lobbyId)
     {
+        ConnectingOverlayUI.Instance?.Show("Joining Lobby...");
+        HideUI();
+
         try
         {
             joinedLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobbyId);
@@ -266,19 +275,22 @@ public class LobbyManager : MonoBehaviour
             NetworkManager.Singleton.StartClient();
             RegisterNetworkCallbacks();
 
-            HideUI();
-            lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
+            ShowPregameUIWhenReady();
+
         }
         catch (LobbyServiceException e)
         {
             Debug.Log(e);
+            ConnectingOverlayUI.Instance?.Hide();
+            ShowUI();
         }
     }
 
     public async void JoinWithCode(string lobbyCode)
     {
+        ConnectingOverlayUI.Instance?.Show("Joining with code...");
+        HideUI();
+
         try
         {
             joinedLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(lobbyCode);
@@ -296,17 +308,25 @@ public class LobbyManager : MonoBehaviour
 
             HideUI();
             lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
+            ShowPregameUIWhenReady();
+
         }
         catch (LobbyServiceException e)
         {
             Debug.Log(e);
+            ConnectingOverlayUI.Instance?.Hide();
+            ShowUI();
         }
     }
 
     public async void LeaveToLobbySelect()
     {
+        if (showPregameRoutine != null) { StopCoroutine(showPregameRoutine); showPregameRoutine = null; }
+
+        ConnectingOverlayUI.Instance?.Show("Leaving...");
+
+        SwitchToMenuAudioImmediate();
+
         try
         {
             if (joinedLobby != null)
@@ -324,6 +344,7 @@ public class LobbyManager : MonoBehaviour
         catch (LobbyServiceException e)
         {
             Debug.Log(e);
+            ConnectingOverlayUI.Instance?.Hide();
         }
 
         if (NetworkManager.Singleton != null)
@@ -345,14 +366,23 @@ public class LobbyManager : MonoBehaviour
         // UI cursor for menus
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+
+        // Hide overlay now that leave flow is finished
+        ConnectingOverlayUI.Instance?.Hide();
     }
+
 
 
 
     private void HideUI()
     {
         lobbyUI.SetActive(false);
-        cam.SetActive(false);
+        lobbyCreateUI.Hide();
+    }
+
+    private void ShowUI()
+    { 
+        lobbyUI.SetActive(true);
     }
 
     private void RegisterNetworkCallbacks()
@@ -375,17 +405,19 @@ public class LobbyManager : MonoBehaviour
 
     private void OnClientDisconnected(ulong clientId)
     {
-        // Clients only: if *we* got disconnected (e.g., host left), go back to the lobby UI.
         if (NetworkManager.Singleton != null &&
-            !NetworkManager.Singleton.IsServer &&                          // we're not the host
-            clientId == NetworkManager.Singleton.LocalClientId)            // this local client got dropped
+            !NetworkManager.Singleton.IsServer &&
+            clientId == NetworkManager.Singleton.LocalClientId)
         {
-            // If the pause overlay was open, close it so it won't block menus.
-            PauseMenuUI.Instance?.Resume();                                // hides overlay; cursor state fixed by LeaveToLobbySelect()
+            SwitchToMenuAudioImmediate();
+            if (showPregameRoutine != null) { StopCoroutine(showPregameRoutine); showPregameRoutine = null; }
 
-            LeaveToLobbySelect();                                          // restore lobby UI, camera, cursor
+            PauseMenuUI.Instance?.Resume();
+            LeaveToLobbySelect();
         }
     }
+
+
 
     // Best-effort: if host closes the app, try to delete the lobby so it doesn't linger.
     private async void OnApplicationQuit()
@@ -402,8 +434,8 @@ public class LobbyManager : MonoBehaviour
             Debug.Log(e);
         }
     }
-    
-        // Called by PlayerSetup on server when a player object spawns
+
+    // Called by PlayerSetup on server when a player object spawns
     public int AssignColorIndex()
     {
         if (shirtMaterials == null || shirtMaterials.Count == 0)
@@ -468,5 +500,77 @@ public class LobbyManager : MonoBehaviour
             Debug.LogWarning("[LobbyManager] PregameNetwork prefab missing NetworkObject component");
         }
     }
+
+    public void HandOffAudioAndMenuCamera()
+    {
+        // 1) Turn OFF the menu AudioListener immediately to avoid overlap
+        if (cam != null)
+        {
+            var al = cam.GetComponent<AudioListener>();
+            if (al) al.enabled = false;
+        }
+
+        // 2) Next frame, disable the whole menu camera GameObject (no freeze/frame pop)
+        StartCoroutine(DisableMenuCameraNextFrame());
+    }
+
+    private System.Collections.IEnumerator DisableMenuCameraNextFrame()
+    {
+        yield return null; // wait one frame so player camera is already rendering
+        if (cam != null) cam.SetActive(false);
+    }
+
+    public void SwitchToMenuAudioImmediate()
+    {
+        // 1) Turn OFF the local player's listener if it exists
+        var nm = NetworkManager.Singleton;
+        var playerObj = nm != null ? nm.LocalClient?.PlayerObject : null;
+        if (playerObj != null)
+        {
+            // Find any listener under the local player (camera is usually a child)
+            var playerListener = playerObj.GetComponentInChildren<AudioListener>(true);
+            if (playerListener != null)
+                playerListener.enabled = false;
+        }
+
+        // 2) Ensure the menu camera is active and has its listener ON
+        if (cam != null)
+        {
+            cam.SetActive(true);
+            var menuListener = cam.GetComponent<AudioListener>();
+            if (menuListener != null) menuListener.enabled = true;
+            // (If you truly don't have one on the menu camera, add one here:
+            // if (menuListener == null) cam.AddComponent<AudioListener>();
+            // but usually it's already present.)
+        }
+    }
+
+    public void ShowPregameUIWhenReady()
+    {
+        if (showPregameRoutine != null) StopCoroutine(showPregameRoutine);
+        showPregameRoutine = StartCoroutine(Co_ShowPregameWhenReady());
+    }
+
+    private System.Collections.IEnumerator Co_ShowPregameWhenReady()
+    {
+        // 1) Wait until networking is actually running (host or client)
+        while (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening)
+            yield return null;
+
+        // 2) Wait for the local player's NetworkObject to exist
+        while (NetworkManager.Singleton.LocalClient == null ||
+            NetworkManager.Singleton.LocalClient.PlayerObject == null)
+            yield return null;
+
+        // 3) Wait for the pregame network brain to spawn (so UI has real data)
+        while (PregameLobbyNetwork.Instance == null)
+            yield return null;
+
+        // 4) Now it's safe to show accurate UI
+        pregameUI.SetPregameUI();        // this already calls Show() inside your script
+        ConnectingOverlayUI.Instance?.Hide();
+        showPregameRoutine = null;
+    }
+
 
 }
