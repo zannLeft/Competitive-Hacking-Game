@@ -508,10 +508,8 @@ public class LobbyManager : MonoBehaviour
         {
             var al = cam.GetComponent<AudioListener>();
             if (al) al.enabled = false;
+            cam.SetActive(false); // disable menu camera immediately
         }
-
-        // 2) Next frame, disable the whole menu camera GameObject (no freeze/frame pop)
-        StartCoroutine(DisableMenuCameraNextFrame());
     }
 
     private System.Collections.IEnumerator DisableMenuCameraNextFrame()
@@ -527,7 +525,6 @@ public class LobbyManager : MonoBehaviour
         var playerObj = nm != null ? nm.LocalClient?.PlayerObject : null;
         if (playerObj != null)
         {
-            // Find any listener under the local player (camera is usually a child)
             var playerListener = playerObj.GetComponentInChildren<AudioListener>(true);
             if (playerListener != null)
                 playerListener.enabled = false;
@@ -539,9 +536,6 @@ public class LobbyManager : MonoBehaviour
             cam.SetActive(true);
             var menuListener = cam.GetComponent<AudioListener>();
             if (menuListener != null) menuListener.enabled = true;
-            // (If you truly don't have one on the menu camera, add one here:
-            // if (menuListener == null) cam.AddComponent<AudioListener>();
-            // but usually it's already present.)
         }
     }
 
