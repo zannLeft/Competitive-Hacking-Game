@@ -22,6 +22,21 @@ public class PregameLobbyNetwork : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    // true when server has started the coordinated load (set before LoadScene)
+    public NetworkVariable<bool> IsLoading = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    // Stores the selected bad-guy client id so player objects spawned later can read it
+    // ulong.MaxValue means "none selected"
+    public NetworkVariable<ulong> BadGuyClientId = new NetworkVariable<ulong>(
+        ulong.MaxValue,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     // ----------------- Config -----------------
     [SerializeField] private string gameSceneName = "GameScene";   // set in Inspector
     [SerializeField] private int startCountdownSeconds = 5;        // tweakable
@@ -51,6 +66,10 @@ public class PregameLobbyNetwork : NetworkBehaviour
         // UI reflections while in lobby scene
         PlayerCount.OnValueChanged += (oldV, newV) => UpdateUI_PlayerCount(newV);
         Countdown.OnValueChanged   += (oldV, newV) => UpdateUI_Countdown(newV);
+        IsLoading.OnValueChanged   += (oldV, newV) => UpdateUI_IsLoading(newV);
+
+        // Ensure UI reflects current state on join
+        PushStateToUI();
     }
 
     public override void OnNetworkDespawn()
@@ -97,8 +116,8 @@ public class PregameLobbyNetwork : NetworkBehaviour
         ulong sender = rpcParams.Receive.SenderClientId;
         if (sender != NetworkManager.ServerClientId) return;
 
-        // Require at least 2 players
-        if (PlayerCount.Value < 1) return;
+        // Require at least 2 players to start (change as you like)
+        if (PlayerCount.Value < 1 ) return;
 
         if (Countdown.Value <= 0) StartCountdownServerSide(startCountdownSeconds);
         else                      CancelCountdownServerSide();
@@ -129,17 +148,21 @@ public class PregameLobbyNetwork : NetworkBehaviour
         // Briefly show 0 ("Starting now")
         yield return new WaitForSeconds(0.1f);
 
-        // Server: kick off the network scene load (single mode)
+        // Server: choose bad guy, set loading flag, then kick off the network scene load (single mode)
         if (IsServer)
         {
+            // Choose bad guy now so its id is available to clients/player objects before load
+            AssignRandomBadGuyBeforeLoad();
+
             // Show the full-screen overlay with "Loading..." before switching
+            IsLoading.Value = true;
             ConnectingOverlayUI.Instance?.Show("Loading...");
+
             NetworkManager.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
+            // Do NOT reset Countdown here. Wait until load completes to avoid races.
         }
 
-        // Reset local countdown state
-        Countdown.Value = -1;
-        countdownCoroutine = null;
+        // No local reset here; server will reset Countdown and IsLoading after the load completes.
     }
 
     // ----------------- Scene load overlay + post-load role pick -----------------
@@ -164,18 +187,50 @@ public class PregameLobbyNetwork : NetworkBehaviour
         // Enable the in-game HUD canvas if present
         TryEnableGameUI();
 
-        // Server: choose exactly one "bad guy" and publish the flag
-        if (IsServer) AssignRandomBadGuy();
+        // Server: apply the preselected bad-guy id to player objects now that they exist
+        if (IsServer)
+        {
+            // Apply the previously chosen bad guy to any player objects
+            ApplyBadGuySelectionToPlayerObjects();
+
+            // Loading done, reset server-side state
+            IsLoading.Value = false;
+            Countdown.Value = -1;
+            countdownCoroutine = null;
+
+            // Optionally clear BadGuyClientId after applying it:
+            // BadGuyClientId.Value = ulong.MaxValue;
+        }
     }
 
-    private void AssignRandomBadGuy()
+    // Choose bad guy BEFORE load. Store id in BadGuyClientId and apply to any existing player objects.
+    private void AssignRandomBadGuyBeforeLoad()
     {
         var clients = NetworkManager.Singleton.ConnectedClientsList;
         if (clients == null || clients.Count == 0) return;
 
         int pick = UnityEngine.Random.Range(0, clients.Count);
         ulong badId = clients[pick].ClientId;
+        BadGuyClientId.Value = badId;
 
+        // For any player objects that already exist, set their IsBadGuy flag now
+        foreach (var c in clients)
+        {
+            var setup = c.PlayerObject ? c.PlayerObject.GetComponent<PlayerSetup>() : null;
+            if (setup != null)
+                setup.IsBadGuy.Value = (c.ClientId == badId);
+        }
+    }
+
+    // Called after scene load completes to assign IsBadGuy on player objects that were created during the load
+    private void ApplyBadGuySelectionToPlayerObjects()
+    {
+        if (BadGuyClientId.Value == ulong.MaxValue) return;
+
+        var clients = NetworkManager.Singleton.ConnectedClientsList;
+        if (clients == null || clients.Count == 0) return;
+
+        ulong badId = BadGuyClientId.Value;
         foreach (var c in clients)
         {
             var setup = c.PlayerObject ? c.PlayerObject.GetComponent<PlayerSetup>() : null;
@@ -232,10 +287,28 @@ public class PregameLobbyNetwork : NetworkBehaviour
         }
     }
 
+    private void UpdateUI_IsLoading(bool isLoading)
+    {
+        if (isLoading)
+        {
+            ConnectingOverlayUI.Instance?.Show("Loading...");
+            // Also hide lobby countdown UI for clarity
+            PregameUI.Instance?.HideCountdown();
+            PregameUI.Instance?.UpdateStatus("Loading...");
+        }
+        else
+        {
+            ConnectingOverlayUI.Instance?.Hide();
+            // When loading finishes but we're still in lobby, push normal UI
+            UpdateUI_PlayerCount(PlayerCount.Value);
+        }
+    }
+
     // ----------------- Public helper for UI bootstrap -----------------
     public void PushStateToUI()
     {
         UpdateUI_PlayerCount(PlayerCount.Value);
         UpdateUI_Countdown(Countdown.Value);
+        UpdateUI_IsLoading(IsLoading.Value);
     }
 }

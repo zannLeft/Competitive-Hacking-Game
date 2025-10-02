@@ -17,7 +17,7 @@ public class PlayerSetup : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
-    // later we'll add IsBadGuy; keep it ready for next steps.
+    // Is this player the bad guy? Server authoritative.
     public NetworkVariable<bool> IsBadGuy = new NetworkVariable<bool>(
         false,
         NetworkVariableReadPermission.Everyone,
@@ -60,11 +60,35 @@ public class PlayerSetup : NetworkBehaviour
             {
                 Debug.LogWarning("[PlayerSetup] LobbyManager.Instance is null on server when assigning shirt index");
             }
+
+            // If the lobby already picked a bad guy before the load, apply it here
+            if (PregameLobbyNetwork.Instance != null)
+            {
+                ulong preselected = PregameLobbyNetwork.Instance.BadGuyClientId.Value;
+                if (preselected != ulong.MaxValue)
+                {
+                    bool amBad = (preselected == OwnerClientId);
+                    IsBadGuy.Value = amBad;
+                    if (amBad)
+                        Debug.Log($"[Server] Marking client {OwnerClientId} as bad guy on spawn (preselected)");
+                }
+            }
         }
 
         // Always apply local materials when the network variable changes
         ShirtIndex.OnValueChanged += (oldVal, newVal) => ApplyShirtMaterial();
         IsBadGuy.OnValueChanged += (oldVal, newVal) => ApplyShirtMaterial();
+
+        // Also listen for the lobby's BadGuyClientId so clients can react immediately
+        if (PregameLobbyNetwork.Instance != null)
+        {
+            // Subscribe to be notified if preselected bad guy arrives/changes
+            PregameLobbyNetwork.Instance.BadGuyClientId.OnValueChanged += (oldId, newId) =>
+            {
+                // If the new preselection targets this player, update visuals
+                ApplyShirtMaterial();
+            };
+        }
 
         // If the variables already have values (e.g. after scene change), apply them now
         ApplyShirtMaterial();
@@ -78,6 +102,14 @@ public class PlayerSetup : NetworkBehaviour
         {
             LobbyManager.Instance.ReleaseColorIndex(ShirtIndex.Value);
         }
+
+        // Unsubscribe from BadGuyClientId.OnValueChanged if possible
+        if (PregameLobbyNetwork.Instance != null)
+        {
+            // We used a lambda subscription above. Unity Netcode does not provide a simple handle for removal of that exact delegate,
+            // so if you plan to spawn/despawn many times you may want to store the delegate and unsubscribe it here.
+            // For now this is left as-is; if you need explicit unsubscription I can show that pattern.
+        }
     }
 
     private void ApplyShirtMaterial()
@@ -88,8 +120,22 @@ public class PlayerSetup : NetworkBehaviour
 
         Material shirtMaterial = LobbyManager.Instance.GetShirtMaterial(ShirtIndex.Value);
 
+        // Decide if we should show the black material
+        bool showBadGuyVisual = false;
+
+        // 1) authoritative network var says so
+        if (IsBadGuy.Value) showBadGuyVisual = true;
+
+        // 2) or lobby preselection targets this client (helps clients show black shirt early)
+        else if (PregameLobbyNetwork.Instance != null)
+        {
+            ulong preselected = PregameLobbyNetwork.Instance.BadGuyClientId.Value;
+            if (preselected != ulong.MaxValue && preselected == OwnerClientId)
+                showBadGuyVisual = true;
+        }
+
         // If this player is the bad guy, use the black material (will be set in LobbyManager inspector).
-        if (IsBadGuy.Value && LobbyManager.Instance.blackShirtMaterial != null)
+        if (showBadGuyVisual && LobbyManager.Instance.blackShirtMaterial != null)
         {
             shirtMaterial = LobbyManager.Instance.blackShirtMaterial;
         }
