@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 1920
     height: 1037
   m_ShowMode: 4
-  m_Title: Console
+  m_Title: Game
   m_RootView: {fileID: 2}
   m_MinSize: {x: 875, y: 300}
   m_MaxSize: {x: 10000, y: 10000}
@@ -218,8 +218,8 @@ MonoBehaviour:
     y: 0
     width: 1299
     height: 667
-  m_MinSize: {x: 202, y: 226}
-  m_MaxSize: {x: 4002, y: 4026}
+  m_MinSize: {x: 200, y: 200}
+  m_MaxSize: {x: 4000, y: 4000}
   m_ActualView: {fileID: 17}
   m_Panes:
   - {fileID: 17}
@@ -272,8 +272,8 @@ MonoBehaviour:
     y: 0
     width: 434
     height: 314
-  m_MinSize: {x: 101, y: 126}
-  m_MaxSize: {x: 4001, y: 4026}
+  m_MinSize: {x: 100, y: 100}
+  m_MaxSize: {x: 4000, y: 4000}
   m_ActualView: {fileID: 19}
   m_Panes:
   - {fileID: 19}
@@ -378,8 +378,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Game\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 435
-    y: 24
+    x: 434
+    y: 746
     width: 465
     height: 288
   m_SerializedDataModeController:
@@ -480,7 +480,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 24
+    y: 79
     width: 262
     height: 641
   m_SerializedDataModeController:
@@ -499,7 +499,7 @@ MonoBehaviour:
       scrollPos: {x: 0, y: 0}
       m_SelectedIDs: 
       m_LastClickedID: 0
-      m_ExpandedIDs: 54a7ffff6ca7ffff02aaffff66c4ffff7ec4ffff10c7ffffa8f6ffff8efaffffa0f80000ae1e0100
+      m_ExpandedIDs: 6aa8ffff6ea8ffff60ceffff78ceffffacd0ffff18d1ffff0edbffffbcdbffffc6e6ffff9ae9ffff90f1ffffa8f1ffff40f4ffff82f5ffff90faffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -545,8 +545,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Scene\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 264
-    y: 24
+    x: 263
+    y: 79
     width: 1297
     height: 641
   m_SerializedDataModeController:
@@ -1047,9 +1047,9 @@ MonoBehaviour:
   m_AudioPlay: 0
   m_DebugDrawModesUseInteractiveLightBakingData: 0
   m_Position:
-    m_Target: {x: 40.964085, y: 13.5925455, z: -11.718203}
+    m_Target: {x: 0.70322245, y: -0.42147338, z: -1.1430306}
     speed: 2
-    m_Value: {x: -4.3853574, y: 0.09817189, z: -1.0153017}
+    m_Value: {x: 0.70322245, y: -0.42147338, z: -1.1430306}
   m_RenderMode: 0
   m_CameraMode:
     drawMode: 0
@@ -1095,13 +1095,13 @@ MonoBehaviour:
     m_GridAxis: 1
     m_gridOpacity: 0.5
   m_Rotation:
-    m_Target: {x: -0.13840826, y: 0.8597391, z: -0.3777283, w: -0.31477788}
+    m_Target: {x: -0.27671388, y: 0.6778507, z: -0.30875805, w: -0.60719705}
     speed: 2
-    m_Value: {x: -0.04244762, y: 0.21704812, z: -0.009447553, w: -0.9751917}
+    m_Value: {x: -0.27625403, y: 0.67462677, z: -0.30363005, w: -0.613491}
   m_Size:
-    m_Target: 8.978171
+    m_Target: 2.147867
     speed: 2
-    m_Value: 5.1894646
+    m_Value: 1.7533607
   m_Ortho:
     m_Target: 0
     speed: 2
@@ -1297,7 +1297,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 24
+    y: 746
     width: 433
     height: 288
   m_SerializedDataModeController:
@@ -1332,8 +1332,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Project\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 902
-    y: 24
+    x: 901
+    y: 746
     width: 659
     height: 288
   m_SerializedDataModeController:
@@ -1358,7 +1358,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/Temp
+    - Assets/Scripts
     m_Globs: []
     m_ProductIds: 
     m_AnyWithAssetOrigin: 0
@@ -1368,16 +1368,16 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 64
   m_LastFolders:
-  - Assets/Temp
+  - Assets/Scripts
   m_LastFoldersGridSize: -1
   m_LastProjectPath: C:\Users\Zanql\Desktop\Projects\Repository\Competitive-Hacking-Game\Competitive
     Hacking Game
   m_LockTracker:
     m_IsLocked: 0
   m_FolderTreeState:
-    scrollPos: {x: 0, y: 20}
-    m_SelectedIDs: 48f70000
-    m_LastClickedID: 63304
+    scrollPos: {x: 0, y: 0}
+    m_SelectedIDs: 20f80000
+    m_LastClickedID: 63520
     m_ExpandedIDs: 000000004af700004cf700004ef7000050f7000052f70000
     m_RenameOverlay:
       m_UserAcceptedRename: 0
@@ -1469,8 +1469,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Inspector\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1563
-    y: 24
+    x: 1562
+    y: 79
     width: 357
     height: 955
   m_SerializedDataModeController:
