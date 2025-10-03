@@ -8,6 +8,7 @@ public class PauseMenuUI : MonoBehaviour
     [SerializeField] private GameObject root;              // The top-level canvas/panel to toggle
     [SerializeField] private Button resumeButton;
     [SerializeField] private Button leaveLobbyButton;
+    [SerializeField] private Button endMatchButton;        // New button
 
     public static PauseMenuUI Instance { get; private set; }
     private bool isOpen;
@@ -19,6 +20,18 @@ public class PauseMenuUI : MonoBehaviour
 
         resumeButton.onClick.AddListener(Resume);
         leaveLobbyButton.onClick.AddListener(Leave);
+
+        // End match button only for host in GameScene
+        if (endMatchButton != null)
+        {
+            endMatchButton.onClick.AddListener(EndMatch);
+            endMatchButton.gameObject.SetActive(
+                NetworkManager.Singleton != null &&
+                NetworkManager.Singleton.IsHost &&
+                SceneManager.GetActiveScene().name == "GameScene"
+            );
+        }
+
         root.SetActive(false);
     }
 
@@ -91,5 +104,13 @@ public class PauseMenuUI : MonoBehaviour
         // In lobby UI we want the mouse
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+    }
+
+    private void EndMatch()
+    {
+        if (LobbyManager.Instance != null)
+        {
+            Debug.Log("Ending match");
+        }
     }
 }
