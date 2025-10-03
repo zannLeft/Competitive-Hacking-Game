@@ -5437,7 +5437,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &502618967
 RectTransform:
   m_ObjectHideFlags: 0
@@ -5625,9 +5625,9 @@ RectTransform:
   - {fileID: 2032075222}
   m_Father: {fileID: 44844863}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 90, y: -13.5}
   m_SizeDelta: {x: 180, y: 27}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &518404037
@@ -10218,105 +10218,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1038211422}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!1 &1054897899
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1054897902}
-  - component: {fileID: 1054897901}
-  - component: {fileID: 1054897903}
-  m_Layer: 0
-  m_Name: NetworkManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1054897901
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1054897899}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 593a2fe42fa9d37498c96f9a383b6521, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  NetworkConfig:
-    ProtocolVersion: 0
-    NetworkTransport: {fileID: 1054897903}
-    PlayerPrefab: {fileID: 5911205127122785075, guid: 27432635972d5f749bc0bc462961b827, type: 3}
-    Prefabs:
-      NetworkPrefabsLists:
-      - {fileID: 11400000, guid: 19f436bc0872f7d41b6e25f1f0561ff9, type: 2}
-    TickRate: 30
-    ClientConnectionBufferTimeout: 10
-    ConnectionApproval: 0
-    ConnectionData: 
-    EnableTimeResync: 0
-    TimeResyncInterval: 30
-    EnsureNetworkVariableLengthSafety: 0
-    EnableSceneManagement: 1
-    ForceSamePrefabs: 1
-    RecycleNetworkIds: 1
-    NetworkIdRecycleDelay: 120
-    RpcHashSize: 0
-    LoadSceneTimeOut: 120
-    SpawnTimeout: 10
-    EnableNetworkLogs: 1
-    OldPrefabList: []
-  RunInBackground: 1
-  LogLevel: 1
---- !u!4 &1054897902
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1054897899}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 2, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1054897903
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1054897899}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_ProtocolType: 1
-  m_UseWebSockets: 0
-  m_UseEncryption: 0
-  m_MaxPacketQueueSize: 128
-  m_MaxPayloadSize: 6144
-  m_HeartbeatTimeoutMS: 500
-  m_ConnectTimeoutMS: 1000
-  m_MaxConnectAttempts: 60
-  m_DisconnectTimeoutMS: 30000
-  ConnectionData:
-    Address: 127.0.0.1
-    Port: 7777
-    ServerListenAddress: 0.0.0.0
-  DebugSimulator:
-    PacketDelayMS: 0
-    PacketJitterMS: 0
-    PacketDropRate: 0
 --- !u!1 &1068804401
 GameObject:
   m_ObjectHideFlags: 0
@@ -12529,7 +12430,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1301652848
 RectTransform:
   m_ObjectHideFlags: 0
@@ -14648,7 +14549,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!81 &1547934319
 AudioListener:
   m_ObjectHideFlags: 0
@@ -16230,63 +16131,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1761221161}
   m_CullTransparentMesh: 1
---- !u!1 &1773646423
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1773646425}
-  - component: {fileID: 1773646424}
-  m_Layer: 0
-  m_Name: LobbyManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1773646424
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1773646423}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: eba390cb4ec146d4cba63c17e7c12513, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  lobbyUI: {fileID: 1301652847}
-  pregameUI: {fileID: 2078672026}
-  lobbyCreateUI: {fileID: 502618968}
-  cam: {fileID: 1547934318}
-  shirtMaterials:
-  - {fileID: 2100000, guid: 53b02a6a1bcabff4a99b370f4e61838e, type: 2}
-  - {fileID: 2100000, guid: b4f4ad7bf5a0dc346a7c874b36f46932, type: 2}
-  - {fileID: 2100000, guid: caa3fd0d51947f94b86506f77e81ba30, type: 2}
-  - {fileID: 2100000, guid: 09bc943622489e44f86dfc75d3f54092, type: 2}
-  - {fileID: 2100000, guid: 50329d88a8be50648b35f80efb7f768b, type: 2}
-  blackShirtMaterial: {fileID: 2100000, guid: c871faa8fb13d69479f5fc6b8bf83afb, type: 2}
-  lobbySceneName: LobbyScene
-  gameSceneName: GameScene
---- !u!4 &1773646425
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1773646423}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1790006456
 GameObject:
   m_ObjectHideFlags: 0
@@ -19425,6 +19269,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd4aee06c5fbe214282da9c90a0728f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+  lobbyManagerPrefab: {fileID: 6679349771025820681, guid: a41a19fbb1cbe92498b1ccb2c96d5d71, type: 3}
+  networkManagerPrefab: {fileID: 4782159350367806850, guid: b5088f47c2e6ad744bbcceeca5332725, type: 3}
+  lobbyCamera: {fileID: 1547934318}
+  lobbyUI: {fileID: 1301652847}
+  lobbyCreateUI: {fileID: 502618966}
+  pregameUI: {fileID: 2078672025}
 --- !u!4 &2087755515
 Transform:
   m_ObjectHideFlags: 0
@@ -20158,10 +20008,8 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 161952810}
-  - {fileID: 1054897902}
   - {fileID: 1547934321}
   - {fileID: 188967015}
   - {fileID: 949488192}
-  - {fileID: 1773646425}
   - {fileID: 975575962}
   - {fileID: 2087755515}

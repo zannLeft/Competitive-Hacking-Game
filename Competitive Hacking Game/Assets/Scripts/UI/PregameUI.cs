@@ -9,12 +9,6 @@ public class PregameUI : MonoBehaviour {
 
     [SerializeField] private TextMeshProUGUI lobbyCodeText;
     
-
-
-    private void Start() {
-        Hide();
-    }
-
     public void SetPregameUI() {
         Lobby lobby = LobbyManager.Instance.GetLobby();
         lobbyCodeText.text = lobby.Name + ": " + lobby.LobbyCode;
@@ -22,9 +16,5 @@ public class PregameUI : MonoBehaviour {
 
     public void Show() {
         gameObject.SetActive(true);
-    }
-
-    private void Hide() {
-        gameObject.SetActive(false);
     }
 }

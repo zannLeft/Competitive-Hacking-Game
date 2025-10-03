@@ -53,11 +53,57 @@ public class LobbyManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
-
         DontDestroyOnLoad(gameObject);
-
         InitializeUnityAuthentication();
+
+        SceneManager.sceneLoaded += OnSceneLoaded;
     }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name == "LobbyScene")
+        {
+            // Lobby UI
+            if (lobbyUI == null)
+            {
+                var ui = FindObjectOfType<LobbyUI>(true);
+                if (ui != null) lobbyUI = ui.gameObject;
+            }
+
+            // Pregame UI
+            if (pregameUI == null)
+            {
+                pregameUI = FindObjectOfType<PregameUI>(true);
+            }
+
+            // Lobby Create UI
+            if (lobbyCreateUI == null)
+            {
+                lobbyCreateUI = FindObjectOfType<LobbyCreateUI>(true);
+            }
+
+            // Lobby Camera
+            if (cam == null)
+            {
+                Camera camObj = null;
+                foreach (var c in FindObjectsOfType<Camera>(true))
+                {
+                    if (c.CompareTag("LobbyCamera"))
+                    {
+                        camObj = c;
+                        break;
+                    }
+                }
+
+                if (camObj != null)
+                {
+                    cam = camObj.gameObject;
+                    Debug.Log("its not null babes");
+                }
+            }
+        }
+    }
+
 
     private async void InitializeUnityAuthentication()
     {
@@ -332,10 +378,22 @@ public class LobbyManager : MonoBehaviour
         {
             if (joinedLobby != null)
             {
+                Debug.Log("joined lobby NOT NULL!!!" + joinedLobby.Id);
                 if (IsLobbyHost())
+                {
+                    Debug.Log("BItch i am host i should deltee" + joinedLobby.Id);
                     await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
+                }
                 else
+                {
+                    Debug.Log("WTF i'm not hostP??" + joinedLobby.Id);
                     await LobbyService.Instance.RemovePlayerAsync(joinedLobby.Id, AuthenticationService.Instance.PlayerId);
+                }
+
+            }
+            else
+            {
+                Debug.Log("WTF joinedlobby is null???");
             }
         }
         catch (LobbyServiceException e) { Debug.Log(e); }
@@ -477,7 +535,7 @@ public class LobbyManager : MonoBehaviour
         catch (LobbyServiceException e) { Debug.Log(e); }
     }
 
-    public void ClearJoinedLobby() => joinedLobby = null;
+    //public void ClearJoinedLobby() => joinedLobby = null;
 
     // Call this after (re)loading LobbyScene to rebind scene refs and show the selection screen.
     public void ShowLobbyScreen()
@@ -516,8 +574,7 @@ public class LobbyManager : MonoBehaviour
                 // Lock (no new joins) and hide from browse queries during the match.
                 joinedLobby = await LobbyService.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
                 {
-                    IsLocked  = true,   // blocks join by code
-                    IsPrivate = true,   // hides from QueryLobbies / QuickJoin
+                    IsLocked = true,   // blocks join by code
                     Data = new Dictionary<string, DataObject>
                     {
                         // Optional: track state for your own UI / filters (indexed so it can be queried)
@@ -533,7 +590,7 @@ public class LobbyManager : MonoBehaviour
 
         NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
     }
-    
+
     public void EndGameToLobbyForEveryone()
     {
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
@@ -566,6 +623,54 @@ public class LobbyManager : MonoBehaviour
         // Show lobby UI locally for the host (clients handle it in OnClientDisconnected below)
         ShowLobbyScreen();
     }
+    
+    public async void EndMatch()
+    {
+        // Only the host should execute this
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
 
+        // Unlock the lobby and change its state back to "waiting"
+        if (joinedLobby != null)
+        {
+            try
+            {
+                Debug.Log("Ok i unlocked this lobby: " + joinedLobby.Id);
+                joinedLobby = await LobbyService.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
+                {
+                    IsLocked = false, // UNLOCK lobby (allows join by code)
+                    // We intentionally omit IsPrivate, so it stays as whatever it was before (true or false).
+                    Data = new Dictionary<string, DataObject>
+                    {
+                        // Set state back to "waiting" so the lobby shows up in lists/quick-join if it was public, 
+                        // or just to indicate to players that the match is over.
+                        { "state", new DataObject(DataObject.VisibilityOptions.Public, "waiting", DataObject.IndexOptions.S1) } 
+                    }
+                });
+            }
+            catch (LobbyServiceException e)
+            {
+                Debug.LogWarning($"[LobbyManager] Failed to unlock/set state on lobby: {e}");
+            }
+        }
+
+        Debug.Log("Ok before scene load " + joinedLobby.Id);
+
+        // Load the lobby scene for everyone, keeping connections alive
+        GameManager.Instance.SetReturningFromMatch(true);
+        NetworkManager.Singleton.SceneManager.LoadScene(lobbySceneName, LoadSceneMode.Single);
+
+        Debug.Log("ok after scene load " + joinedLobby.Id);
+
+        // Unpause the local player and reset cursor... (rest of your logic)
+        var playerObj = NetworkManager.Singleton.LocalClient?.PlayerObject;
+        if (playerObj != null)
+        {
+            var input = playerObj.GetComponent<InputManager>();
+            if (input != null) input.SetGameplayEnabled(true);
+        }
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
 
 }

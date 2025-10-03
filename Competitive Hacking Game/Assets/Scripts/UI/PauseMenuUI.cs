@@ -24,7 +24,7 @@ public class PauseMenuUI : MonoBehaviour
         // End match button only for host in GameScene
         if (endMatchButton != null)
         {
-            endMatchButton.onClick.AddListener(EndMatch);
+            endMatchButton.onClick.AddListener(OnEndMatchClicked);
             endMatchButton.gameObject.SetActive(
                 NetworkManager.Singleton != null &&
                 NetworkManager.Singleton.IsHost &&
@@ -78,9 +78,6 @@ public class PauseMenuUI : MonoBehaviour
 
     private void Leave()
     {
-        isOpen = false;
-        root.SetActive(false);
-
         var current = SceneManager.GetActiveScene().name;
         if (current == "GameScene")
         {
@@ -97,7 +94,10 @@ public class PauseMenuUI : MonoBehaviour
         }
         else
         {
+            isOpen = false;
+            root.SetActive(false);
             // In LobbyScene, "Leave" just leaves the lobby
+            Debug.Log("ok bitch you clicked this i'm going to run LeaveToLobbySelect");
             LobbyManager.Instance.LeaveToLobbySelect();
         }
 
@@ -106,11 +106,12 @@ public class PauseMenuUI : MonoBehaviour
         Cursor.visible = true;
     }
 
-    private void EndMatch()
+    private void OnEndMatchClicked()
     {
         if (LobbyManager.Instance != null)
         {
-            Debug.Log("Ending match");
+            // Call the new EndMatch method that unlocks lobby, sets state, switches scene, and unpauses
+            LobbyManager.Instance.EndMatch();
         }
     }
 }
