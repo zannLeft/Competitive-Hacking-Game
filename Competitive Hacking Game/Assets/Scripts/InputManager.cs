@@ -45,6 +45,7 @@ public class InputManager : NetworkBehaviour
             onFoot.Enable();
             //handItems.Enable();
 
+            ui.Start.performed += OnStartPerformed;
             ui.Pause.performed += OnPausePerformed; // <-- added
             ui.Enable();                             // <-- added
         }
@@ -91,6 +92,7 @@ public class InputManager : NetworkBehaviour
             onFoot.Crouch.performed -= OnCrouchPerformed;
 
             ui.Pause.performed -= OnPausePerformed;
+            ui.Start.performed -= OnStartPerformed;
 
             onFoot.Disable();
             ui.Disable();
@@ -103,5 +105,12 @@ public class InputManager : NetworkBehaviour
     {
         if (!IsOwner) return;
         if (enabled) onFoot.Enable(); else onFoot.Disable();
+    }
+
+    // In InputManager
+    private void OnStartPerformed(InputAction.CallbackContext ctx)
+    {
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
+            LobbyManager.Instance.StartGameAsHost(); // host-only
     }
 }

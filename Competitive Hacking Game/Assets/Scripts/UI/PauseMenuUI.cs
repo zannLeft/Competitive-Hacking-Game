@@ -1,6 +1,7 @@
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class PauseMenuUI : MonoBehaviour
 {
@@ -64,11 +65,28 @@ public class PauseMenuUI : MonoBehaviour
 
     private void Leave()
     {
-        // Close UI first
         isOpen = false;
         root.SetActive(false);
 
-        LobbyManager.Instance.LeaveToLobbySelect();
+        var current = SceneManager.GetActiveScene().name;
+        if (current == "GameScene")
+        {
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
+            {
+                // Host ends the match for everyone
+                LobbyManager.Instance.EndGameToLobbyForEveryone();
+            }
+            else
+            {
+                // Client leaves only themselves
+                LobbyManager.Instance.LeaveToLobbySelect();
+            }
+        }
+        else
+        {
+            // In LobbyScene, "Leave" just leaves the lobby
+            LobbyManager.Instance.LeaveToLobbySelect();
+        }
 
         // In lobby UI we want the mouse
         Cursor.lockState = CursorLockMode.None;

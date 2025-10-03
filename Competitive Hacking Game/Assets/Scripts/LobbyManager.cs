@@ -14,6 +14,8 @@ using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class LobbyManager : MonoBehaviour
 {
@@ -45,6 +47,8 @@ public class LobbyManager : MonoBehaviour
     // internal set of used indices
     private HashSet<int> usedShirtIndices = new HashSet<int>();
 
+    [SerializeField] private string lobbySceneName = "LobbyScene";
+    [SerializeField] private string gameSceneName = "GameScene";
 
     private void Awake()
     {
@@ -75,13 +79,14 @@ public class LobbyManager : MonoBehaviour
 
     private void HandlePeriodicListLobbies()
     {
+        if (SceneManager.GetActiveScene().name != lobbySceneName) return;
+
         if (joinedLobby == null && AuthenticationService.Instance.IsSignedIn)
         {
             listLobbiesTimer -= Time.deltaTime;
             if (listLobbiesTimer <= 0f)
             {
-                float listLobbiesTimerMax = 3f;
-                listLobbiesTimer = listLobbiesTimerMax;
+                listLobbiesTimer = 3f;
                 ListLobbies();
             }
         }
@@ -114,9 +119,12 @@ public class LobbyManager : MonoBehaviour
         {
             QueryLobbiesOptions queryLobbiesOptions = new QueryLobbiesOptions
             {
-                Filters = new List<QueryFilter> {
-                new QueryFilter(QueryFilter.FieldOptions.AvailableSlots, "0", QueryFilter.OpOptions.GT)
-            }
+                Filters = new List<QueryFilter>
+                {
+                    new QueryFilter(QueryFilter.FieldOptions.AvailableSlots, "0", QueryFilter.OpOptions.GT),
+                    new QueryFilter(QueryFilter.FieldOptions.IsLocked, "false", QueryFilter.OpOptions.EQ), // hide locked
+                    new QueryFilter(QueryFilter.FieldOptions.S1, "waiting", QueryFilter.OpOptions.EQ)      // only waiting
+                }
             };
             QueryResponse queryResponse = await LobbyService.Instance.QueryLobbiesAsync(queryLobbiesOptions);
 
@@ -179,10 +187,16 @@ public class LobbyManager : MonoBehaviour
     {
         try
         {
-            joinedLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, MAX_PLAYER_AMOUNT, new CreateLobbyOptions
-            {
-                IsPrivate = isPrivate,
-            });
+            joinedLobby = await LobbyService.Instance.CreateLobbyAsync(
+                lobbyName, MAX_PLAYER_AMOUNT,
+                new CreateLobbyOptions
+                {
+                    IsPrivate = isPrivate,
+                    Data = new Dictionary<string, DataObject>
+                    {
+                        { "state", new DataObject(DataObject.VisibilityOptions.Public, "waiting", DataObject.IndexOptions.S1) }
+                    }
+                });
 
             Allocation allocation = await AllocateRelay();
             string relayJoinCode = await GetRelayJoinCode(allocation);
@@ -217,8 +231,17 @@ public class LobbyManager : MonoBehaviour
     {
         try
         {
-            joinedLobby = await LobbyService.Instance.QuickJoinLobbyAsync();
+            var quickJoinOptions = new QuickJoinLobbyOptions
+            {
+                Filter = new List<QueryFilter>
+                {
+                    new QueryFilter(QueryFilter.FieldOptions.AvailableSlots, "0", QueryFilter.OpOptions.GT),
+                    new QueryFilter(QueryFilter.FieldOptions.IsLocked, "false", QueryFilter.OpOptions.EQ),
+                    new QueryFilter(QueryFilter.FieldOptions.S1, "waiting", QueryFilter.OpOptions.EQ)
+                }
+            };
 
+            joinedLobby = await LobbyService.Instance.QuickJoinLobbyAsync(quickJoinOptions);
 
             string relayJoinCode = joinedLobby.Data[KEY_RELAY_JOIN_CODE].Value;
             JoinAllocation joinAllocation = await JoinRelay(relayJoinCode);
@@ -310,39 +333,41 @@ public class LobbyManager : MonoBehaviour
             if (joinedLobby != null)
             {
                 if (IsLobbyHost())
-                {
                     await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
-                }
                 else
-                {
                     await LobbyService.Instance.RemovePlayerAsync(joinedLobby.Id, AuthenticationService.Instance.PlayerId);
-                }
             }
         }
-        catch (LobbyServiceException e)
-        {
-            Debug.Log(e);
-        }
+        catch (LobbyServiceException e) { Debug.Log(e); }
 
         if (NetworkManager.Singleton != null)
         {
             UnregisterNetworkCallbacks();
             if (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient)
-            {
                 NetworkManager.Singleton.Shutdown();
-            }
         }
 
         joinedLobby = null;
 
-        // Restore lobby UI + main menu camera
-        if (lobbyUI != null) lobbyUI.SetActive(true);
-        if (pregameUI != null) pregameUI.gameObject.SetActive(false);
-        if (cam != null) cam.SetActive(true);
+        // If we are NOT in LobbyScene, go there first; once loaded, show the selection UI.
+        if (SceneManager.GetActiveScene().name != lobbySceneName)
+        {
+            SceneManager.sceneLoaded += OnLobbySceneLoadedOnce;
+            SceneManager.LoadScene(lobbySceneName, LoadSceneMode.Single);
+        }
+        else
+        {
+            ShowLobbyScreen();
+        }
+    }
 
-        // UI cursor for menus
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+    private void OnLobbySceneLoadedOnce(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name == lobbySceneName)
+        {
+            SceneManager.sceneLoaded -= OnLobbySceneLoadedOnce;
+            ShowLobbyScreen();
+        }
     }
 
 
@@ -373,15 +398,12 @@ public class LobbyManager : MonoBehaviour
 
     private void OnClientDisconnected(ulong clientId)
     {
-        // Clients only: if *we* got disconnected (e.g., host left), go back to the lobby UI.
         if (NetworkManager.Singleton != null &&
-            !NetworkManager.Singleton.IsServer &&                          // we're not the host
-            clientId == NetworkManager.Singleton.LocalClientId)            // this local client got dropped
+            !NetworkManager.Singleton.IsServer &&
+            clientId == NetworkManager.Singleton.LocalClientId)
         {
-            // If the pause overlay was open, close it so it won't block menus.
-            PauseMenuUI.Instance?.Resume();                                // hides overlay; cursor state fixed by LeaveToLobbySelect()
-
-            LeaveToLobbySelect();                                          // restore lobby UI, camera, cursor
+            PauseMenuUI.Instance?.Resume();
+            LeaveToLobbySelect();
         }
     }
 
@@ -400,8 +422,8 @@ public class LobbyManager : MonoBehaviour
             Debug.Log(e);
         }
     }
-    
-        // Called by PlayerSetup on server when a player object spawns
+
+    // Called by PlayerSetup on server when a player object spawns
     public int AssignColorIndex()
     {
         if (shirtMaterials == null || shirtMaterials.Count == 0)
@@ -441,6 +463,108 @@ public class LobbyManager : MonoBehaviour
             return shirtMaterials[0];
 
         return shirtMaterials[index];
+    }
+
+    public async Task DeleteLobbyIfHostAsync()
+    {
+        try
+        {
+            if (joinedLobby != null && IsLobbyHost())
+            {
+                await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
+            }
+        }
+        catch (LobbyServiceException e) { Debug.Log(e); }
+    }
+
+    public void ClearJoinedLobby() => joinedLobby = null;
+
+    // Call this after (re)loading LobbyScene to rebind scene refs and show the selection screen.
+    public void ShowLobbyScreen()
+    {
+        // Rebind scene-local refs if they've been destroyed during scene changes
+        if (lobbyUI == null)
+        {
+            var ui = FindObjectOfType<LobbyUI>(true);
+            if (ui != null) lobbyUI = ui.gameObject;
+        }
+        if (pregameUI == null) pregameUI = FindObjectOfType<PregameUI>(true);
+
+        if (cam == null)
+        {
+            // Tag your lobby camera as "LobbyCamera"
+            var camObj = GameObject.FindWithTag("LobbyCamera");
+            if (camObj != null) cam = camObj;
+        }
+
+        if (lobbyUI != null) lobbyUI.SetActive(true);
+        if (pregameUI != null) pregameUI.gameObject.SetActive(false);
+        if (cam != null) cam.SetActive(true);
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    public async void StartGameAsHost()
+    {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
+
+        if (joinedLobby != null)
+        {
+            try
+            {
+                // Lock (no new joins) and hide from browse queries during the match.
+                joinedLobby = await LobbyService.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
+                {
+                    IsLocked  = true,   // blocks join by code
+                    IsPrivate = true,   // hides from QueryLobbies / QuickJoin
+                    Data = new Dictionary<string, DataObject>
+                    {
+                        // Optional: track state for your own UI / filters (indexed so it can be queried)
+                        { "state", new DataObject(DataObject.VisibilityOptions.Public, "in-game", DataObject.IndexOptions.S1) }
+                    }
+                });
+            }
+            catch (LobbyServiceException e)
+            {
+                Debug.LogWarning($"[LobbyManager] Failed to lock/unlist lobby: {e}");
+            }
+        }
+
+        NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
+    }
+    
+    public void EndGameToLobbyForEveryone()
+    {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
+
+        // Bring everyone back to the lobby scene (still connected)
+        NetworkManager.Singleton.SceneManager.LoadScene(lobbySceneName, LoadSceneMode.Single);
+
+        // After the scene load completes for everyone, shut the session down.
+        NetworkManager.Singleton.SceneManager.OnLoadEventCompleted += OnReturnToLobbyLoadedOnce;
+    }
+
+    private void OnReturnToLobbyLoadedOnce(string sceneName, LoadSceneMode mode,
+        System.Collections.Generic.List<ulong> clientsCompleted,
+        System.Collections.Generic.List<ulong> clientsTimedOut)
+    {
+        if (sceneName != lobbySceneName) return;
+
+        NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= OnReturnToLobbyLoadedOnce;
+
+        // Give NGO one frame to settle, then shut down the network.
+        StartCoroutine(ShutdownNextFrame());
+    }
+
+    private System.Collections.IEnumerator ShutdownNextFrame()
+    {
+        yield return null;
+        if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient))
+            NetworkManager.Singleton.Shutdown();
+
+        // Show lobby UI locally for the host (clients handle it in OnClientDisconnected below)
+        ShowLobbyScreen();
     }
 
 
