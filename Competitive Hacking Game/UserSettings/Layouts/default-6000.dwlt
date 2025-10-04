@@ -119,7 +119,7 @@ MonoBehaviour:
   m_MinSize: {x: 400, y: 100}
   m_MaxSize: {x: 32384, y: 16192}
   vertical: 0
-  controlID: 87
+  controlID: 166
   draggingID: 0
 --- !u!114 &6
 MonoBehaviour:
@@ -145,7 +145,7 @@ MonoBehaviour:
   m_MinSize: {x: 300, y: 100}
   m_MaxSize: {x: 24288, y: 16192}
   vertical: 1
-  controlID: 88
+  controlID: 50
   draggingID: 0
 --- !u!114 &7
 MonoBehaviour:
@@ -499,7 +499,7 @@ MonoBehaviour:
       scrollPos: {x: 0, y: 0}
       m_SelectedIDs: 
       m_LastClickedID: 0
-      m_ExpandedIDs: dcfaffff
+      m_ExpandedIDs: fac8fffffec8ffff02c9ffff06c9ffff46c9ffff4ac9ffff4ec9ffff7ac9ffff8ac9ffff8ec9ffffacc9ffff64cdffff68cdffff6ccdffff70cdffffb0cdffffb4cdffffb8cdffffe4cdfffff4cdfffff8cdffff16ceffffaee9ffffe4e9ffff78fafffff4ffffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -1047,9 +1047,9 @@ MonoBehaviour:
   m_AudioPlay: 0
   m_DebugDrawModesUseInteractiveLightBakingData: 0
   m_Position:
-    m_Target: {x: 0.48546892, y: -1.3780446, z: -3.9152713}
+    m_Target: {x: 0.5840484, y: -1.6176587, z: -3.8749497}
     speed: 2
-    m_Value: {x: 0.48546892, y: -1.3780446, z: -3.9152713}
+    m_Value: {x: 0.5840484, y: -1.6176587, z: -3.8749497}
   m_RenderMode: 0
   m_CameraMode:
     drawMode: 0
@@ -1095,9 +1095,9 @@ MonoBehaviour:
     m_GridAxis: 1
     m_gridOpacity: 0.5
   m_Rotation:
-    m_Target: {x: -0.049152527, y: -0.94080955, z: 0.1551825, w: -0.2974908}
+    m_Target: {x: -0.084767535, y: -0.8452177, z: 0.14069836, w: -0.5086711}
     speed: 2
-    m_Value: {x: 0.049152527, y: 0.94080955, z: -0.1551825, w: 0.2974908}
+    m_Value: {x: 0.08476754, y: 0.8452177, z: -0.14069836, w: 0.5086711}
   m_Size:
     m_Target: 0.7286617
     speed: 2
@@ -1156,9 +1156,9 @@ MonoBehaviour:
     m_TextWithWhitespace: "Animator\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 263
+    x: 409
     y: 79
-    width: 1297
+    width: 1151
     height: 641
   m_SerializedDataModeController:
     m_DataMode: 0
@@ -1358,7 +1358,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/Resources/Prefabs
+    - Assets/Input
     m_Globs: []
     m_ProductIds: 
     m_AnyWithAssetOrigin: 0
@@ -1368,7 +1368,7 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 64
   m_LastFolders:
-  - Assets/Resources/Prefabs
+  - Assets/Input
   m_LastFoldersGridSize: -1
   m_LastProjectPath: C:\Users\Zanql\Desktop\Projects\Repository\Competitive-Hacking-Game\Competitive
     Hacking Game
@@ -1376,9 +1376,9 @@ MonoBehaviour:
     m_IsLocked: 0
   m_FolderTreeState:
     scrollPos: {x: 0, y: 0}
-    m_SelectedIDs: a6000100
-    m_LastClickedID: 65702
-    m_ExpandedIDs: 0000000020010100220101002401010026010100280101002a010100
+    m_SelectedIDs: 90010100
+    m_LastClickedID: 65936
+    m_ExpandedIDs: 0000000056000100580001005a0001005c0001005e00010060000100
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1407,7 +1407,7 @@ MonoBehaviour:
     scrollPos: {x: 0, y: 0}
     m_SelectedIDs: 
     m_LastClickedID: 0
-    m_ExpandedIDs: 0000000020010100220101002401010026010100280101002a010100
+    m_ExpandedIDs: 0000000056000100580001005a0001005c0001005e00010060000100
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 

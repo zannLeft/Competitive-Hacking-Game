@@ -14,6 +14,7 @@ public class InputManager : NetworkBehaviour
     private PlayerMotor motor;
     private PlayerLook look;
     //private HandItems items;
+    private PlayerPhone phone; // add to the class
 
     void Awake()
     {
@@ -24,6 +25,7 @@ public class InputManager : NetworkBehaviour
 
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
+        phone = GetComponent<PlayerPhone>();
         //items = GetComponent<HandItems>();
     }
 
@@ -48,6 +50,10 @@ public class InputManager : NetworkBehaviour
             ui.Start.performed += OnStartPerformed;
             ui.Pause.performed += OnPausePerformed; // <-- added
             ui.Enable();                             // <-- added
+
+            onFoot.Phone.started += OnPhoneStarted;
+            onFoot.Phone.canceled += OnPhoneCanceled;
+
         }
     }
 
@@ -97,6 +103,9 @@ public class InputManager : NetworkBehaviour
             onFoot.Disable();
             ui.Disable();
             //handItems.Disable();
+
+            onFoot.Phone.started -= OnPhoneStarted;
+            onFoot.Phone.canceled -= OnPhoneCanceled;
         }
     }
 
@@ -112,5 +121,15 @@ public class InputManager : NetworkBehaviour
     {
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
             LobbyManager.Instance.StartGameAsHost(); // host-only
+    }
+
+    private void OnPhoneStarted(InputAction.CallbackContext ctx)
+    {
+        phone?.SetPhone(true);
+    }
+
+    private void OnPhoneCanceled(InputAction.CallbackContext ctx)
+    {
+        phone?.SetPhone(false);
     }
 }
