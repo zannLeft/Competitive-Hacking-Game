@@ -1,21 +1,21 @@
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.SceneManagement; // <— add
 
 public class PhoneTargetHandler : NetworkBehaviour
 {
     [Header("References")]
-    [SerializeField] private Camera playerCamera;   // Assign your main player Camera
-    [SerializeField] private PlayerLook playerLook; // For Pitch access (owner only)
+    [SerializeField] private Camera playerCamera;
+    [SerializeField] private PlayerLook playerLook;
 
-    // BAKED position settings (hidden from Inspector)
-    private const float offsetDistance   = 0.2f;   // forward from camera
-    private const float horizontalOffset = 0.2f;   // right(+)/left(-)
-    private const float verticalOffset   = -0.06f; // up(+)/down(-)
+    private const float offsetDistance   = 0.2f;
+    private const float horizontalOffset = 0.2f;
+    private const float verticalOffset   = -0.06f;
 
     [Header("Smoothing & Clamp")]
-    [SerializeField] private float rotationSmoothSpeed = 10f; // inertia of look-induced rotation
-    [SerializeField] private float maxPitchUp = 45f;          // clamp up
-    [SerializeField] private float maxPitchDown = -45f;       // clamp down (negative)
+    [SerializeField] private float rotationSmoothSpeed = 10f;
+    [SerializeField] private float maxPitchUp = 45f;
+    [SerializeField] private float maxPitchDown = -45f;
 
     [Header("IK Anchor (child of PhoneTarget)")]
     [SerializeField] private string ikAnchorName = "IKAnchor";
@@ -24,7 +24,7 @@ public class PhoneTargetHandler : NetworkBehaviour
     private Transform ikAnchor;
     private bool isPhoneActive = false;
     private Quaternion smoothedRotation;
-    private bool _initialized; // lazy init for smoothing
+    private bool _initialized;
 
     public Transform Target   => phoneTarget;
     public Transform IKAnchor => ikAnchor;
@@ -35,23 +35,49 @@ public class PhoneTargetHandler : NetworkBehaviour
         base.OnNetworkSpawn();
         if (!IsOwner) return;
 
-        // Create PhoneTarget at scene root (not parented) to avoid inheriting body transforms
-        GameObject targetObj = new GameObject("PhoneTarget");
-        phoneTarget = targetObj.transform;
-        phoneTarget.parent = null;
-        phoneTarget.gameObject.SetActive(false);
+        EnsurePhoneTarget();
+        // listen so we can re-seed smoothing on scene changes (optional but nice)
+        SceneManager.activeSceneChanged += OnActiveSceneChanged;
+    }
 
-        CreateOrFindIKAnchor();
-        // Wait to init smoothing until first Update (camera/look can be fully ready)
+    private void OnActiveSceneChanged(Scene oldScene, Scene newScene)
+    {
+        // Re-seed smoothing next Update so we don't get a pop if the camera teleported.
         _initialized = false;
+    }
+
+    private void OnDestroy()
+    {
+        // Safety net in case OnNetworkDespawn didn't run (e.g., shutdown order).
+        if (IsOwner && phoneTarget != null)
+        {
+            Destroy(phoneTarget.gameObject);
+            phoneTarget = null;
+            ikAnchor = null;
+        }
+        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+        if (phoneTarget != null)
+        {
+            Destroy(phoneTarget.gameObject); // clean up DDOL object when player despawns
+            phoneTarget = null;
+            ikAnchor = null;
+        }
+        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
     }
 
     void Update()
     {
         if (!IsOwner) return;
-        if (playerCamera == null || playerLook == null || phoneTarget == null) return;
+        if (playerCamera == null || playerLook == null) return;
 
-        // Lazy-initialize smoothing to the current aim exactly once
+        // If a scene load destroyed it somehow, recreate.
+        if (phoneTarget == null) EnsurePhoneTarget();
+
         if (!_initialized)
         {
             float initPitch = Mathf.Clamp(playerLook.Pitch, maxPitchDown, maxPitchUp);
@@ -59,14 +85,10 @@ public class PhoneTargetHandler : NetworkBehaviour
             _initialized = true;
         }
 
-        // --- Always update transform, even while hidden/disabled ---
         float pitch = Mathf.Clamp(playerLook.Pitch, maxPitchDown, maxPitchUp);
         Quaternion targetRotation = Quaternion.Euler(pitch, playerCamera.transform.eulerAngles.y, 0f);
-
-        // Rotation smoothing (used to compute offset directions)
         smoothedRotation = Quaternion.Slerp(smoothedRotation, targetRotation, rotationSmoothSpeed * Time.deltaTime);
 
-        // Position uses current camera position + smoothed direction offsets
         Vector3 forwardOffset = smoothedRotation * Vector3.forward * offsetDistance;
         Vector3 rightOffset   = smoothedRotation * Vector3.right   * horizontalOffset;
         Vector3 upOffset      = smoothedRotation * Vector3.up      * verticalOffset;
@@ -74,33 +96,50 @@ public class PhoneTargetHandler : NetworkBehaviour
         Vector3 targetPosition = playerCamera.transform.position + forwardOffset + rightOffset + upOffset;
 
         phoneTarget.position = targetPosition;
-
-        // Make the target face the camera (phone looks oriented toward you)
         phoneTarget.rotation = Quaternion.LookRotation(playerCamera.transform.position - phoneTarget.position);
     }
 
-    /// <summary>
-    /// Shows/hides the PhoneTarget + IKAnchor (visual/IK usage).
-    /// Transforms keep updating regardless, so re-activating won't snap.
-    /// </summary>
     public void SetPhoneActive(bool value)
     {
         if (!IsOwner) return;
-        if (value == isPhoneActive) return;
 
+        if (value && phoneTarget == null)
+            EnsurePhoneTarget();
+
+        if (value == isPhoneActive) return;
         isPhoneActive = value;
 
         if (phoneTarget != null)
             phoneTarget.gameObject.SetActive(isPhoneActive);
 
-        // Ensure IK anchor exists under the target
         if (isPhoneActive && ikAnchor == null)
             CreateOrFindIKAnchor();
     }
 
+    private void EnsurePhoneTarget()
+    {
+        if (phoneTarget != null) return;
+
+        var name = $"PhoneTarget_{(NetworkManager ? NetworkManager.LocalClientId : 0)}";
+        GameObject targetObj = new GameObject(name);
+        phoneTarget = targetObj.transform;
+
+        // keep at root (no body transform inheritance)
+        phoneTarget.parent = null;
+
+        // ✨ make it survive scene loads
+        Object.DontDestroyOnLoad(targetObj);
+
+        // match current visual state
+        phoneTarget.gameObject.SetActive(isPhoneActive);
+
+        CreateOrFindIKAnchor();
+        _initialized = false;
+    }
+
     private void CreateOrFindIKAnchor()
     {
-        if (!IsOwner || phoneTarget == null) return;
+        if (phoneTarget == null) return;
 
         var t = phoneTarget.Find(ikAnchorName);
         if (t == null)
@@ -108,18 +147,9 @@ public class PhoneTargetHandler : NetworkBehaviour
             var go = new GameObject(ikAnchorName);
             t = go.transform;
             t.SetParent(phoneTarget, worldPositionStays: false);
-            // Default at local zero; no extra baked offsets.
             t.localPosition = Vector3.zero;
             t.localRotation = Quaternion.identity;
         }
-
         ikAnchor = t;
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        base.OnNetworkDespawn();
-        if (phoneTarget != null)
-            Destroy(phoneTarget.gameObject);
     }
 }
