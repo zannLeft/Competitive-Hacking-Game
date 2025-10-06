@@ -380,9 +380,9 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 5162219321685998565}
   - {fileID: 6640517816137906802}
   - {fileID: 5256281508926833506}
-  - {fileID: 5162219321685998565}
   m_Father: {fileID: 6870777860927479631}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1709436950981021920
@@ -1198,7 +1198,8 @@ GameObject:
   - component: {fileID: 3788420408615085539}
   - component: {fileID: 667075037438137217}
   - component: {fileID: 119657160423194826}
-  - component: {fileID: 6967141301849075269}
+  - component: {fileID: 5216577995390182814}
+  - component: {fileID: 8878162043686913073}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1261,7 +1262,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 2057213198
+  GlobalObjectIdHash: 1182312238
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -1453,7 +1454,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 482c6fba7a86d2b498ec3b350fcd78e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HeadLookIK
---- !u!114 &6967141301849075269
+--- !u!114 &5216577995390182814
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 125379b1d678215419559147e9e41ac1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  playerCamera: {fileID: 2272284346070443280}
+  playerLook: {fileID: 6487965562487473033}
+  rotationSmoothSpeed: 10
+  maxPitchUp: 45
+  maxPitchDown: -45
+  ikAnchorName: IKAnchor
+--- !u!114 &8878162043686913073
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1464,12 +1483,26 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1b07af9f3d7e4bd44a929ec6875bb3db, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: '::'
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerPhone
+  animator: {fileID: 7898741019774491149}
+  targetHandler: {fileID: 5216577995390182814}
+  phoneAttachR: {fileID: 5162219321685998565}
   phonePrefab: {fileID: 6671164735964093091, guid: a18efead22d4aeb489486b7dcfd70f20, type: 3}
-  phoneAttach: {fileID: 5162219321685998565}
-  attachLocalPosition: {x: 0, y: 0, z: 0}
-  attachLocalEuler: {x: 0, y: 0, z: 0}
-  initialScale: {x: 1, y: 1, z: 1}
+  phoneMaskParam: PhoneMask
+  phoneIKParam: PhoneIK
+  phoneLayerIndex: 1
+  maskEaseInTime: 0.12
+  maskEaseOutTime: 0.12
+  maskMaxSpeed: 0
+  ikEaseInTime: 0.5
+  ikEaseOutTime: 0.1
+  ikMaxSpeed: 0
+  approxDistance: 0.45
+  approxHorizontal: 0.06
+  approxVertical: -0.02
+  remoteRotOffsetEuler: {x: 0, y: 90, z: 0}
+  rightElbowHint: {fileID: 0}
+  elbowHintWeight: 0.5
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

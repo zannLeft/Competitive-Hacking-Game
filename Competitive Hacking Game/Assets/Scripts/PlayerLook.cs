@@ -56,6 +56,10 @@ public class PlayerLook : NetworkBehaviour
     public float Pitch => xRotation;          // [-90, +90] from your clamp
     public float YawOffset => yawOffset;      // [-maxShoulderYaw, +maxShoulderYaw] 
 
+    private bool phoneAimActive = false;
+    public bool IsPhoneAiming => phoneAimActive;
+
+
     public Quaternion WorldLookRotation =>
         transform.rotation * Quaternion.Euler(0f, yawOffset, 0f) * Quaternion.Euler(Pitch, 0f, 0f);
 
@@ -139,7 +143,31 @@ public class PlayerLook : NetworkBehaviour
             !motor.sprinting &&
             (motor.crouching ? shoulderWhileCrouching : true);
 
-        if (shoulderModeActive)
+        if (phoneAimActive)
+        {
+            // While aiming: rotate body with camera every frame (same as moving)
+            transform.Rotate(Vector3.up * (mouseX * Time.deltaTime) * xSensitivity);
+
+            // If there’s any leftover shoulder offset, resolve it just like "start moving"
+            if (Mathf.Abs(yawOffset) > 0.01f)
+            {
+                if (instantCatchUpOnMove)
+                {
+                    // same behavior as your movement snap
+                    transform.Rotate(0f, yawOffset, 0f);
+                    yawOffset = 0f;
+                }
+                else
+                {
+                    // same behavior as your smooth catch-up on move
+                    float step = catchUpOnMoveSpeed * Time.deltaTime;
+                    CatchUp(step);
+                }
+            }
+
+            catchingUpStationary = false; // don’t run the in-place catch-up
+        }
+        else if (shoulderModeActive)
         {
             // Accumulate yaw on the camera pivot (look-over-shoulder)
             yawOffset += mouseX * xSensitivity * Time.deltaTime;
@@ -166,13 +194,11 @@ public class PlayerLook : NetworkBehaviour
             {
                 if (instantCatchUpOnMove)
                 {
-                    // Snap the body to the camera direction and clear offset
                     transform.Rotate(0f, yawOffset, 0f);
                     yawOffset = 0f;
                 }
                 else
                 {
-                    // Smooth catch-up starting on move
                     float step = catchUpOnMoveSpeed * Time.deltaTime;
                     CatchUp(step);
                 }
@@ -188,8 +214,9 @@ public class PlayerLook : NetworkBehaviour
                 CatchUp(step);
             }
 
-            catchingUpStationary = false; // moving cancels stationary catch-up
+            catchingUpStationary = false;
         }
+
 
         // Apply offset immediately so there is no 1-frame visual lag
         if (cameraRoot != null)
@@ -213,7 +240,7 @@ public class PlayerLook : NetworkBehaviour
         if (Mathf.Abs(yawOffset) <= 0.01f)
             yawOffset = 0f;
     }
-    
+
     // Add inside PlayerLook class
     public Quaternion MoveSpaceRotation
     {
@@ -223,6 +250,12 @@ public class PlayerLook : NetworkBehaviour
             return transform.rotation * Quaternion.Euler(0f, yawOffset, 0f);
         }
     }
+    
 
+    public void SetPhoneAim(bool aiming)
+    {
+        // No snap here — catch-up (instant or smooth) is handled in ProcessLook
+        phoneAimActive = aiming;
+    }
 }
 

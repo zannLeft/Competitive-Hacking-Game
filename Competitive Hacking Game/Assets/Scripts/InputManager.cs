@@ -14,7 +14,8 @@ public class InputManager : NetworkBehaviour
     private PlayerMotor motor;
     private PlayerLook look;
     //private HandItems items;
-    private PlayerPhone phone; // add to the class
+    private PlayerPhone phone;
+    private PhoneTargetHandler phoneTarget;
 
     void Awake()
     {
@@ -26,6 +27,7 @@ public class InputManager : NetworkBehaviour
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
         phone = GetComponent<PlayerPhone>();
+        phoneTarget = GetComponent<PhoneTargetHandler>();
         //items = GetComponent<HandItems>();
     }
 
@@ -51,8 +53,8 @@ public class InputManager : NetworkBehaviour
             ui.Pause.performed += OnPausePerformed; // <-- added
             ui.Enable();                             // <-- added
 
-            onFoot.Phone.started += OnPhoneStarted;
-            onFoot.Phone.canceled += OnPhoneCanceled;
+            onFoot.Phone.started  += OnPhoneHoldStarted;
+            onFoot.Phone.canceled += OnPhoneHoldCanceled;
 
         }
     }
@@ -70,18 +72,11 @@ public class InputManager : NetworkBehaviour
 
     void Update()
     {
-        // Only allow the owner of the player object to control movement
         if (!IsOwner) return;
 
-        // Keep calling ProcessMove even when paused so gravity continues to apply.
         motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
-    }
 
-    void LateUpdate()
-    {
-        // Only allow the owner of the player object to control camera look
-        if (!IsOwner) return;
-
+        // Moved from LateUpdate → Update (fixes the 1-frame lag)
         look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
 
@@ -104,8 +99,9 @@ public class InputManager : NetworkBehaviour
             ui.Disable();
             //handItems.Disable();
 
-            onFoot.Phone.started -= OnPhoneStarted;
-            onFoot.Phone.canceled -= OnPhoneCanceled;
+            onFoot.Phone.started -= OnPhoneHoldStarted;
+            onFoot.Phone.canceled -= OnPhoneHoldCanceled;
+
         }
     }
 
@@ -122,14 +118,14 @@ public class InputManager : NetworkBehaviour
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
             LobbyManager.Instance.StartGameAsHost(); // host-only
     }
-
-    private void OnPhoneStarted(InputAction.CallbackContext ctx)
+    private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
-        phone?.SetPhone(true);
+        phone?.SetHolding(true);
+        look?.SetPhoneAim(true);   // NEW: snap + rotate with camera while held
     }
-
-    private void OnPhoneCanceled(InputAction.CallbackContext ctx)
+    private void OnPhoneHoldCanceled(InputAction.CallbackContext ctx)
     {
-        phone?.SetPhone(false);
+        phone?.SetHolding(false);
+        look?.SetPhoneAim(false);  // NEW: restore normal shoulder/look behavior
     }
 }
