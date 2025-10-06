@@ -819,7 +819,7 @@ SkinnedMeshRenderer:
   m_SortingOrder: 0
   serializedVersion: 2
   m_Quality: 0
-  m_UpdateWhenOffscreen: 0
+  m_UpdateWhenOffscreen: 1
   m_SkinnedMotionVectors: 1
   m_Mesh: {fileID: -8839368762345780380, guid: 7f203de5af3a42b42bb97c141c49cf8b, type: 3}
   m_Bones:
@@ -1262,7 +1262,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 1182312238
+  GlobalObjectIdHash: 2057213198
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -1625,7 +1625,7 @@ SkinnedMeshRenderer:
   m_SortingOrder: 0
   serializedVersion: 2
   m_Quality: 0
-  m_UpdateWhenOffscreen: 0
+  m_UpdateWhenOffscreen: 1
   m_SkinnedMotionVectors: 1
   m_Mesh: {fileID: 260929123691190064, guid: 7f203de5af3a42b42bb97c141c49cf8b, type: 3}
   m_Bones:

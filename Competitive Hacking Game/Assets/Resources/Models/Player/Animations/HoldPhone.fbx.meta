@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: bb49dd3f33758a648b0d4bd722ec56c4
+guid: df904b11be8cd614aa1d9f4ba1120900
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
@@ -31,7 +31,7 @@ ModelImporter:
     extraUserProperties: []
     clipAnimations:
     - serializedVersion: 16
-      name: HoldingPhone
+      name: HoldPhone
       takeName: Scene
       internalID: -623603649343465320
       firstFrame: 0
