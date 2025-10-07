@@ -1,8 +1,5 @@
-using System.Collections;
-using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 [DisallowMultipleComponent]
 public class PlayerPhone : NetworkBehaviour
@@ -19,35 +16,25 @@ public class PlayerPhone : NetworkBehaviour
     [SerializeField] private int    phoneLayerIndex = 1;           // Right-arm mask layer index
 
     [Header("Easing (Mask Layer Weight)")]
-    [Tooltip("Lower = smoother/longer ease-in")]
     [SerializeField] private float maskEaseInTime  = 0.12f;
-    [Tooltip("Lower = smoother/longer ease-out")]
     [SerializeField] private float maskEaseOutTime = 0.12f;
-    [Tooltip("Optional clamp; 0 = unlimited")]
     [SerializeField] private float maskMaxSpeed    = 0f;
 
     [Header("Easing (IK Weight)")]
-    [Tooltip("Lower = smoother/longer ease-in")]
     [SerializeField] private float ikEaseInTime    = 0.10f;
-    [Tooltip("Lower = smoother/longer ease-out")]
     [SerializeField] private float ikEaseOutTime   = 0.10f;
-    [Tooltip("Optional clamp; 0 = unlimited")]
     [SerializeField] private float ikMaxSpeed      = 0f;
-
-    // (Removed: Phone Show/Hide threshold — now show when IK > 0)
 
     [Header("Remote Approx Target (non-owner)")]
     [SerializeField] private float approxDistance   = 0.45f;  // forward from head
     [SerializeField] private float approxHorizontal = 0.06f;  // right from head
     [SerializeField] private float approxVertical   = -0.02f; // up from head (negative = down)
-    [Tooltip("Base offset applied to the remote target orientation (before IK hand offset).")]
     [SerializeField] private Vector3 remoteRotOffsetEuler = new Vector3(0f, 90f, 0f);
 
-    // (Removed: Phone Model Offsets & IK Hand Rotation Offset from Inspector)
-    // BAKED values:
+    // BAKED values (restored)
     private static readonly Vector3 kPhoneLocalPosition   = new Vector3(-0.03f, 0f, 0.01f);
     private static readonly Vector3 kPhoneLocalEuler      = new Vector3(20f, 0f, 90f);
-    private static readonly Vector3 kIKHandRotOffsetEuler = new Vector3(0f, 90f, -90f);
+    private static readonly Vector3 kIKHandRotOffsetEuler = new Vector3(0f, 90f, -90f); // ← original
 
     [Header("Optional: Elbow Hint")]
     [SerializeField] private Transform rightElbowHint;
@@ -58,13 +45,13 @@ public class PlayerPhone : NetworkBehaviour
     private bool _rmbHeld;                 // set by InputManager (owner only)
     private float _targetBlend;            // 0 or 1 based on RMB
     private float _maskWeight, _ikWeight;  // smoothed outputs
-    private float _maskVel, _ikVel;        // SmoothDamp velocities (must persist across frames)
+    private float _maskVel, _ikVel;        // SmoothDamp velocities
     private bool _phoneVisible;
     private GameObject _spawnedPhone;
     private Transform _headBone;
-    private bool _targetActive;            // whether PhoneTargetHandler is currently active
+    private bool _targetActive;
+    private float _lastLayerWeight = -1f;
 
-    // Tiny snap epsilon so weights reach exact 0/1 (lets us deactivate cleanly at 0)
     private const float SnapEps = 1e-4f;
 
     void Reset()
@@ -109,12 +96,13 @@ public class PlayerPhone : NetworkBehaviour
             }
         }
 
-        // Apply baked offsets to any existing child right away (helps when tweaking in play mode)
         ApplyPhoneOffsets();
     }
 
     void Update()
     {
+        float dt = Time.deltaTime;
+
         // 1) Owner computes target blend from input
         if (IsOwner)
             _targetBlend = _rmbHeld ? 1f : 0f;
@@ -129,13 +117,13 @@ public class PlayerPhone : NetworkBehaviour
 
             _maskWeight = Mathf.SmoothDamp(
                 _maskWeight, _targetBlend, ref _maskVel, maskSmooth,
-                maskMaxSpeed <= 0f ? float.PositiveInfinity : maskMaxSpeed, Time.deltaTime);
+                maskMaxSpeed <= 0f ? float.PositiveInfinity : maskMaxSpeed, dt);
 
             _ikWeight = Mathf.SmoothDamp(
                 _ikWeight, _targetBlend, ref _ikVel, ikSmooth,
-                ikMaxSpeed <= 0f ? float.PositiveInfinity : ikMaxSpeed, Time.deltaTime);
+                ikMaxSpeed <= 0f ? float.PositiveInfinity : ikMaxSpeed, dt);
 
-            // Snap to exact 0/1 when near ends, then clamp
+            // Snap to exact 0/1 when near ends
             if (_targetBlend <= 0f)
             {
                 if (_maskWeight < SnapEps) { _maskWeight = 0f; _maskVel = 0f; }
@@ -159,9 +147,15 @@ public class PlayerPhone : NetworkBehaviour
             _ikWeight   = animator.GetFloat(_ikHash);
         }
 
-        // 3) Drive right-arm layer weight
+        // 3) Drive right-arm layer weight (only if changed)
         if (phoneLayerIndex >= 0 && phoneLayerIndex < animator.layerCount)
-            animator.SetLayerWeight(phoneLayerIndex, _maskWeight);
+        {
+            if (!Mathf.Approximately(_lastLayerWeight, _maskWeight))
+            {
+                animator.SetLayerWeight(phoneLayerIndex, _maskWeight);
+                _lastLayerWeight = _maskWeight;
+            }
+        }
 
         // 4) Activate/deactivate PhoneTarget based on CURRENT weights (not input)
         if (IsOwner && targetHandler != null)
@@ -187,6 +181,7 @@ public class PlayerPhone : NetworkBehaviour
         if (animator == null) return;
 
         float w = _ikWeight;
+
         animator.SetIKPositionWeight(AvatarIKGoal.RightHand, w);
         animator.SetIKRotationWeight(AvatarIKGoal.RightHand, w);
 
@@ -195,9 +190,15 @@ public class PlayerPhone : NetworkBehaviour
 
         if (w <= 0f) return;
 
+        // Ensure the anchor pose is updated in the same frame IK samples it (kills spin jitter)
+        if (IsOwner && targetHandler != null)
+        {
+            targetHandler.UpdateAnchorImmediate(Time.deltaTime);
+        }
+
         Quaternion handRotOffset = Quaternion.Euler(kIKHandRotOffsetEuler);
 
-        // Owner uses IKAnchor under PhoneTarget (inherits PhoneTargetHandler smoothing)
+        // Owner uses IKAnchor under PhoneTarget (inherits smoothing)
         if (IsOwner && targetHandler != null && targetHandler.IKAnchor != null)
         {
             Transform a = targetHandler.IKAnchor;
@@ -218,7 +219,6 @@ public class PlayerPhone : NetworkBehaviour
 
     /// <summary>
     /// Called by InputManager (owner only). Press -> true, Release -> false.
-    /// This only sets target; actual weights ease in/out via SmoothDamp.
     /// </summary>
     public void SetHolding(bool holding)
     {
@@ -260,11 +260,9 @@ public class PlayerPhone : NetworkBehaviour
     {
         if (_spawnedPhone == null || phoneAttachR == null) return;
 
-        // Always enforce local pose (baked)
         var t = _spawnedPhone.transform;
         t.localPosition = kPhoneLocalPosition;
         t.localRotation = Quaternion.Euler(kPhoneLocalEuler);
-        // (If you also want scale, add a baked scale and set t.localScale)
     }
 
     private void ResolveRemoteApproxTarget(out Vector3 pos, out Quaternion rot)

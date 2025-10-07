@@ -1262,7 +1262,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 2057213198
+  GlobalObjectIdHash: 1182312238
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -1468,7 +1468,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: '::'
   playerCamera: {fileID: 2272284346070443280}
   playerLook: {fileID: 6487965562487473033}
-  rotationSmoothSpeed: 10
+  rotationSmoothSpeed: 5
   maxPitchUp: 45
   maxPitchDown: -45
   ikAnchorName: IKAnchor

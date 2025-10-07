@@ -1,7 +1,8 @@
 using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.SceneManagement; // <— add
+using UnityEngine.SceneManagement;
 
+[DisallowMultipleComponent]
 public class PhoneTargetHandler : NetworkBehaviour
 {
     [Header("References")]
@@ -25,6 +26,7 @@ public class PhoneTargetHandler : NetworkBehaviour
     private bool isPhoneActive = false;
     private Quaternion smoothedRotation;
     private bool _initialized;
+    private Transform _camT;
 
     public Transform Target   => phoneTarget;
     public Transform IKAnchor => ikAnchor;
@@ -35,68 +37,81 @@ public class PhoneTargetHandler : NetworkBehaviour
         base.OnNetworkSpawn();
         if (!IsOwner) return;
 
+        if (playerCamera == null) playerCamera = GetComponentInChildren<Camera>(true);
+        _camT = playerCamera ? playerCamera.transform : null;
+
         EnsurePhoneTarget();
-        // listen so we can re-seed smoothing on scene changes (optional but nice)
         SceneManager.activeSceneChanged += OnActiveSceneChanged;
     }
 
     private void OnActiveSceneChanged(Scene oldScene, Scene newScene)
     {
-        // Re-seed smoothing next Update so we don't get a pop if the camera teleported.
-        _initialized = false;
+        _initialized = false; // reseed smoothing after teleports/loads
     }
 
     private void OnDestroy()
     {
-        // Safety net in case OnNetworkDespawn didn't run (e.g., shutdown order).
+        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
+
         if (IsOwner && phoneTarget != null)
         {
             Destroy(phoneTarget.gameObject);
             phoneTarget = null;
             ikAnchor = null;
         }
-        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
     }
 
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
+        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
+
         if (phoneTarget != null)
         {
-            Destroy(phoneTarget.gameObject); // clean up DDOL object when player despawns
+            Destroy(phoneTarget.gameObject);
             phoneTarget = null;
             ikAnchor = null;
         }
-        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
     }
 
     void Update()
     {
-        if (!IsOwner) return;
-        if (playerCamera == null || playerLook == null) return;
+        if (!IsOwner || playerCamera == null || playerLook == null) return;
 
-        // If a scene load destroyed it somehow, recreate.
         if (phoneTarget == null) EnsurePhoneTarget();
+
+        // keep it fresh even when IK isn't sampled (owner only)
+        UpdateAnchorImmediate(Time.deltaTime);
+    }
+
+    /// <summary>
+    /// Update the anchor NOW (call from OnAnimatorIK before sampling IK target).
+    /// </summary>
+    public void UpdateAnchorImmediate(float dt)
+    {
+        if (_camT == null || playerLook == null || phoneTarget == null) return;
 
         if (!_initialized)
         {
             float initPitch = Mathf.Clamp(playerLook.Pitch, maxPitchDown, maxPitchUp);
-            smoothedRotation = Quaternion.Euler(initPitch, playerCamera.transform.eulerAngles.y, 0f);
+            smoothedRotation = Quaternion.Euler(initPitch, _camT.eulerAngles.y, 0f);
             _initialized = true;
         }
 
         float pitch = Mathf.Clamp(playerLook.Pitch, maxPitchDown, maxPitchUp);
-        Quaternion targetRotation = Quaternion.Euler(pitch, playerCamera.transform.eulerAngles.y, 0f);
-        smoothedRotation = Quaternion.Slerp(smoothedRotation, targetRotation, rotationSmoothSpeed * Time.deltaTime);
+        Quaternion targetRotation = Quaternion.Euler(pitch, _camT.eulerAngles.y, 0f);
+        smoothedRotation = Quaternion.Slerp(smoothedRotation, targetRotation, rotationSmoothSpeed * dt);
 
         Vector3 forwardOffset = smoothedRotation * Vector3.forward * offsetDistance;
         Vector3 rightOffset   = smoothedRotation * Vector3.right   * horizontalOffset;
         Vector3 upOffset      = smoothedRotation * Vector3.up      * verticalOffset;
 
-        Vector3 targetPosition = playerCamera.transform.position + forwardOffset + rightOffset + upOffset;
+        Vector3 targetPosition = _camT.position + forwardOffset + rightOffset + upOffset;
 
         phoneTarget.position = targetPosition;
-        phoneTarget.rotation = Quaternion.LookRotation(playerCamera.transform.position - phoneTarget.position);
+
+        // Restore original facing logic so palm orientation matches the old setup
+        phoneTarget.rotation = Quaternion.LookRotation(_camT.position - phoneTarget.position);
     }
 
     public void SetPhoneActive(bool value)
@@ -124,13 +139,8 @@ public class PhoneTargetHandler : NetworkBehaviour
         GameObject targetObj = new GameObject(name);
         phoneTarget = targetObj.transform;
 
-        // keep at root (no body transform inheritance)
         phoneTarget.parent = null;
-
-        // ✨ make it survive scene loads
         Object.DontDestroyOnLoad(targetObj);
-
-        // match current visual state
         phoneTarget.gameObject.SetActive(isPhoneActive);
 
         CreateOrFindIKAnchor();

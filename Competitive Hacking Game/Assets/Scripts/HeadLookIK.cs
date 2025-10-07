@@ -4,7 +4,6 @@ using Unity.Netcode;
 [DisallowMultipleComponent]
 public class HeadLookIK : NetworkBehaviour
 {
-    // ---- tiny set of constants ----
     const float LOOK_DISTANCE   = 8f;
     const float HEAD_WEIGHT     = 0.85f;
     const float EYES_WEIGHT     = 0.30f;
@@ -12,7 +11,7 @@ public class HeadLookIK : NetworkBehaviour
 
     const float MAX_HEAD_YAW    = 80f;  // left/right
     const float MAX_PITCH_UP    = 60f;  // look up (deg; negative)
-    const float MAX_PITCH_DOWN  = 45f;  // look down (same for stand & crouch)
+    const float MAX_PITCH_DOWN  = 45f;  // look down
 
     const float BODY_W_DEFAULT  = 0.15f; // spine/chest influence when NOT crouching
     const float SEND_RATE_HZ    = 15f;   // owner → others (pitch,yaw) updates
@@ -38,7 +37,6 @@ public class HeadLookIK : NetworkBehaviour
 
         if (animator)
         {
-            // keep bones updating even if local head renderer is ShadowsOnly
             animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
 
             if (animator.isHuman && animator.avatar)
@@ -50,13 +48,14 @@ public class HeadLookIK : NetworkBehaviour
     {
         if (!IsSpawned || animator == null || headBone == null) return;
 
+        float dt = Time.deltaTime;
+
         if (IsOwner && look != null)
         {
             float yaw   = Mathf.Clamp(look.YawOffset, -MAX_HEAD_YAW, MAX_HEAD_YAW);
             float pitch = Mathf.Clamp(look.Pitch,     -MAX_PITCH_UP, MAX_PITCH_DOWN);
 
-            // throttle network sends & ignore tiny changes
-            sendTimer += Time.deltaTime;
+            sendTimer += dt;
             if (sendTimer >= 1f / SEND_RATE_HZ)
             {
                 sendTimer = 0f;
@@ -70,13 +69,11 @@ public class HeadLookIK : NetworkBehaviour
         }
         else
         {
-            // smooth remote
             Vector2 t = netLook.Value;
-            lerpedPitch = Mathf.Lerp(lerpedPitch, t.x, Time.deltaTime * REMOTE_SMOOTH);
-            lerpedYaw   = Mathf.Lerp(lerpedYaw,   t.y, Time.deltaTime * REMOTE_SMOOTH);
+            lerpedPitch = Mathf.Lerp(lerpedPitch, t.x, dt * REMOTE_SMOOTH);
+            lerpedYaw   = Mathf.Lerp(lerpedYaw,   t.y, dt * REMOTE_SMOOTH);
         }
 
-        // final clamps
         lerpedPitch = Mathf.Clamp(lerpedPitch, -MAX_PITCH_UP, MAX_PITCH_DOWN);
         lerpedYaw   = Mathf.Clamp(lerpedYaw,   -MAX_HEAD_YAW, MAX_HEAD_YAW);
     }
@@ -86,11 +83,8 @@ public class HeadLookIK : NetworkBehaviour
         if (!IsSpawned || animator == null || headBone == null) return;
 
         bool isCrouching = animator.GetBool("Crouching");
-
-        // Body influence: 0 while crouching; default otherwise
         float bodyW = isCrouching ? 0f : BODY_W_DEFAULT;
 
-        // Build target look
         Quaternion lookRot =
             transform.rotation *
             Quaternion.Euler(0f, lerpedYaw, 0f) *
