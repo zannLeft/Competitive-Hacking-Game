@@ -233,19 +233,18 @@ public class PlayerPhone : NetworkBehaviour
         if (_spawnedPhone == null)
         {
             if (phonePrefab != null && phoneAttachR != null)
-            {
-                _spawnedPhone = Instantiate(phonePrefab, phoneAttachR, worldPositionStays: false);
-            }
+                _spawnedPhone = Instantiate(phonePrefab, phoneAttachR, false);
             else if (phoneAttachR != null && phoneAttachR.childCount > 0)
-            {
                 _spawnedPhone = phoneAttachR.GetChild(0).gameObject;
-            }
         }
 
         if (_spawnedPhone != null)
         {
             _spawnedPhone.SetActive(true);
             ApplyPhoneOffsets();
+
+            var screen = _spawnedPhone.GetComponent<PhoneScreenController>();
+            screen?.SetRenderingActive(true);
         }
     }
 
@@ -253,7 +252,12 @@ public class PlayerPhone : NetworkBehaviour
     {
         _phoneVisible = false;
         if (_spawnedPhone != null)
+        {
+            var screen = _spawnedPhone.GetComponent<PhoneScreenController>();
+            screen?.SetRenderingActive(false);
+
             _spawnedPhone.SetActive(false);
+        }
     }
 
     private void ApplyPhoneOffsets()

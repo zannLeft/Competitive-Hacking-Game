@@ -169,7 +169,6 @@ GameObject:
   - component: {fileID: 2155987865107882855}
   - component: {fileID: 7080930450452105395}
   - component: {fileID: 3676972200234201696}
-  - component: {fileID: 6148827395292756921}
   m_Layer: 11
   m_Name: PhoneUI
   m_TagString: Untagged
@@ -244,23 +243,6 @@ MonoBehaviour:
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
   m_PresetInfoIsWorld: 0
---- !u!114 &6148827395292756921
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5921356610043139508}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.GraphicRaycaster
-  m_IgnoreReversedGraphics: 1
-  m_BlockingObjects: 0
-  m_BlockingMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
 --- !u!1 &6491684886276934534
 GameObject:
   m_ObjectHideFlags: 0
@@ -483,10 +465,43 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: e56051c9ad6b87f44b5d1827bf67eab7, type: 3}
       insertIndex: -1
       addedObject: {fileID: 5755566847539361120}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: e56051c9ad6b87f44b5d1827bf67eab7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3154018222151749938}
   m_SourcePrefab: {fileID: 100100000, guid: e56051c9ad6b87f44b5d1827bf67eab7, type: 3}
+--- !u!23 &5157818440398879606 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: -7511558181221131132, guid: e56051c9ad6b87f44b5d1827bf67eab7, type: 3}
+  m_PrefabInstance: {fileID: 5788767274589333490}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &6331898726318129177 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: e56051c9ad6b87f44b5d1827bf67eab7, type: 3}
   m_PrefabInstance: {fileID: 5788767274589333490}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &6671164735964093091 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: e56051c9ad6b87f44b5d1827bf67eab7, type: 3}
+  m_PrefabInstance: {fileID: 5788767274589333490}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &3154018222151749938
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6671164735964093091}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d722f0e856f5be747a74faf9d3f353ad, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  uiCam: {fileID: 3165668771073812791}
+  uiCanvas: {fileID: 7080930450452105395}
+  screenMR: {fileID: 5157818440398879606}
+  screenMaterialIndex: 1
+  remoteSolidMat: {fileID: 2100000, guid: 0d8f6a7ed533b9c4f85e38d48dee9fc0, type: 2}
+  rtWidth: 794
+  rtHeight: 1554
+  useMipmaps: 0
