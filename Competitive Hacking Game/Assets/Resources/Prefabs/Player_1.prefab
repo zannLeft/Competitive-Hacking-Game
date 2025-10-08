@@ -1470,7 +1470,7 @@ MonoBehaviour:
   playerLook: {fileID: 6487965562487473033}
   rotationSmoothSpeed: 5
   maxPitchUp: 45
-  maxPitchDown: -45
+  maxPitchDown: -75
   ikAnchorName: IKAnchor
 --- !u!114 &8878162043686913073
 MonoBehaviour:
@@ -1503,6 +1503,7 @@ MonoBehaviour:
   remoteRotOffsetEuler: {x: -20, y: -160, z: -7.8}
   rightElbowHint: {fileID: 0}
   elbowHintWeight: 0.5
+  flashlightNodeName: FlashLight
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

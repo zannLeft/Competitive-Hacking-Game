@@ -20,6 +20,7 @@ public class PhoneTargetHandler : NetworkBehaviour
 
     [Header("IK Anchor (child of PhoneTarget)")]
     [SerializeField] private string ikAnchorName = "IKAnchor";
+    [SerializeField] private Vector3 ikAnchorLocalEuler = new Vector3(-12f, -160f, 0f); // <-- requested spawn rotation
 
     private Transform phoneTarget;
     private Transform ikAnchor;
@@ -111,7 +112,7 @@ public class PhoneTargetHandler : NetworkBehaviour
         phoneTarget.position = targetPosition;
 
         // Restore original facing logic so palm orientation matches the old setup
-        phoneTarget.rotation = Quaternion.LookRotation(_camT.position - phoneTarget.position);
+        phoneTarget.rotation = smoothedRotation;
     }
 
     public void SetPhoneActive(bool value)
@@ -158,7 +159,7 @@ public class PhoneTargetHandler : NetworkBehaviour
             t = go.transform;
             t.SetParent(phoneTarget, worldPositionStays: false);
             t.localPosition = Vector3.zero;
-            t.localRotation = Quaternion.identity;
+            t.localRotation = Quaternion.Euler(ikAnchorLocalEuler); // <-- apply spawn rotation
         }
         ikAnchor = t;
     }

@@ -143,6 +143,15 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                     ""id"": ""e3dbdb67-5a25-4b82-b74b-59d6c95b7c68"",
                     ""expectedControlType"": """",
                     ""processors"": """",
+                    ""interactions"": ""Press"",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Flashlight"",
+                    ""type"": ""Button"",
+                    ""id"": ""3875f4d3-5e9b-4e97-a643-b50356436dbe"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
                 }
@@ -356,6 +365,17 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                     ""action"": ""Phone"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""8cdef8c5-f000-4ded-a5ff-0c8cedaab75b"",
+                    ""path"": ""<Keyboard>/f"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Flashlight"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         },
@@ -429,6 +449,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         m_OnFoot_Sprint = m_OnFoot.FindAction("Sprint", throwIfNotFound: true);
         m_OnFoot_Crouch = m_OnFoot.FindAction("Crouch", throwIfNotFound: true);
         m_OnFoot_Phone = m_OnFoot.FindAction("Phone", throwIfNotFound: true);
+        m_OnFoot_Flashlight = m_OnFoot.FindAction("Flashlight", throwIfNotFound: true);
         // UI
         m_UI = asset.FindActionMap("UI", throwIfNotFound: true);
         m_UI_Pause = m_UI.FindAction("Pause", throwIfNotFound: true);
@@ -520,6 +541,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
     private readonly InputAction m_OnFoot_Sprint;
     private readonly InputAction m_OnFoot_Crouch;
     private readonly InputAction m_OnFoot_Phone;
+    private readonly InputAction m_OnFoot_Flashlight;
     /// <summary>
     /// Provides access to input actions defined in input action map "OnFoot".
     /// </summary>
@@ -555,6 +577,10 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "OnFoot/Phone".
         /// </summary>
         public InputAction @Phone => m_Wrapper.m_OnFoot_Phone;
+        /// <summary>
+        /// Provides access to the underlying input action "OnFoot/Flashlight".
+        /// </summary>
+        public InputAction @Flashlight => m_Wrapper.m_OnFoot_Flashlight;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -599,6 +625,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             @Phone.started += instance.OnPhone;
             @Phone.performed += instance.OnPhone;
             @Phone.canceled += instance.OnPhone;
+            @Flashlight.started += instance.OnFlashlight;
+            @Flashlight.performed += instance.OnFlashlight;
+            @Flashlight.canceled += instance.OnFlashlight;
         }
 
         /// <summary>
@@ -628,6 +657,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             @Phone.started -= instance.OnPhone;
             @Phone.performed -= instance.OnPhone;
             @Phone.canceled -= instance.OnPhone;
+            @Flashlight.started -= instance.OnFlashlight;
+            @Flashlight.performed -= instance.OnFlashlight;
+            @Flashlight.canceled -= instance.OnFlashlight;
         }
 
         /// <summary>
@@ -817,6 +849,13 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnPhone(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "Flashlight" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnFlashlight(InputAction.CallbackContext context);
     }
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "UI" which allows adding and removing callbacks.

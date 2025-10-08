@@ -57,6 +57,15 @@
                     "id": "e3dbdb67-5a25-4b82-b74b-59d6c95b7c68",
                     "expectedControlType": "",
                     "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Flashlight",
+                    "type": "Button",
+                    "id": "3875f4d3-5e9b-4e97-a643-b50356436dbe",
+                    "expectedControlType": "",
+                    "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
                 }
@@ -268,6 +277,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "Phone",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8cdef8c5-f000-4ded-a5ff-0c8cedaab75b",
+                    "path": "<Keyboard>/f",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Flashlight",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

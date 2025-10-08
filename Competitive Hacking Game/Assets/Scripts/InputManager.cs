@@ -17,6 +17,9 @@ public class InputManager : NetworkBehaviour
     private PlayerPhone phone;
     private PhoneTargetHandler phoneTarget;
 
+    private bool _rmbHeld;
+    private bool _screenToggle;
+
     void Awake()
     {
         // Initialize input system and references
@@ -53,8 +56,9 @@ public class InputManager : NetworkBehaviour
             ui.Pause.performed += OnPausePerformed; // <-- added
             ui.Enable();                             // <-- added
 
-            onFoot.Phone.started  += OnPhoneHoldStarted;
-            onFoot.Phone.canceled += OnPhoneHoldCanceled;
+            onFoot.Phone.performed += OnPhoneToggle;
+
+            onFoot.Flashlight.performed += OnFlashlightPerformed;
 
         }
     }
@@ -99,8 +103,9 @@ public class InputManager : NetworkBehaviour
             ui.Disable();
             //handItems.Disable();
 
-            onFoot.Phone.started -= OnPhoneHoldStarted;
-            onFoot.Phone.canceled -= OnPhoneHoldCanceled;
+            onFoot.Phone.performed -= OnPhoneToggle;
+
+            onFoot.Flashlight.performed -= OnFlashlightPerformed;
 
         }
     }
@@ -118,14 +123,24 @@ public class InputManager : NetworkBehaviour
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
             LobbyManager.Instance.StartGameAsHost(); // host-only
     }
-    private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
+    private void OnPhoneToggle(InputAction.CallbackContext ctx)
     {
-        phone?.SetHolding(true);
-        look?.SetPhoneAim(true);   // NEW: snap + rotate with camera while held
-    }
-    private void OnPhoneHoldCanceled(InputAction.CallbackContext ctx)
+        _screenToggle = !_screenToggle;
+
+        // Screen on/off (we reuse SetHolding(bool) as the "screen active" flag)
+        phone?.SetHolding(_screenToggle);
+
+        // Aim body while phone is up for either reason (screen || flashlight)
+        bool aiming = _screenToggle || (phone != null && phone.IsFlashlightOn);
+        look?.SetPhoneAim(aiming);
+    }  
+      
+    private void OnFlashlightPerformed(InputAction.CallbackContext ctx)
     {
-        phone?.SetHolding(false);
-        look?.SetPhoneAim(false);  // NEW: restore normal shoulder/look behavior
+        if (phone == null) return;
+        phone.ToggleFlashlight();
+
+        bool aiming = _screenToggle || phone.IsFlashlightOn;
+        look?.SetPhoneAim(aiming);
     }
 }
