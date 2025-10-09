@@ -9,6 +9,13 @@ A passion project developed in my free time. This online competitive hacking gam
 - **Lobby System**: Play with friends or other competitors using a robust lobby system built with Unity's Netcode for GameObjects.
 - **Work in Progress**: This project is a heavy work in progress, and new features and improvements are continuously being added.
 
+## Devlog Entry #2 Long time no see!
+
+It’s been a while since the last update. I’ve made my first Blender model for the final player design, added custom animations, implemented an immersive first-person POV, reworked the lobby system, and much more!
+
+### In-Game Screenshot 3
+![Ss3](https://i.ibb.co/qFn94wDd/image.png)
+
 ## Devlog Entry #1
 
 The development is still at an early stage, but here are some sneak peeks of the game so far:
