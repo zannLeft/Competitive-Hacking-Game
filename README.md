@@ -14,19 +14,19 @@ A passion project developed in my free time. This online competitive hacking gam
 It’s been a while since the last update. I’ve made my first Blender model for the final player design, added custom animations, implemented an immersive first-person POV, reworked the lobby system, and much more!
 
 ### In-Game Screenshot 3
-![Ss3](https://i.ibb.co/qFn94wDd/image.png)
+![Ss3](https://i.ibb.co/qFn94wDd/image.png?)
 
 ## Devlog Entry #1
 
 The development is still at an early stage, but here are some sneak peeks of the game so far:
 
 ### Main Menu
-![Menu](https://i.ibb.co/wsg5Ch4/Screenshot-2024-10-15-011026.png)
+![Menu](https://i.ibb.co/wsg5Ch4/Screenshot-2024-10-15-011026.png?3)
 
 ### In-Game Screenshot 1
-![Ss1](https://i.ibb.co/GnJCcJ7/Screenshot-2024-10-15-010557.png)
+![Ss1](https://i.ibb.co/GnJCcJ7/Screenshot-2024-10-15-010557.png?)
 
 ### In-Game Screenshot 2
-![Ss2](https://i.ibb.co/p3zW2db/Screenshot-2024-10-15-010927.png)
+![Ss2](https://i.ibb.co/p3zW2db/Screenshot-2024-10-15-010927.png?)
 
 Stay tuned for more updates as the game evolves!
