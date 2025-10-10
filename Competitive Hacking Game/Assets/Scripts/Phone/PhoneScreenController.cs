@@ -1,5 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
+using UnityEngine.Experimental.Rendering; // GraphicsFormat + SystemInfo support checks
 
 /// Controls the phone “screen” rendering.
 /// Locals render a Canvas -> Camera -> RenderTexture pipeline into a per-instance screen material.
@@ -53,15 +54,29 @@ public class PhoneScreenController : MonoBehaviour
             mats[idx] = _runtimeMat;
             screenMR.materials = mats;
 
-            // 2) Create a private RT and wire it up
-            _rt = new RenderTexture(rtWidth, rtHeight, 0, RenderTextureFormat.ARGB32)
+            // 2) Create a private RT with a valid depth-stencil format (fixes RenderGraph warning)
+            var colorGF = (QualitySettings.activeColorSpace == ColorSpace.Linear)
+                ? GraphicsFormat.R8G8B8A8_SRGB
+                : GraphicsFormat.R8G8B8A8_UNorm;
+
+            var desc = new RenderTextureDescriptor(rtWidth, rtHeight)
             {
-                useMipMap = useMipmaps,
-                autoGenerateMips = useMipmaps,
-                antiAliasing = 1,
+                graphicsFormat     = colorGF,
+                depthStencilFormat = GraphicsFormat.D32_SFloat_S8_UInt,  // <- MUST NOT be None in URP/RenderGraph
+                msaaSamples        = 1,
+                mipCount           = useMipmaps ? -1 : 1, // -1 lets Unity pick a full chain
+                useMipMap          = useMipmaps,
+                autoGenerateMips   = useMipmaps,
+                sRGB               = (QualitySettings.activeColorSpace == ColorSpace.Linear),
+                // URP will handle dynamic scaling if enabled in pipeline; keep RT simple here.
+            };
+
+            _rt = new RenderTexture(desc)
+            {
                 anisoLevel = 4,
                 name = _ownerPhone ? $"PhoneHUD_{_ownerPhone.OwnerClientId}" : "PhoneHUD"
             };
+            _rt.Create();
 
             if (uiCam) uiCam.targetTexture = _rt;
 

@@ -50,8 +50,9 @@ public class PhoneTargetHandler : NetworkBehaviour
         _initialized = false; // reseed smoothing after teleports/loads
     }
 
-    private void OnDestroy()
+    public override void OnDestroy()
     {
+        base.OnDestroy(); // keep NetworkBehaviour cleanup
         SceneManager.activeSceneChanged -= OnActiveSceneChanged;
 
         if (IsOwner && phoneTarget != null)

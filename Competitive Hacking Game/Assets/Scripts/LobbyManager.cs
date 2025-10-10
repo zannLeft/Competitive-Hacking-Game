@@ -15,7 +15,6 @@ using Unity.Services.Relay.Models;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using System.Threading.Tasks;
 
 public class LobbyManager : MonoBehaviour
 {
@@ -38,13 +37,9 @@ public class LobbyManager : MonoBehaviour
     private bool callbacksRegistered = false;
 
     [Header("Shirt materials (assign in inspector)")]
-    // list of predefined shirt materials. assign a material per color in the inspector.
     [SerializeField] public List<Material> shirtMaterials = new List<Material>();
-
-    // special black material for the bad guy. assign in inspector.
     [SerializeField] public Material blackShirtMaterial;
 
-    // internal set of used indices
     private HashSet<int> usedShirtIndices = new HashSet<int>();
 
     [SerializeField] private string lobbySceneName = "LobbyScene";
@@ -66,27 +61,28 @@ public class LobbyManager : MonoBehaviour
             // Lobby UI
             if (lobbyUI == null)
             {
-                var ui = FindObjectOfType<LobbyUI>(true);
+                var ui = FindFirstObjectByType<LobbyUI>(FindObjectsInactive.Include);
                 if (ui != null) lobbyUI = ui.gameObject;
             }
 
             // Pregame UI
             if (pregameUI == null)
             {
-                pregameUI = FindObjectOfType<PregameUI>(true);
+                pregameUI = FindFirstObjectByType<PregameUI>(FindObjectsInactive.Include);
             }
 
             // Lobby Create UI
             if (lobbyCreateUI == null)
             {
-                lobbyCreateUI = FindObjectOfType<LobbyCreateUI>(true);
+                lobbyCreateUI = FindFirstObjectByType<LobbyCreateUI>(FindObjectsInactive.Include);
             }
 
             // Lobby Camera
             if (cam == null)
             {
                 Camera camObj = null;
-                foreach (var c in FindObjectsOfType<Camera>(true))
+                var cams = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                foreach (var c in cams)
                 {
                     if (c.CompareTag("LobbyCamera"))
                     {
@@ -535,18 +531,16 @@ public class LobbyManager : MonoBehaviour
         catch (LobbyServiceException e) { Debug.Log(e); }
     }
 
-    //public void ClearJoinedLobby() => joinedLobby = null;
-
     // Call this after (re)loading LobbyScene to rebind scene refs and show the selection screen.
     public void ShowLobbyScreen()
     {
         // Rebind scene-local refs if they've been destroyed during scene changes
         if (lobbyUI == null)
         {
-            var ui = FindObjectOfType<LobbyUI>(true);
+            var ui = FindFirstObjectByType<LobbyUI>(FindObjectsInactive.Include);
             if (ui != null) lobbyUI = ui.gameObject;
         }
-        if (pregameUI == null) pregameUI = FindObjectOfType<PregameUI>(true);
+        if (pregameUI == null) pregameUI = FindFirstObjectByType<PregameUI>(FindObjectsInactive.Include);
 
         if (cam == null)
         {
@@ -638,11 +632,8 @@ public class LobbyManager : MonoBehaviour
                 joinedLobby = await LobbyService.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
                 {
                     IsLocked = false, // UNLOCK lobby (allows join by code)
-                    // We intentionally omit IsPrivate, so it stays as whatever it was before (true or false).
                     Data = new Dictionary<string, DataObject>
                     {
-                        // Set state back to "waiting" so the lobby shows up in lists/quick-join if it was public, 
-                        // or just to indicate to players that the match is over.
                         { "state", new DataObject(DataObject.VisibilityOptions.Public, "waiting", DataObject.IndexOptions.S1) } 
                     }
                 });
@@ -661,7 +652,7 @@ public class LobbyManager : MonoBehaviour
 
         Debug.Log("ok after scene load " + joinedLobby.Id);
 
-        // Unpause the local player and reset cursor... (rest of your logic)
+        // Unpause the local player and reset cursor...
         var playerObj = NetworkManager.Singleton.LocalClient?.PlayerObject;
         if (playerObj != null)
         {

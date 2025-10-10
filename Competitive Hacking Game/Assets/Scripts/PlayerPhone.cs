@@ -1,5 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [DisallowMultipleComponent]
 public class PlayerPhone : NetworkBehaviour
@@ -45,6 +46,11 @@ public class PlayerPhone : NetworkBehaviour
     private readonly NetworkVariable<bool> _flashOn = new(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
     public bool IsFlashlightOn => _flashOn.Value;
+
+    [Header("Lens Flare (URP)")]
+    [SerializeField] private LensFlareComponentSRP flareSRP; // optional drag-in
+    private LensFlareComponentSRP _flare;
+
 
     // --- internals ---
     private int _maskHash, _ikHash;
@@ -281,11 +287,18 @@ public class PlayerPhone : NetworkBehaviour
     private void UpdateFlashlightActive()
     {
         if (!_phoneVisible) return; // phone must be up to use the light
-        EnsureFlashRef();
-        if (_flash != null)
-            _flash.enabled = _flashOn.Value;
-    }
 
+        EnsureFlashRef();
+        EnsureFlareRef();
+
+        bool enabledNow = _flashOn.Value && _flash != null;
+
+        if (_flash != null)
+            _flash.enabled = enabledNow;
+
+        if (_flare != null)
+            _flare.enabled = enabledNow; // flare follows the light
+    }
     private void ShowPhone()
     {
         _phoneVisible = true;
@@ -319,8 +332,8 @@ public class PlayerPhone : NetworkBehaviour
     {
         _phoneVisible = false;
 
-        // Safety: ensure light is off when phone goes down
         if (_flash != null) _flash.enabled = false;
+        if (_flare != null) _flare.enabled = false;
 
         if (_spawnedPhone != null)
             _spawnedPhone.SetActive(false);
@@ -350,5 +363,18 @@ public class PlayerPhone : NetworkBehaviour
             rot = transform.rotation * Quaternion.Euler(remoteRotOffsetEuler);
             pos = transform.position + transform.forward * 0.4f + Vector3.up * 1.2f;
         }
+    }
+
+    private void EnsureFlareRef()
+    {
+        if (_flare != null || _spawnedPhone == null) return;
+
+        // Prefer under the flashlight node (so it follows the light)
+        var t = _spawnedPhone.transform.Find(flashlightNodeName);
+        if (t != null) _flare = t.GetComponentInChildren<LensFlareComponentSRP>(true);
+
+        // Fallbacks
+        if (_flare == null && flareSRP != null) _flare = flareSRP;
+        if (_flare == null) _flare = _spawnedPhone.GetComponentInChildren<LensFlareComponentSRP>(true);
     }
 }
