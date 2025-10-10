@@ -29,9 +29,9 @@ public class PlayerPhone : NetworkBehaviour
 
     [Header("IK weight by locomotion (caps)")]
     [Range(0f,1f)] [SerializeField] private float idleIKMax   = 1.00f;
-    [Range(0f,1f)] [SerializeField] private float walkIKMax   = 0.90f;
-    [Range(0f,1f)] [SerializeField] private float sprintIKMax = 0.75f;
-    [Range(0f,1f)] [SerializeField] private float slideIKMax  = 0.70f;
+    [Range(0f,1f)] [SerializeField] private float walkIKMax   = 0.10f;
+    [Range(0f,1f)] [SerializeField] private float sprintIKMax = 0.01f;
+    [Range(0f,1f)] [SerializeField] private float slideIKMax  = 0.01f;
 
     // (Optional) If you want a continuous mapping later, uncomment these and the block in ResolveCurrentIkCap()
     //[Header("Optional: speed-based IK cap")]
@@ -387,7 +387,6 @@ public class PlayerPhone : NetworkBehaviour
         }
     }
 
-    // ---- NEW: locomotion-aware IK cap ----
     private float ResolveCurrentIkCap()
     {
         // If we don't have motor info, default to idle cap
@@ -398,16 +397,13 @@ public class PlayerPhone : NetworkBehaviour
 
         // Walking if there is horizontal input
         bool isMoving = motor.inputDirection.sqrMagnitude > 0.0001f;
-        return isMoving ? walkIKMax : idleIKMax;
 
-        // --- Optional continuous mapping (uncomment header fields & this block) ---
-        // if (useSpeedCurve)
-        // {
-        //     // If you feed real horizontal speed (m/s), evaluate curve:
-        //     // float speed = new Vector3(controller.velocity.x, 0f, controller.velocity.z).magnitude;
-        //     // return Mathf.Clamp01(ikCapBySpeed.Evaluate(speed));
-        // }
+        // Walk cap depends on RMB: 0.5 while holding RMB, 0.1 otherwise
+        float walkCap = _rmbHeld ? 0.5f : 0.1f;
+
+        return isMoving ? walkCap : idleIKMax;
     }
+
 
     private void EnsureFlareRef()
     {

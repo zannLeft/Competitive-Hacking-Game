@@ -10,7 +10,6 @@ public class PlayerLook : NetworkBehaviour
     [Tooltip("Parent pivot of the main camera (your empty 'Camera' object in the middle of the player).")]
     public Transform cameraRoot;
 
-    // Camera local positions by state
     private Vector3 standingPosition;
     private Vector3 crouchingPosition;
     private Vector3 slidingPosition;
@@ -20,7 +19,6 @@ public class PlayerLook : NetworkBehaviour
     public float xSensitivity = 30f;
     public float ySensitivity = 30f;
 
-    // Pitch
     private float xRotation = 0f;
 
     [Header("FOV")]
@@ -38,16 +36,19 @@ public class PlayerLook : NetworkBehaviour
     public bool  instantCatchUpOnMove = true;
     public float catchUpOnMoveSpeed   = 1080f;
 
-    // Internal yaw state (camera pivot offset)
-    private float yawOffset = 0f;              // local yaw on cameraRoot (degrees)
+    private float yawOffset = 0f;
     private bool  catchingUpStationary = false;
     private bool  wasMoving = false;
 
     public float Pitch => xRotation;
     public float YawOffset => yawOffset;
 
-    private bool phoneAimActive = false;
+    // Phone/aim flags
+    private bool phoneAimActive = false; // camera behavior (RMB or flashlight)
     public  bool IsPhoneAiming => phoneAimActive;
+
+    private bool rmbHeld = false;        // RMB-only gate for sprint
+    public  bool IsRmbHeld => rmbHeld;
 
     public Quaternion WorldLookRotation =>
         transform.rotation * Quaternion.Euler(0f, yawOffset, 0f) * Quaternion.Euler(Pitch, 0f, 0f);
@@ -74,7 +75,7 @@ public class PlayerLook : NetworkBehaviour
         cam.fieldOfView = defaultFOV;
 
         if (cameraRoot == null && cam != null)
-            cameraRoot = cam.transform.parent; // auto-fill
+            cameraRoot = cam.transform.parent;
     }
 
     void Update()
@@ -86,13 +87,16 @@ public class PlayerLook : NetworkBehaviour
         if (motor.sliding && xRotation > 0f)
             xRotation = Mathf.Lerp(xRotation, 0f, dt * 3.5f);
 
-        Vector3 targetPos = motor.sprinting ? sprintingPosition :
-                            motor.sliding   ? slidingPosition   :
-                            motor.crouching ? crouchingPosition : standingPosition;
+        bool actuallySprinting = motor != null && motor.IsActuallySprinting;
+
+        Vector3 targetPos =
+            actuallySprinting ? sprintingPosition :
+            motor.sliding     ? slidingPosition   :
+            motor.crouching   ? crouchingPosition : standingPosition;
 
         cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetPos, dt * 7f);
 
-        bool fastState = (motor.sprinting && motor.inputDirection.y > 0) || motor.sliding;
+        bool fastState = actuallySprinting || motor.sliding;
         float targetFOV = fastState ? sprintFOV : defaultFOV;
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovTransitionSpeed);
 
@@ -108,7 +112,7 @@ public class PlayerLook : NetworkBehaviour
         float mouseX = input.x;
         float mouseY = input.y;
 
-        // ---------- PITCH ----------
+        // PITCH
         if (!(motor.sliding && xRotation > 0f && mouseY <= 0f))
         {
             xRotation -= mouseY * dt * ySensitivity;
@@ -116,7 +120,7 @@ public class PlayerLook : NetworkBehaviour
         }
         cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        // ---------- YAW ----------
+        // YAW
         bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
         bool shoulderMode =
             !hasMoveInput && !motor.sliding && !motor.sprinting &&
@@ -126,6 +130,7 @@ public class PlayerLook : NetworkBehaviour
 
         if (phoneAimActive)
         {
+            // While aiming (RMB or flashlight), rotate body directly with camera yaw
             transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
 
             if (Mathf.Abs(yawOffset) > 0.01f)
@@ -198,5 +203,9 @@ public class PlayerLook : NetworkBehaviour
 
     public Quaternion MoveSpaceRotation => transform.rotation * Quaternion.Euler(0f, yawOffset, 0f);
 
+    // Camera/aim mode (true if RMB OR flashlight)
     public void SetPhoneAim(bool aiming) => phoneAimActive = aiming;
+
+    // RMB-only tracking for sprint gating
+    public void SetAimHeld(bool held) => rmbHeld = held;
 }

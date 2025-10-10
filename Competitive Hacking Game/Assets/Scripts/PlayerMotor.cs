@@ -7,7 +7,7 @@ public class PlayerMotor : NetworkBehaviour
 {
     private CharacterController controller;
     private Animator animator;
-    private PlayerLook look;  
+    private PlayerLook look;
 
     private Vector3 playerVelocity;
     private Vector3 moveDirection = Vector3.zero;
@@ -28,16 +28,13 @@ public class PlayerMotor : NetworkBehaviour
     [SerializeField] private float sprintSpeed = 7.5f;
     [SerializeField] private float jumpHeight = 2f;
 
-    // Updated: change stand height to 1.685
-    // crouchHeight scaled proportionally from previous ratio (~0.475543...)
-    [SerializeField] private float crouchHeight = 0.80129076f; // ~1.685 * 0.47554348
+    [SerializeField] private float crouchHeight = 0.80129076f;
     [SerializeField] private float standHeight = 1.685f;
     [SerializeField] private float slideSpeed = 8f;
-    [SerializeField] private float slideSpeedDecay = 6f;  // How fast the sliding speed decreases
-    [SerializeField] private float minSlideSpeed = 2f;    // Minimum sliding speed
-    
-    // stand center unchanged. crouchCenterY will be recomputed in Start().
-    [SerializeField] private float crouchCenterY = 0.47814538f; // initial guess
+    [SerializeField] private float slideSpeedDecay = 6f;
+    [SerializeField] private float minSlideSpeed = 2f;
+
+    [SerializeField] private float crouchCenterY = 0.47814538f;
     [SerializeField] private float standCenterY = 0.92f;
 
     private float currentHeight;
@@ -51,13 +48,19 @@ public class PlayerMotor : NetworkBehaviour
     private float fallSpeed = 1.5f;
     private const float slideTimerMax = 1.3f;
     private const float crouchTransitionSpeed = 20.0f;
-    public Vector2 inputDirection;
-
+    public  Vector2 inputDirection;
 
     private int xVelHash;
     private int zVelHash;
 
     private bool useMirror;
+
+    // Expose sprint key state so InputManager can check it on RMB release
+    public bool IsSprintHeld => sprintButtonHeld;
+
+    // "Actually sprinting" used by camera/FOV
+    public bool IsActuallySprinting =>
+        sprinting && isGrounded && !sliding && inputDirection.y > 0.01f && currentSpeed > 0.1f;
 
     void Start()
     {
@@ -65,7 +68,6 @@ public class PlayerMotor : NetworkBehaviour
         animator = GetComponent<Animator>();
         look = GetComponent<PlayerLook>();
 
-        // Ensure crouchCenterY is consistent if someone adjusted stand/crouch heights in inspector
         crouchCenterY = standCenterY - (standHeight - crouchHeight) / 2f;
 
         ResetCrouchAndSlide();
@@ -78,26 +80,22 @@ public class PlayerMotor : NetworkBehaviour
     {
         if (!IsOwner) return;
 
+        // Gate sprint only while RMB is down; do not change the 'held' flag.
+        if (look != null && look.IsRmbHeld && sprinting)
+            sprinting = false;
+
         HandleSliding();
         HandleJumping();
         UpdateStandStatus();
         UpdateGroundStatus();
         UpdateCharacterDimensions();
-        //Debug.Log(sprinting + ", " + crouching + ", " + sliding + ", " + currentSpeed);
-        //Debug.Log(currentSpeedVertical);
-        
     }
 
     private void ResetCrouchAndSlide()
     {
-        // initialize controller to stand dimensions based on the new model
         currentHeight = standHeight;
         controller.height = currentHeight;
-
-        // set controller center.y to the stand center for the new model
-        // preserve x and z of whatever the controller center currently is
         controller.center = new Vector3(controller.center.x, standCenterY, controller.center.z);
-
         slideTimer = slideTimerMax;
     }
 
@@ -110,7 +108,6 @@ public class PlayerMotor : NetworkBehaviour
         if (currentSpeed < 2f) slideTimer = 0f;
         if (currentSpeedVertical > 1f) slideTimer = 0f;
 
-        // Gradually reduce the sliding speed over time
         slideSpeed = Mathf.Max(slideSpeed - slideSpeedDecay * Time.deltaTime, minSlideSpeed);
 
         if (slideTimer <= 0f)
@@ -130,7 +127,6 @@ public class PlayerMotor : NetworkBehaviour
         }
     }
 
-
     private void UpdateStandStatus()
     {
         canStand = CanStand();
@@ -145,13 +141,14 @@ public class PlayerMotor : NetworkBehaviour
         couldStand = canStand;
     }
 
-    private void HandleJumping() {
+    private void HandleJumping()
+    {
         if (jumpButtonHeld && isGrounded && CanStand())
-        {   
+        {
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
             animator.SetTrigger("Jump");
             animator.SetBool("useMirror", useMirror);
-            
+
             if (sliding)
             {
                 slideTimer = 0;
@@ -164,7 +161,7 @@ public class PlayerMotor : NetworkBehaviour
     {
         isGrounded = controller.isGrounded;
         animator.SetBool("IsGrounded", isGrounded);
-        
+
         if (isGrounded && !wasGrounded)
         {
             useMirror = !useMirror;
@@ -191,28 +188,29 @@ public class PlayerMotor : NetworkBehaviour
     #region Movement
     public void ProcessMove(Vector2 input)
     {
+        // Block movement when crouching AND RMB is held (but still allow rotation/gravity)
+        bool movementBlocked = (look != null && look.IsRmbHeld && crouching && !sliding);
 
-        inputDirection = input;
-        currentSpeed = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        // Feed what PlayerLook considers "moving" — when blocked, report no move input
+        inputDirection = movementBlocked ? Vector2.zero : input;
+
+        currentSpeed         = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
         currentSpeedVertical = controller.velocity.y;
 
+        // Gravity
         playerVelocity.y += Physics.gravity.y * Time.deltaTime * fallSpeed;
 
-        if (isGrounded && !sliding)
-        {
-            smoothSpeed = 9f;
-        }
-        else if (sliding)
-        {
-            smoothSpeed = 0.5f;
-        }
-        else
-        {
-            smoothSpeed = 1f;
-        }
+        // Movement smoothing mode
+        if (isGrounded && !sliding)       smoothSpeed = 9f;
+        else if (sliding)                 smoothSpeed = 0.5f;
+        else                               smoothSpeed = 1f;
 
         Quaternion moveSpace = (look != null) ? look.MoveSpaceRotation : transform.rotation;
-        Vector3 targetDirection = moveSpace * new Vector3(input.x, 0f, input.y);
+
+        // If blocked, target no horizontal direction
+        Vector3 targetDirection = movementBlocked
+            ? Vector3.zero
+            : moveSpace * new Vector3(input.x, 0f, input.y);
 
         moveDirection = Vector3.Lerp(moveDirection, targetDirection, Time.deltaTime * smoothSpeed);
 
@@ -220,16 +218,22 @@ public class PlayerMotor : NetworkBehaviour
         {
             if (sliding)
             {
-                targetSpeed = slideSpeed;  // Use the decaying slide speed
+                targetSpeed   = slideSpeed;
+            }
+            else if (movementBlocked)
+            {
+                // Snap quickly to a stop when blocked
+                targetSpeed   = 0f;
+                speedLerpTime = 20f;
             }
             else if (input.y > 0 && sprinting)
             {
-                targetSpeed = sprintSpeed;
+                targetSpeed   = sprintSpeed;
                 speedLerpTime = 6f;
             }
             else if (input.x != 0 || input.y != 0)
             {
-                targetSpeed = 2f;
+                targetSpeed   = 2f;
                 speedLerpTime = 8f;
             }
             else
@@ -240,74 +244,50 @@ public class PlayerMotor : NetworkBehaviour
 
         speed = Mathf.Lerp(speed, targetSpeed, Time.deltaTime * speedLerpTime);
 
-        Vector3 move = moveDirection * speed + playerVelocity;
+        // Apply move: if blocked, zero horizontal translation
+        Vector3 move = movementBlocked
+            ? new Vector3(0f, playerVelocity.y, 0f)
+            : moveDirection * speed + playerVelocity;
 
-        // Debug.Log("Move direction: " + moveDirection);
-        // Debug.Log("speed: " + speed);
-        // Debug.Log("move: " + move);
         controller.Move(move * Time.deltaTime);
 
-        if (isGrounded)
-        {
-            if (playerVelocity.y < 0)
-            {
-                playerVelocity.y = -2f;
-            }
-        }
+        if (isGrounded && playerVelocity.y < 0)
+            playerVelocity.y = -2f;
 
-        // compute localVelocity (keep this for actual movement)
+        // Animator velocities — zero them while blocked so feet stay planted
         Vector3 localVelocity = transform.InverseTransformDirection(controller.velocity);
+        float animX = movementBlocked ? 0f : localVelocity.x;
+        float animZ = movementBlocked ? 0f : localVelocity.z;
 
-        // use the smoothed localVelocity but scale it so the largest component equals the current speed
-        float animX = localVelocity.x;
-        float animZ = localVelocity.z;
-
-        // current horizontal speed (already computed earlier in ProcessMove as 'currentSpeed')
-        float desiredMax = Mathf.Max(currentSpeed, 0.001f); // avoid div by zero
-
-        float maxComp = Mathf.Max(Mathf.Abs(animX), Mathf.Abs(animZ));
-
-        // only scale when the player is actually providing input / moving
-        if (maxComp > 0.001f)
+        float desiredMax = Mathf.Max(currentSpeed, 0.001f);
+        float maxComp    = Mathf.Max(Mathf.Abs(animX), Mathf.Abs(animZ));
+        if (!movementBlocked && maxComp > 0.001f)
         {
             float scale = desiredMax / maxComp;
             animX *= scale;
             animZ *= scale;
         }
 
-        // set animator floats with slight damping so transitions remain smooth
-        float dampTime = 0.08f; // tweak between 0.02 - 0.15 for snappier or smoother
-
-        //Debug.Log(localVelocity.x + ", " + localVelocity.z);
-
+        float dampTime = 0.08f;
         animator.SetFloat(xVelHash, animX, dampTime, Time.deltaTime);
         animator.SetFloat(zVelHash, animZ, dampTime, Time.deltaTime);
-
     }
 
     #endregion
 
     private bool CanStand()
     {
-        // Build capsule endpoints for the standing pose (using standHeight and standCenterY)
-        // This accounts for controllers whose center is not at Y=0
         Vector3 centerWorld = transform.position + new Vector3(controller.center.x, standCenterY, controller.center.z);
         float halfHeight = standHeight / 2f;
         float radius = controller.radius;
 
-        // the two sphere centers for the capsule
         Vector3 capsuleBottom = centerWorld + Vector3.up * (-halfHeight + radius);
-        Vector3 capsuleTop = centerWorld + Vector3.up * (halfHeight - radius);
+        Vector3 capsuleTop    = centerWorld + Vector3.up * ( halfHeight - radius);
 
-        // Check whether the capsule for standing would overlap anything on the Default layer
         bool canStandLocal = !Physics.CheckCapsule(capsuleBottom, capsuleTop, radius, LayerMask.GetMask("Default"));
-
-        // Debug visual: draw the capsule axis
         Debug.DrawLine(capsuleBottom, capsuleTop, canStandLocal ? Color.green : Color.red, 0.1f);
-
         return canStandLocal;
     }
-
 
     public void Jump(bool value)
     {
@@ -346,6 +326,7 @@ public class PlayerMotor : NetworkBehaviour
         }
     }
 
+
     public void Land()
     {
         if (sprintButtonHeld && !crouching)
@@ -363,7 +344,6 @@ public class PlayerMotor : NetworkBehaviour
                 animator.SetBool("Crouching", false);
                 sprinting = true;
             }
-            
         }
         else
         {
