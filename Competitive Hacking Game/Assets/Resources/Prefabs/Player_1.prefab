@@ -1473,6 +1473,7 @@ MonoBehaviour:
   targetHandler: {fileID: 5216577995390182814}
   phoneAttachR: {fileID: 5162219321685998565}
   phonePrefab: {fileID: 6671164735964093091, guid: a18efead22d4aeb489486b7dcfd70f20, type: 3}
+  motor: {fileID: 0}
   phoneMaskParam: PhoneMask
   phoneIKParam: PhoneIK
   phoneLayerIndex: 1
@@ -1482,6 +1483,10 @@ MonoBehaviour:
   ikEaseInTime: 0.5
   ikEaseOutTime: 0.1
   ikMaxSpeed: 0
+  idleIKMax: 1
+  walkIKMax: 0.5
+  sprintIKMax: 0.01
+  slideIKMax: 0.01
   approxDistance: 0.35
   approxHorizontal: 0.06
   approxVertical: -0.02

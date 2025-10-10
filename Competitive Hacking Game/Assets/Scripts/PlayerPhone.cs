@@ -10,32 +10,44 @@ public class PlayerPhone : NetworkBehaviour
     [SerializeField] private PhoneTargetHandler targetHandler;     // Owner-only (optional on remotes)
     [SerializeField] private Transform phoneAttachR;               // "PhoneAttach_R" on right hand
     [SerializeField] private GameObject phonePrefab;               // Optional: if no child exists under PhoneAttach_R
+    [SerializeField] private PlayerMotor motor;                    // NEW: to read sprint/walk/sliding
 
     [Header("Animator Params & Layer")]
     [SerializeField] private string phoneMaskParam = "PhoneMask";  // Animator float (replicated via NetworkAnimator)
-    [SerializeField] private string phoneIKParam = "PhoneIK";    // Animator float (replicated via NetworkAnimator)
-    [SerializeField] private int phoneLayerIndex = 1;           // Right-arm mask layer index
+    [SerializeField] private string phoneIKParam   = "PhoneIK";    // Animator float (replicated via NetworkAnimator)
+    [SerializeField] private int    phoneLayerIndex = 1;           // Right-arm mask layer index
 
     [Header("Easing (Mask Layer Weight)")]
-    [SerializeField] private float maskEaseInTime = 0.12f;
+    [SerializeField] private float maskEaseInTime  = 0.12f;
     [SerializeField] private float maskEaseOutTime = 0.12f;
-    [SerializeField] private float maskMaxSpeed = 0f;
+    [SerializeField] private float maskMaxSpeed    = 0f;
 
     [Header("Easing (IK Weight)")]
-    [SerializeField] private float ikEaseInTime = 0.10f;
+    [SerializeField] private float ikEaseInTime  = 0.10f;
     [SerializeField] private float ikEaseOutTime = 0.10f;
-    [SerializeField] private float ikMaxSpeed = 0f;
+    [SerializeField] private float ikMaxSpeed    = 0f;
+
+    [Header("IK weight by locomotion (caps)")]
+    [Range(0f,1f)] [SerializeField] private float idleIKMax   = 1.00f;
+    [Range(0f,1f)] [SerializeField] private float walkIKMax   = 0.90f;
+    [Range(0f,1f)] [SerializeField] private float sprintIKMax = 0.75f;
+    [Range(0f,1f)] [SerializeField] private float slideIKMax  = 0.70f;
+
+    // (Optional) If you want a continuous mapping later, uncomment these and the block in ResolveCurrentIkCap()
+    //[Header("Optional: speed-based IK cap")]
+    //[SerializeField] private bool  useSpeedCurve = false;
+    //[SerializeField] private AnimationCurve ikCapBySpeed = AnimationCurve.Linear(0, 1f, 7.5f, 0.75f); // speed (m/s) → cap
 
     [Header("Remote Approx Target (non-owner)")]
-    [SerializeField] private float approxDistance = 0.45f;  // forward from head
-    [SerializeField] private float approxHorizontal = 0.06f;  // right from head
-    [SerializeField] private float approxVertical = -0.02f; // up from head (negative = down)
+    [SerializeField] private float approxDistance = 0.45f;     // forward from head
+    [SerializeField] private float approxHorizontal = 0.06f;   // right from head
+    [SerializeField] private float approxVertical = -0.02f;    // up from head (negative = down)
     [SerializeField] private Vector3 remoteRotOffsetEuler = new Vector3(0f, 90f, 0f);
 
     // BAKED values (restored)
-    private static readonly Vector3 kPhoneLocalPosition = new Vector3(-0.03f, 0f, 0.01f);
-    private static readonly Vector3 kPhoneLocalEuler = new Vector3(20f, 0f, 90f);
-    private static readonly Vector3 kIKHandRotOffsetEuler = new Vector3(0f, 90f, -90f); // ← original
+    private static readonly Vector3 kPhoneLocalPosition     = new Vector3(-0.03f, 0f, 0.01f);
+    private static readonly Vector3 kPhoneLocalEuler        = new Vector3(20f, 0f, 90f);
+    private static readonly Vector3 kIKHandRotOffsetEuler   = new Vector3(0f, 90f, -90f); // ← original
 
     [Header("Optional: Elbow Hint")]
     [SerializeField] private Transform rightElbowHint;
@@ -52,10 +64,11 @@ public class PlayerPhone : NetworkBehaviour
     private LensFlareComponentSRP _flare;
 
 
+
     // --- internals ---
     private int _maskHash, _ikHash;
     private bool _rmbHeld;                 // set by InputManager (owner only)
-    private float _targetBlend;            // 0..1 derived from (_rmbHeld || _flashOn)
+    private float _targetBlend;            // 0..1 → for MASK only (not IK)
     private float _maskWeight, _ikWeight;  // smoothed outputs
     private float _maskVel, _ikVel;        // SmoothDamp velocities
     private bool _phoneVisible;
@@ -72,6 +85,7 @@ public class PlayerPhone : NetworkBehaviour
     {
         animator = GetComponent<Animator>();
         targetHandler = GetComponent<PhoneTargetHandler>();
+        motor = GetComponent<PlayerMotor>();
     }
 
     public override void OnNetworkSpawn()
@@ -81,6 +95,8 @@ public class PlayerPhone : NetworkBehaviour
             animator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>(true);
         if (targetHandler == null)
             targetHandler = GetComponent<PhoneTargetHandler>();
+        if (motor == null)
+            motor = GetComponent<PlayerMotor>();
 
         // Bones
         if (animator != null && animator.isHuman && animator.avatar)
@@ -88,7 +104,7 @@ public class PlayerPhone : NetworkBehaviour
 
         // Hashes
         _maskHash = Animator.StringToHash(phoneMaskParam);
-        _ikHash = Animator.StringToHash(phoneIKParam);
+        _ikHash   = Animator.StringToHash(phoneIKParam);
 
         // Auto-find PhoneAttach_R if missing
         if (phoneAttachR == null && animator != null && animator.isHuman && animator.avatar)
@@ -127,52 +143,52 @@ public class PlayerPhone : NetworkBehaviour
     {
         float dt = Time.deltaTime;
 
-        // 1) Owner decides if phone should be up
+        // 1) Owner decides if phone should be up (drives MASK only)
         if (IsOwner)
         {
             // Phone is up if either RMB is held OR flashlight is on
             _targetBlend = (_rmbHeld || _flashOn.Value) ? 1f : 0f;
 
-            // Easing for mask and IK (both directions)
+            // Easing for MASK (both directions)
             float maskSmooth = (_targetBlend > _maskWeight ? Mathf.Max(0.0001f, maskEaseInTime)
                                                            : Mathf.Max(0.0001f, maskEaseOutTime));
-            float ikSmooth = (_targetBlend > _ikWeight ? Mathf.Max(0.0001f, ikEaseInTime)
-                                                           : Mathf.Max(0.0001f, ikEaseOutTime));
 
             _maskWeight = Mathf.SmoothDamp(
                 _maskWeight, _targetBlend, ref _maskVel, maskSmooth,
                 maskMaxSpeed <= 0f ? float.PositiveInfinity : maskMaxSpeed, dt);
 
-            _ikWeight = Mathf.SmoothDamp(
-                _ikWeight, _targetBlend, ref _ikVel, ikSmooth,
-                ikMaxSpeed <= 0f ? float.PositiveInfinity : ikMaxSpeed, dt);
-
-            // Snap to exact 0/1 near ends
-            if (_targetBlend <= 0f)
-            {
-                if (_maskWeight < SnapEps) { _maskWeight = 0f; _maskVel = 0f; }
-                if (_ikWeight < SnapEps) { _ikWeight = 0f; _ikVel = 0f; }
-            }
-            else if (_targetBlend >= 1f)
-            {
-                if (1f - _maskWeight < SnapEps) { _maskWeight = 1f; _maskVel = 0f; }
-                if (1f - _ikWeight < SnapEps) { _ikWeight = 1f; _ikVel = 0f; }
-            }
-
+            // Clamp + snap MASK ends
             _maskWeight = Mathf.Clamp01(_maskWeight);
-            _ikWeight = Mathf.Clamp01(_ikWeight);
+            if (_targetBlend <= 0f && _maskWeight < SnapEps) { _maskWeight = 0f; _maskVel = 0f; }
+            else if (_targetBlend >= 1f && (1f - _maskWeight) < SnapEps) { _maskWeight = 1f; _maskVel = 0f; }
 
             animator.SetFloat(_maskHash, _maskWeight);
+
+            // 2) IK weight aims for a locomotion-dependent cap while phone is up
+            float ikTarget = (_rmbHeld || _flashOn.Value) ? ResolveCurrentIkCap() : 0f;
+
+            float ikSmooth = (ikTarget > _ikWeight ? Mathf.Max(0.0001f, ikEaseInTime)
+                                                   : Mathf.Max(0.0001f, ikEaseOutTime));
+
+            _ikWeight = Mathf.SmoothDamp(
+                _ikWeight, ikTarget, ref _ikVel, ikSmooth,
+                ikMaxSpeed <= 0f ? float.PositiveInfinity : ikMaxSpeed, dt);
+
+            _ikWeight = Mathf.Clamp01(_ikWeight);
+
+            // Snap when we’re very close to target to avoid micro-jitter
+            if (Mathf.Abs(_ikWeight - ikTarget) < SnapEps) { _ikWeight = ikTarget; _ikVel = 0f; }
+
             animator.SetFloat(_ikHash, _ikWeight);
         }
         else
         {
             // Remotes read what the owner wrote via NetworkAnimator
             _maskWeight = animator.GetFloat(_maskHash);
-            _ikWeight = animator.GetFloat(_ikHash);
+            _ikWeight   = animator.GetFloat(_ikHash);
         }
 
-        // 2) Drive right-arm layer weight
+        // 3) Drive right-arm layer weight from MASK (unchanged)
         if (phoneLayerIndex >= 0 && phoneLayerIndex < animator.layerCount)
         {
             if (!Mathf.Approximately(_lastLayerWeight, _maskWeight))
@@ -182,7 +198,7 @@ public class PlayerPhone : NetworkBehaviour
             }
         }
 
-        // 3) Activate/deactivate PhoneTarget based on CURRENT weights (not raw input)
+        // 4) Activate/deactivate PhoneTarget based on CURRENT weights (not raw input)
         if (IsOwner && targetHandler != null)
         {
             bool shouldBeActive = (_maskWeight > 0f) || (_ikWeight > 0f);
@@ -193,14 +209,14 @@ public class PlayerPhone : NetworkBehaviour
             }
         }
 
-        // 4) Phone prop visibility: show when IK > 0, hide when <= 0
+        // 5) Phone prop visibility: show when IK > 0, hide when <= 0
         if (!_phoneVisible && _ikWeight > 0f) ShowPhone();
         else if (_phoneVisible && _ikWeight <= 0f) HidePhone();
 
-        // 5) Keep applying local offsets so you can live-tweak in play mode
+        // 6) Keep applying local offsets so you can live-tweak in play mode
         ApplyPhoneOffsets();
 
-        // 6) Screen ON only while RMB is held (owner-only visual)
+        // 7) Screen ON only while RMB is held (owner-only visual)
         if (_spawnedPhone != null && IsOwner)
         {
             if (_screenController == null)
@@ -208,7 +224,7 @@ public class PlayerPhone : NetworkBehaviour
             _screenController?.SetScreenOn(_rmbHeld);
         }
 
-        // 7) Flashlight component reflect network state (on only while phone is up)
+        // 8) Flashlight component reflect network state (on only while phone is up)
         UpdateFlashlightActive();
     }
 
@@ -216,15 +232,18 @@ public class PlayerPhone : NetworkBehaviour
     {
         if (animator == null) return;
 
-        float w = _ikWeight;
+        // after: split weights → position = capped IK, rotation = mask (near 1 when phone is up)
+        float posW = _ikWeight;      // 0.5 walk, 0.1 sprint/slide, etc.
+        float rotW = _maskWeight;    // stays ~1 while phone is up, fades out when you put it away
 
-        animator.SetIKPositionWeight(AvatarIKGoal.RightHand, w);
-        animator.SetIKRotationWeight(AvatarIKGoal.RightHand, w);
+        animator.SetIKPositionWeight(AvatarIKGoal.RightHand, posW);
+        animator.SetIKRotationWeight(AvatarIKGoal.RightHand, rotW);
+
 
         if (rightElbowHint != null)
-            animator.SetIKHintPositionWeight(AvatarIKHint.RightElbow, w * elbowHintWeight);
+            animator.SetIKHintPositionWeight(AvatarIKHint.RightElbow, posW * elbowHintWeight);
 
-        if (w <= 0f) return;
+        if (posW  <= 0f) return;
 
         // Ensure anchor pose is up-to-date (kills spin jitter)
         if (IsOwner && targetHandler != null)
@@ -299,6 +318,8 @@ public class PlayerPhone : NetworkBehaviour
         if (_flare != null)
             _flare.enabled = enabledNow; // flare follows the light
     }
+
+
     private void ShowPhone()
     {
         _phoneVisible = true;
@@ -339,6 +360,7 @@ public class PlayerPhone : NetworkBehaviour
             _spawnedPhone.SetActive(false);
     }
 
+
     private void ApplyPhoneOffsets()
     {
         if (_spawnedPhone == null || phoneAttachR == null) return;
@@ -365,6 +387,28 @@ public class PlayerPhone : NetworkBehaviour
         }
     }
 
+    // ---- NEW: locomotion-aware IK cap ----
+    private float ResolveCurrentIkCap()
+    {
+        // If we don't have motor info, default to idle cap
+        if (motor == null) return idleIKMax;
+
+        if (motor.sliding)   return slideIKMax;
+        if (motor.sprinting) return sprintIKMax;
+
+        // Walking if there is horizontal input
+        bool isMoving = motor.inputDirection.sqrMagnitude > 0.0001f;
+        return isMoving ? walkIKMax : idleIKMax;
+
+        // --- Optional continuous mapping (uncomment header fields & this block) ---
+        // if (useSpeedCurve)
+        // {
+        //     // If you feed real horizontal speed (m/s), evaluate curve:
+        //     // float speed = new Vector3(controller.velocity.x, 0f, controller.velocity.z).magnitude;
+        //     // return Mathf.Clamp01(ikCapBySpeed.Evaluate(speed));
+        // }
+    }
+
     private void EnsureFlareRef()
     {
         if (_flare != null || _spawnedPhone == null) return;
@@ -377,4 +421,5 @@ public class PlayerPhone : NetworkBehaviour
         if (_flare == null && flareSRP != null) _flare = flareSRP;
         if (_flare == null) _flare = _spawnedPhone.GetComponentInChildren<LensFlareComponentSRP>(true);
     }
+
 }
