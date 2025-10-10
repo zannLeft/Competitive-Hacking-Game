@@ -1484,7 +1484,7 @@ MonoBehaviour:
   ikEaseOutTime: 0.1
   ikMaxSpeed: 0
   idleIKMax: 1
-  walkIKMax: 0.5
+  walkIKMax: 0.1
   sprintIKMax: 0.01
   slideIKMax: 0.01
   approxDistance: 0.35
@@ -1494,6 +1494,7 @@ MonoBehaviour:
   rightElbowHint: {fileID: 0}
   elbowHintWeight: 0.5
   flashlightNodeName: FlashLight
+  flareSRP: {fileID: 0}
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

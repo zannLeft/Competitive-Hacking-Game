@@ -18,7 +18,6 @@ public class InputManager : NetworkBehaviour
     private PhoneTargetHandler phoneTarget;
 
     private bool _rmbHeld;
-    private bool _screenToggle;
 
     void Awake()
     {
@@ -56,7 +55,8 @@ public class InputManager : NetworkBehaviour
             ui.Pause.performed += OnPausePerformed; // <-- added
             ui.Enable();                             // <-- added
 
-            onFoot.Phone.performed += OnPhoneToggle;
+            onFoot.Phone.started  += OnPhoneHoldStarted;
+            onFoot.Phone.canceled += OnPhoneHoldCanceled;
 
             onFoot.Flashlight.performed += OnFlashlightPerformed;
 
@@ -103,7 +103,8 @@ public class InputManager : NetworkBehaviour
             ui.Disable();
             //handItems.Disable();
 
-            onFoot.Phone.performed -= OnPhoneToggle;
+            onFoot.Phone.started  -= OnPhoneHoldStarted;
+            onFoot.Phone.canceled -= OnPhoneHoldCanceled;
 
             onFoot.Flashlight.performed -= OnFlashlightPerformed;
 
@@ -123,24 +124,30 @@ public class InputManager : NetworkBehaviour
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
             LobbyManager.Instance.StartGameAsHost(); // host-only
     }
-    private void OnPhoneToggle(InputAction.CallbackContext ctx)
+    private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
-        _screenToggle = !_screenToggle;
+        _rmbHeld = true;
+        phone?.SetHolding(true);        // raises phone + turns screen ON (owner-only visual)
+        look?.SetPhoneAim(true);        // rotate body with camera while phone is up
+    }
 
-        // Screen on/off (we reuse SetHolding(bool) as the "screen active" flag)
-        phone?.SetHolding(_screenToggle);
-
-        // Aim body while phone is up for either reason (screen || flashlight)
-        bool aiming = _screenToggle || (phone != null && phone.IsFlashlightOn);
+    private void OnPhoneHoldCanceled(InputAction.CallbackContext ctx)
+    {
+        _rmbHeld = false;
+        phone?.SetHolding(false);       // lowers screen (unless flashlight keeps phone up)
+        // Keep aiming only if flashlight is still ON
+        bool aiming = phone != null && phone.IsFlashlightOn;
         look?.SetPhoneAim(aiming);
-    }  
+    }
       
     private void OnFlashlightPerformed(InputAction.CallbackContext ctx)
     {
         if (phone == null) return;
+
         phone.ToggleFlashlight();
 
-        bool aiming = _screenToggle || phone.IsFlashlightOn;
+        // Aiming while the phone is up for either reason (RMB held OR flashlight on)
+        bool aiming = _rmbHeld || phone.IsFlashlightOn;
         look?.SetPhoneAim(aiming);
     }
 }
