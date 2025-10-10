@@ -30,11 +30,11 @@ public class GameManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // Only instantiate if not already in scene
-        if (FindObjectOfType<LobbyManager>() == null && lobbyManagerPrefab != null)
+        // Only instantiate if not already in scene (exclude inactive to match old FindObjectOfType behavior)
+        if (FindFirstObjectByType<LobbyManager>(FindObjectsInactive.Exclude) == null && lobbyManagerPrefab != null)
             Instantiate(lobbyManagerPrefab);
 
-        if (FindObjectOfType<NetworkManager>() == null && networkManagerPrefab != null)
+        if (FindFirstObjectByType<NetworkManager>(FindObjectsInactive.Exclude) == null && networkManagerPrefab != null)
             Instantiate(networkManagerPrefab);
 
         // Listen for scene changes
