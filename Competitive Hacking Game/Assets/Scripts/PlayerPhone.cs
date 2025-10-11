@@ -29,7 +29,6 @@ public class PlayerPhone : NetworkBehaviour
 
     [Header("IK weight by locomotion (caps)")]
     [Range(0f,1f)] [SerializeField] private float idleIKMax   = 1.00f;
-    [Range(0f,1f)] [SerializeField] private float walkIKMax   = 0.10f;
     [Range(0f,1f)] [SerializeField] private float sprintIKMax = 0.01f;
     [Range(0f,1f)] [SerializeField] private float slideIKMax  = 0.01f;
 

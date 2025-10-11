@@ -9,7 +9,7 @@ public class PhoneTargetHandler : NetworkBehaviour
     [SerializeField] private Camera playerCamera;
     [SerializeField] private PlayerLook playerLook;
 
-    private const float offsetDistance   = 0.2f;
+    private const float offsetDistance   = 0.185f;
     private const float horizontalOffset = 0.2f;
     private const float verticalOffset   = -0.06f;
 

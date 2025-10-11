@@ -10,10 +10,18 @@ public class PlayerLook : NetworkBehaviour
     [Tooltip("Parent pivot of the main camera (your empty 'Camera' object in the middle of the player).")]
     public Transform cameraRoot;
 
-    private Vector3 standingPosition;
-    private Vector3 crouchingPosition;
-    private Vector3 slidingPosition;
-    private Vector3 sprintingPosition;
+    [Header("Camera Positions (Inspector)")]
+    [SerializeField] private bool   useInspectorPositions = true; // if false, we auto-fill from current on Start
+    [SerializeField] private Vector3 standingLocalPos;
+    [SerializeField] private Vector3 crouchingLocalPos;
+    [SerializeField] private Vector3 slidingLocalPos;
+    [SerializeField] private Vector3 sprintingLocalPos;
+    [SerializeField] private Vector3 walkForwardLocalPos;
+    [SerializeField] private Vector3 walkBackwardLocalPos;
+    [SerializeField] private Vector3 walkSideLocalPos; // sideways (pure strafe or lateral-dominant diagonals)
+
+    [Header("Strafe Handling")]
+    [SerializeField] private float moveDirThreshold = 0.10f;
 
     [Header("Sensitivity")]
     public float xSensitivity = 30f;
@@ -36,18 +44,40 @@ public class PlayerLook : NetworkBehaviour
     public bool  instantCatchUpOnMove = true;
     public float catchUpOnMoveSpeed   = 1080f;
 
+    // ---------- PITCH (Instant) ----------
+    [Header("Pitch Offset (Instant) – Standing/Walking/Sprinting")]
+    [SerializeField] private float pitchForwardMax = 0.10f;
+    [SerializeField] private float pitchBackwardMax = 0.12f;
+    [SerializeField] private float pitchDownY = 0.04f;
+    [SerializeField] private float pitchUpY = 0.04f;
+
+    [Header("Pitch Offset (Instant) – While Crouching")]
+    [SerializeField] private float crouchPitchForwardMax = 0.07f;
+    [SerializeField] private float crouchPitchBackwardMax = 0.10f;
+    [SerializeField] private float crouchPitchDownY = 0.03f;
+    [SerializeField] private float crouchPitchUpY = 0.03f;
+
+    [Header("Base Position Smoothing")]
+    [Tooltip("Lerp speed for all non-crouch transitions.")]
+    [SerializeField] private float positionLerpSpeed = 7f;
+    [Tooltip("LINEAR speed (units/sec) for crouch <-> uncrouch camera movement.")]
+    [SerializeField] private float crouchPositionSpeed = 4f;
+
     private float yawOffset = 0f;
     private bool  catchingUpStationary = false;
     private bool  wasMoving = false;
+
+    // We smooth ONLY the base/local camera position (without pitch offset)
+    private Vector3 _smoothedBaseLocalPos;
+    private bool _wasCrouching; // track last-frame crouch state
 
     public float Pitch => xRotation;
     public float YawOffset => yawOffset;
 
     // Phone/aim flags
-    private bool phoneAimActive = false; // camera behavior (RMB or flashlight)
+    private bool phoneAimActive = false;
     public  bool IsPhoneAiming => phoneAimActive;
-
-    private bool rmbHeld = false;        // RMB-only gate for sprint
+    private bool rmbHeld = false;
     public  bool IsRmbHeld => rmbHeld;
 
     public Quaternion WorldLookRotation =>
@@ -67,15 +97,15 @@ public class PlayerLook : NetworkBehaviour
 
         motor = GetComponent<PlayerMotor>();
 
-        standingPosition  = cam.transform.localPosition;
-        crouchingPosition = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z);
-        slidingPosition   = new Vector3(standingPosition.x, standingPosition.y - 1.1f, standingPosition.z - 0.1f);
-        sprintingPosition = new Vector3(standingPosition.x, standingPosition.y - 0.15f, standingPosition.z + 0.15f);
+        if (!useInspectorPositions) AutoFillFromCurrentCamera();
 
+        _smoothedBaseLocalPos = standingLocalPos;
         cam.fieldOfView = defaultFOV;
 
         if (cameraRoot == null && cam != null)
             cameraRoot = cam.transform.parent;
+
+        _wasCrouching = motor != null && motor.crouching;
     }
 
     void Update()
@@ -89,19 +119,66 @@ public class PlayerLook : NetworkBehaviour
 
         bool actuallySprinting = motor != null && motor.IsActuallySprinting;
 
-        Vector3 targetPos =
-            actuallySprinting ? sprintingPosition :
-            motor.sliding     ? slidingPosition   :
-            motor.crouching   ? crouchingPosition : standingPosition;
+        // Select BASE target (no pitch here)
+        Vector3 baseTargetPos;
+        if (actuallySprinting)            baseTargetPos = sprintingLocalPos;
+        else if (motor.sliding)           baseTargetPos = slidingLocalPos;
+        else if (motor.crouching)         baseTargetPos = crouchingLocalPos;
+        else
+        {
+            Vector2 move = motor.inputDirection;
+            float ax = Mathf.Abs(move.x);
+            float ay = Mathf.Abs(move.y);
+            float thr = moveDirThreshold;
+            bool moving = (ax > thr) || (ay > thr);
 
-        cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, targetPos, dt * 7f);
+            if (moving)
+            {
+                if (ax > ay)                  baseTargetPos = walkSideLocalPos;
+                else if (move.y >  0f)        baseTargetPos = walkForwardLocalPos;
+                else                          baseTargetPos = walkBackwardLocalPos;
+            }
+            else baseTargetPos = standingLocalPos;
+        }
 
+        // ---------- Base position: linear for crouch transitions, lerp otherwise ----------
+        bool useLinear = motor.crouching || _wasCrouching; // entering OR exiting crouch
+        if (useLinear)
+        {
+            _smoothedBaseLocalPos = Vector3.MoveTowards(
+                _smoothedBaseLocalPos, baseTargetPos, crouchPositionSpeed * dt);
+        }
+        else
+        {
+            _smoothedBaseLocalPos = Vector3.Lerp(
+                _smoothedBaseLocalPos, baseTargetPos, dt * positionLerpSpeed);
+        }
+
+        // ---------- Instant pitch offset (Y and Z) ----------
+        float up01   = Mathf.Clamp01(-xRotation / 90f);
+        float down01 = Mathf.Clamp01( xRotation / 90f);
+
+        bool isCrouched = motor.crouching;
+        float fwdMax   = isCrouched ? crouchPitchForwardMax   : pitchForwardMax;
+        float backMax  = isCrouched ? crouchPitchBackwardMax  : pitchBackwardMax;
+        float downMaxY = isCrouched ? crouchPitchDownY        : pitchDownY;
+        float upMaxY   = isCrouched ? crouchPitchUpY          : pitchUpY;
+
+        float yPitch = (-down01 * downMaxY) + (up01 * upMaxY);
+        float zPitch = ( down01 * fwdMax )  - (up01 * backMax);
+
+        cam.transform.localPosition = _smoothedBaseLocalPos + new Vector3(0f, yPitch, zPitch);
+
+        // FOV
         bool fastState = actuallySprinting || motor.sliding;
         float targetFOV = fastState ? sprintFOV : defaultFOV;
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovTransitionSpeed);
 
         if (cameraRoot != null)
             cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
+
+        // remember crouch state for next frame
+        _wasCrouching = motor.crouching;
     }
 
     public void ProcessLook(Vector2 input)
@@ -130,7 +207,6 @@ public class PlayerLook : NetworkBehaviour
 
         if (phoneAimActive)
         {
-            // While aiming (RMB or flashlight), rotate body directly with camera yaw
             transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
 
             if (Mathf.Abs(yawOffset) > 0.01f)
@@ -203,9 +279,29 @@ public class PlayerLook : NetworkBehaviour
 
     public Quaternion MoveSpaceRotation => transform.rotation * Quaternion.Euler(0f, yawOffset, 0f);
 
-    // Camera/aim mode (true if RMB OR flashlight)
     public void SetPhoneAim(bool aiming) => phoneAimActive = aiming;
+    public void SetAimHeld(bool held)    => rmbHeld = held;
 
-    // RMB-only tracking for sprint gating
-    public void SetAimHeld(bool held) => rmbHeld = held;
+    [ContextMenu("Auto-Fill Positions From Current Camera")]
+    private void AutoFillFromCurrentCamera()
+    {
+        if (cam == null) cam = GetComponentInChildren<Camera>();
+        if (cam == null) return;
+
+        var basePos = cam.transform.localPosition;
+        standingLocalPos   = basePos;
+        crouchingLocalPos  = basePos + new Vector3(0f, -1.1f,  0f);
+        slidingLocalPos    = basePos + new Vector3(0f, -1.1f, -0.1f);
+        sprintingLocalPos  = basePos + new Vector3(0f, -0.15f, +0.15f);
+
+        if (walkForwardLocalPos  == Vector3.zero) walkForwardLocalPos  = basePos + new Vector3(0f, -0.02f, +0.05f);
+        if (walkBackwardLocalPos == Vector3.zero) walkBackwardLocalPos = basePos + new Vector3(0f,  0f,    -0.05f);
+        if (walkSideLocalPos     == Vector3.zero) walkSideLocalPos     = basePos + new Vector3(0f, -0.02f, +0.04f);
+
+        // Default crouch pitch mirrors standing until you tune it
+        if (Mathf.Approximately(crouchPitchForwardMax, 0f)) crouchPitchForwardMax = pitchForwardMax;
+        if (Mathf.Approximately(crouchPitchBackwardMax,0f)) crouchPitchBackwardMax= pitchBackwardMax;
+        if (Mathf.Approximately(crouchPitchDownY,      0f)) crouchPitchDownY      = pitchDownY;
+        if (Mathf.Approximately(crouchPitchUpY,        0f)) crouchPitchUpY        = pitchUpY;
+    }
 }

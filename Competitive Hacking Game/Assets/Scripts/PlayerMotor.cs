@@ -188,29 +188,18 @@ public class PlayerMotor : NetworkBehaviour
     #region Movement
     public void ProcessMove(Vector2 input)
     {
-        // Block movement when crouching AND RMB is held (but still allow rotation/gravity)
-        bool movementBlocked = (look != null && look.IsRmbHeld && crouching && !sliding);
-
-        // Feed what PlayerLook considers "moving" — when blocked, report no move input
-        inputDirection = movementBlocked ? Vector2.zero : input;
-
-        currentSpeed         = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        inputDirection = input;
+        currentSpeed = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
         currentSpeedVertical = controller.velocity.y;
 
-        // Gravity
         playerVelocity.y += Physics.gravity.y * Time.deltaTime * fallSpeed;
 
-        // Movement smoothing mode
         if (isGrounded && !sliding)       smoothSpeed = 9f;
         else if (sliding)                 smoothSpeed = 0.5f;
         else                               smoothSpeed = 1f;
 
         Quaternion moveSpace = (look != null) ? look.MoveSpaceRotation : transform.rotation;
-
-        // If blocked, target no horizontal direction
-        Vector3 targetDirection = movementBlocked
-            ? Vector3.zero
-            : moveSpace * new Vector3(input.x, 0f, input.y);
+        Vector3 targetDirection = moveSpace * new Vector3(input.x, 0f, input.y);
 
         moveDirection = Vector3.Lerp(moveDirection, targetDirection, Time.deltaTime * smoothSpeed);
 
@@ -218,22 +207,16 @@ public class PlayerMotor : NetworkBehaviour
         {
             if (sliding)
             {
-                targetSpeed   = slideSpeed;
-            }
-            else if (movementBlocked)
-            {
-                // Snap quickly to a stop when blocked
-                targetSpeed   = 0f;
-                speedLerpTime = 20f;
+                targetSpeed = slideSpeed;
             }
             else if (input.y > 0 && sprinting)
             {
-                targetSpeed   = sprintSpeed;
+                targetSpeed = sprintSpeed;
                 speedLerpTime = 6f;
             }
             else if (input.x != 0 || input.y != 0)
             {
-                targetSpeed   = 2f;
+                targetSpeed = 2f;
                 speedLerpTime = 8f;
             }
             else
@@ -244,24 +227,19 @@ public class PlayerMotor : NetworkBehaviour
 
         speed = Mathf.Lerp(speed, targetSpeed, Time.deltaTime * speedLerpTime);
 
-        // Apply move: if blocked, zero horizontal translation
-        Vector3 move = movementBlocked
-            ? new Vector3(0f, playerVelocity.y, 0f)
-            : moveDirection * speed + playerVelocity;
-
+        Vector3 move = moveDirection * speed + playerVelocity;
         controller.Move(move * Time.deltaTime);
 
         if (isGrounded && playerVelocity.y < 0)
             playerVelocity.y = -2f;
 
-        // Animator velocities — zero them while blocked so feet stay planted
         Vector3 localVelocity = transform.InverseTransformDirection(controller.velocity);
-        float animX = movementBlocked ? 0f : localVelocity.x;
-        float animZ = movementBlocked ? 0f : localVelocity.z;
 
+        float animX = localVelocity.x;
+        float animZ = localVelocity.z;
         float desiredMax = Mathf.Max(currentSpeed, 0.001f);
-        float maxComp    = Mathf.Max(Mathf.Abs(animX), Mathf.Abs(animZ));
-        if (!movementBlocked && maxComp > 0.001f)
+        float maxComp = Mathf.Max(Mathf.Abs(animX), Mathf.Abs(animZ));
+        if (maxComp > 0.001f)
         {
             float scale = desiredMax / maxComp;
             animX *= scale;
@@ -272,8 +250,8 @@ public class PlayerMotor : NetworkBehaviour
         animator.SetFloat(xVelHash, animX, dampTime, Time.deltaTime);
         animator.SetFloat(zVelHash, animZ, dampTime, Time.deltaTime);
     }
-
     #endregion
+
 
     private bool CanStand()
     {

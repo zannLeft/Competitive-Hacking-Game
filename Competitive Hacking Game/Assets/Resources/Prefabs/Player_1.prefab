@@ -1028,7 +1028,7 @@ Transform:
   m_GameObject: {fileID: 5065480775021633320}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.652, z: 0}
+  m_LocalPosition: {x: 0, y: 1.652, z: -0.023}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1271,8 +1271,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cam: {fileID: 2272284346070443280}
   cameraRoot: {fileID: 2698562056828817307}
-  xSensitivity: 30
-  ySensitivity: 30
+  useInspectorPositions: 1
+  standingLocalPos: {x: 0, y: 0, z: 0.2}
+  crouchingLocalPos: {x: 0, y: -1.1, z: 0.2}
+  slidingLocalPos: {x: 0, y: -1.1, z: 0.1}
+  sprintingLocalPos: {x: 0, y: -0.15, z: 0.35}
+  walkForwardLocalPos: {x: 0, y: -0.075, z: 0.2}
+  walkBackwardLocalPos: {x: 0, y: -0.075, z: 0.25}
+  walkSideLocalPos: {x: 0, y: -0.075, z: 0.3}
+  moveDirThreshold: 0.1
+  xSensitivity: 20
+  ySensitivity: 20
   defaultFOV: 90
   sprintFOV: 100
   fovTransitionSpeed: 5
@@ -1282,6 +1291,16 @@ MonoBehaviour:
   shoulderWhileCrouching: 1
   instantCatchUpOnMove: 0
   catchUpOnMoveSpeed: 250
+  pitchForwardMax: 0.1
+  pitchBackwardMax: 0.3
+  pitchDownY: 0.1
+  pitchUpY: 0.04
+  crouchPitchForwardMax: 0
+  crouchPitchBackwardMax: 0.3
+  crouchPitchDownY: 0.03
+  crouchPitchUpY: 0.03
+  positionLerpSpeed: 7
+  crouchPositionSpeed: 3
 --- !u!114 &4708886749802310030
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1454,7 +1473,7 @@ MonoBehaviour:
   playerLook: {fileID: 6487965562487473033}
   rotationSmoothSpeed: 5
   maxPitchUp: 45
-  maxPitchDown: -75
+  maxPitchDown: -90
   ikAnchorName: IKAnchor
   ikAnchorLocalEuler: {x: -12, y: -160, z: 0}
 --- !u!114 &8878162043686913073
@@ -1484,7 +1503,6 @@ MonoBehaviour:
   ikEaseOutTime: 0.1
   ikMaxSpeed: 0
   idleIKMax: 1
-  walkIKMax: 0.1
   sprintIKMax: 0.01
   slideIKMax: 0.01
   approxDistance: 0.35
