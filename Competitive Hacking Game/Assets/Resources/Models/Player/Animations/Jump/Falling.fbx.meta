@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 0279403266a83e846a5dacbd5c95614c
+guid: 554cb6ffe1dd6fc42998a255a72eac55
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
@@ -31,18 +31,18 @@ ModelImporter:
     extraUserProperties: []
     clipAnimations:
     - serializedVersion: 16
-      name: Jump
+      name: Falling
       takeName: Scene
       internalID: -623603649343465320
-      firstFrame: 0.6
-      lastFrame: 64
+      firstFrame: 1
+      lastFrame: 271
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
       cycleOffset: 0
       loop: 0
       hasAdditiveReferencePose: 0
-      loopTime: 0
+      loopTime: 1
       loopBlend: 0
       loopBlendOrientation: 1
       loopBlendPositionY: 1

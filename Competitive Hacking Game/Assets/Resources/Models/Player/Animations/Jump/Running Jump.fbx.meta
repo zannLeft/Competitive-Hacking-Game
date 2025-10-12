@@ -34,8 +34,8 @@ ModelImporter:
       name: Running Jump
       takeName: Scene
       internalID: -623603649343465320
-      firstFrame: 0.6
-      lastFrame: 44
+      firstFrame: 1
+      lastFrame: 43
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
