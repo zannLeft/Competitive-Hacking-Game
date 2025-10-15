@@ -398,8 +398,8 @@ public class PlayerPhone : NetworkBehaviour
         bool isMoving = motor.inputDirection.sqrMagnitude > 0.0001f;
 
         // Walk cap depends on RMB: 0.5 while holding RMB, 0.1 otherwise
-        float walkCap = _rmbHeld ? 0.5f : 0.1f;
-        float idleCap = _rmbHeld ? 1.0f : 0.1f;
+        float walkCap = _rmbHeld ? 0.5f : 0.5f;
+        float idleCap = _rmbHeld ? 1.0f : 1.0f;
 
         return isMoving ? walkCap : idleCap;
     }

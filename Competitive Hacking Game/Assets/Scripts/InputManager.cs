@@ -33,11 +33,15 @@ public class InputManager : NetworkBehaviour
     {
         if (IsOwner)
         {
-            onFoot.Jump.started += OnJumpStarted;
-            onFoot.Jump.canceled += OnJumpCanceled;
+            onFoot.Jump.started   += OnJumpStarted;
+            onFoot.Jump.canceled  += OnJumpCanceled;
+
             onFoot.Sprint.started += OnSprintStarted;
-            onFoot.Sprint.canceled += OnSprintCanceled;
-            onFoot.Crouch.performed += OnCrouchPerformed;
+            onFoot.Sprint.canceled+= OnSprintCanceled;
+
+            // CROUCH is now a HOLD:
+            onFoot.Crouch.started += OnCrouchStarted;   // send true
+            onFoot.Crouch.canceled+= OnCrouchCanceled;  // send false
 
             onFoot.Enable();
 
@@ -61,7 +65,10 @@ public class InputManager : NetworkBehaviour
     private void OnJumpCanceled(InputAction.CallbackContext ctx) => motor.Jump(false);
     private void OnSprintStarted(InputAction.CallbackContext ctx) => motor.Sprint(true);
     private void OnSprintCanceled(InputAction.CallbackContext ctx)=> motor.Sprint(false);
-    private void OnCrouchPerformed(InputAction.CallbackContext ctx)=> motor.Crouch();
+
+    // NEW: crouch hold
+    private void OnCrouchStarted (InputAction.CallbackContext ctx) => motor.Crouch(true);
+    private void OnCrouchCanceled(InputAction.CallbackContext ctx) => motor.Crouch(false);
 
     void Update()
     {
@@ -74,11 +81,15 @@ public class InputManager : NetworkBehaviour
     {
         if (IsOwner)
         {
-            onFoot.Jump.started -= OnJumpStarted;
-            onFoot.Jump.canceled -= OnJumpCanceled;
+            onFoot.Jump.started   -= OnJumpStarted;
+            onFoot.Jump.canceled  -= OnJumpCanceled;
+
             onFoot.Sprint.started -= OnSprintStarted;
-            onFoot.Sprint.canceled -= OnSprintCanceled;
-            onFoot.Crouch.performed -= OnCrouchPerformed;
+            onFoot.Sprint.canceled-= OnSprintCanceled;
+
+            // remove old .performed, add started/canceled unsubscribes
+            onFoot.Crouch.started  -= OnCrouchStarted;
+            onFoot.Crouch.canceled -= OnCrouchCanceled;
 
             ui.Pause.performed -= OnPausePerformed;
             ui.Start.performed -= OnStartPerformed;
@@ -109,8 +120,8 @@ public class InputManager : NetworkBehaviour
     {
         _rmbHeld = true;
         phone?.SetHolding(true);
-        look?.SetAimHeld(true);   // RMB-only flag
-        look?.SetPhoneAim(true);  // aim-style camera while RMB is down
+        look?.SetAimHeld(true);
+        look?.SetPhoneAim(true);
     }
 
     private void OnPhoneHoldCanceled(InputAction.CallbackContext ctx)
@@ -123,11 +134,9 @@ public class InputManager : NetworkBehaviour
         look?.SetPhoneAim(aiming);
         look?.SetAimHeld(false);
 
-        // If Shift is still held, resume sprint immediately
         if (motor != null && motor.IsSprintHeld)
             motor.Sprint(true);
     }
-
 
     private void OnFlashlightPerformed(InputAction.CallbackContext ctx)
     {
@@ -135,10 +144,7 @@ public class InputManager : NetworkBehaviour
 
         phone.ToggleFlashlight();
 
-        // Aim-style camera if either RMB or flashlight is active
         bool aiming = _rmbHeld || phone.IsFlashlightOn;
         look?.SetPhoneAim(aiming);
-
-        // NOTE: No sprint cancel here — flashlight alone should NOT block sprint.
     }
 }

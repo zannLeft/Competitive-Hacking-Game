@@ -22,6 +22,7 @@ public class PlayerMotor : NetworkBehaviour
     public  bool sliding = false;
 
     private bool sprintButtonHeld = false;
+    private bool crouchButtonHeld = false;   // NEW: crouch is now a hold
     private bool jumpButtonHeld = false;
     private bool jumpedFromSlide = false;
 
@@ -83,6 +84,7 @@ public class PlayerMotor : NetworkBehaviour
     private float lastAirbornePlanarSpeed = 0f;
 
     public bool IsSprintHeld => sprintButtonHeld;
+    public bool IsCrouchHeld => crouchButtonHeld;     // NEW
     public bool IsActuallySprinting =>
         sprinting && isGrounded && !sliding && inputDirection.y > 0.01f && currentSpeed > 0.1f;
 
@@ -132,7 +134,7 @@ public class PlayerMotor : NetworkBehaviour
 
         float dt = Time.deltaTime;
         slideElapsed += dt;
-        slideTimer -= dt;
+        slideTimer   -= dt;
 
         // slide speed decays but keeps a floor
         slideSpeed = Mathf.Max(slideSpeed - slideSpeedDecay * dt, minSlideSpeed);
@@ -143,12 +145,19 @@ public class PlayerMotor : NetworkBehaviour
             || (graceOver && currentSpeed < 2f)
             || (graceOver && currentSpeedVertical > 1f))
         {
-            // Slide ends: prefer stand+sprint if sprint is held and headroom exists,
-            // otherwise stay crouched (so you won't pop up under a low ceiling).
-            if (sprintButtonHeld && CanStand())
+            // END SLIDE:
+            // 1) If crouch is held, remain/go to crouch (priority).
+            // 2) Else if sprint is held and there's headroom, stand+sprint.
+            // 3) Else, crouch.
+            if (crouchButtonHeld)
             {
-                sprinting = true;
+                crouching = true;
+                sprinting = false;
+            }
+            else if (sprintButtonHeld && CanStand())
+            {
                 crouching = false;
+                sprinting = true;
             }
             else
             {
@@ -161,24 +170,25 @@ public class PlayerMotor : NetworkBehaviour
             animator.SetBool("Crouching", crouching);
 
             // Reset slide seeds
-            slideTimer = slideTimerMax;
+            slideTimer   = slideTimerMax;
             slideElapsed = 0f;
-            slideSpeed = 8f;
+            slideSpeed   = 8f;
         }
     }
 
     private void UpdateStandStatus()
     {
         canStand = CanStand();
-        if (canStand && !couldStand)
+
+        // If we're crouching, not sliding, there's headroom, and the crouch key is NOT held,
+        // auto-stand and optionally resume sprint if Shift is held.
+        if (crouching && !sliding && canStand && !crouchButtonHeld)
         {
-            if (crouching && !sliding && sprintButtonHeld)
-            {
-                sprinting = true;
-                crouching = false;
-                animator.SetBool("Crouching", false);
-            }
+            crouching = false;
+            animator.SetBool("Crouching", false);
+            sprinting = sprintButtonHeld; // stand+run if Shift is down
         }
+
         couldStand = canStand;
     }
 
@@ -212,7 +222,7 @@ public class PlayerMotor : NetworkBehaviour
         }
         else if (!isGrounded && wasGrounded)
         {
-            BecameAirborne(); // NEW: uncrouch when walking off ledges while crouched
+            BecameAirborne(); // uncrouch when walking off ledges while crouched
         }
 
         wasGrounded = isGrounded;
@@ -231,9 +241,7 @@ public class PlayerMotor : NetworkBehaviour
             {
                 crouching = false;
                 animator.SetBool("Crouching", false);
-                // Do not change sprint here; sprinting is a ground-only concern.
             }
-            // else: keep crouching mid-air because there's no headroom to stand yet.
         }
     }
 
@@ -405,7 +413,7 @@ public class PlayerMotor : NetworkBehaviour
         }
         else if (crouching && CanStand())
         {
-            if (isGrounded && !sliding)
+            if (isGrounded && !sliding && !crouchButtonHeld)
             {
                 sprinting = value;
                 crouching = !value;
@@ -421,7 +429,7 @@ public class PlayerMotor : NetworkBehaviour
     public void Land()
     {
         // Robust effective speed at touchdown
-        float planarNow = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        float planarNow     = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
         float effectiveSpeed = Mathf.Max(planarNow, lastAirbornePlanarSpeed);
         lastAirbornePlanarSpeed = 0f;
 
@@ -437,8 +445,8 @@ public class PlayerMotor : NetworkBehaviour
 
         if (landedFromCoil)
         {
-            // 1) Slide condition: sprint held & fast enough (no headroom needed since slide stays low)
-            if (sprintButtonHeld && effectiveSpeed > 5.85f)
+            // Slide ONLY if sprint + crouch are held and fast enough
+            if (sprintButtonHeld && crouchButtonHeld && effectiveSpeed > 5.85f)
             {
                 crouching = false;
                 animator.SetBool("Crouching", false);
@@ -446,91 +454,117 @@ public class PlayerMotor : NetworkBehaviour
                 return;
             }
 
-            // 2) If sprint held and there's headroom, stand and sprint
-            if (sprintButtonHeld && CanStand())
+            // If crouch is held on coil landing, go to crouch (priority)
+            if (crouchButtonHeld)
+            {
+                crouching = true;
+                sprinting = false;
+                animator.SetBool("Crouching", true);
+                return;
+            }
+
+            // Otherwise: stand if there’s headroom (and sprint if sprint is held), else crouch
+            if (CanStand())
+            {
+                crouching = false;
+                animator.SetBool("Crouching", false);
+                sprinting = sprintButtonHeld;
+            }
+            else
+            {
+                crouching = true;
+                sprinting = false;
+                animator.SetBool("Crouching", true);
+            }
+            return;
+        }
+
+        // Normal landing (unchanged)
+        if (sprintButtonHeld && !crouching)
+        {
+            sprinting = true;
+        }
+        else if (sprintButtonHeld && crouching)
+        {
+            if (CanStand())
             {
                 crouching = false;
                 animator.SetBool("Crouching", false);
                 sprinting = true;
-                return;
-            }
-
-            // 3) Default: land into crouch
-            crouching = true;
-            sprinting = false;
-            animator.SetBool("Crouching", true);
-        }
-        else
-        {
-            // Normal landing (unchanged)
-            if (sprintButtonHeld && !crouching)
-            {
-                sprinting = true;
-            }
-            else if (sprintButtonHeld && crouching)
-            {
-                if (CanStand())
-                {
-                    crouching = false;
-                    animator.SetBool("Crouching", false);
-                    sprinting = true;
-                }
-                else
-                {
-                    sprinting = false;
-                }
             }
             else
             {
                 sprinting = false;
             }
         }
+        else
+        {
+            sprinting = false;
+        }
     }
 
-    public void Crouch()
+    // --- CROUCH is now a HOLD ---
+    public void Crouch(bool held)
     {
+        crouchButtonHeld = held;
+
         // Ignore crouch input while sliding
         if (sliding) return;
 
-        // Air rules
-        if (!isGrounded)
+        if (isGrounded)
         {
-            // If crouching and press crouch in air: stand up, do NOT coil.
-            if (crouching)
+            if (held)
             {
-                crouching = false;
-                animator.SetBool("Crouching", false);
-                coiling = false;
-                animator.SetBool("Coiling", false);
-                startedCrouchingInAir = false;
-                return;
+                // Press-to-slide on ground if sprinting & fast enough
+                if (!crouching && sprinting && currentSpeed > 5.85f && Mathf.Abs(inputDirection.x) == 0)
+                {
+                    Slide();
+                    return;
+                }
+
+                if (!crouching)
+                {
+                    crouching = true;
+                    animator.SetBool("Crouching", true);
+                    sprinting = false;
+                }
             }
-
-            // Not crouching: enter COIL (air only)
-            coiling = true;
-            animator.SetBool("Coiling", true);
-            startedCrouchingInAir = true;
+            else
+            {
+                if (crouching && CanStand())
+                {
+                    crouching = false;
+                    animator.SetBool("Crouching", false);
+                }
+                // Auto-stand later when headroom appears (UpdateStandStatus handles this)
+                sprinting = sprintButtonHeld && !crouching;
+            }
             return;
         }
 
-        // Ground rules
-        if (sprinting && !crouching && currentSpeed > 5.85f && inputDirection.x == 0)
+        // ---------- AIR RULES (COIL HOLD) ----------
+        if (held)
         {
-            Slide();
-            return;
-        }
-
-        if (crouching && CanStand())
-        {
-            crouching = false;
+            // Start COIL only if we weren't already crouching or coiling
+            if (!crouching && !coiling)
+            {
+                coiling = true;
+                animator.SetBool("Coiling", true);
+                startedCrouchingInAir = true;
+            }
+            // If you were crouching in air (shouldn't happen), we still don't start coil.
         }
         else
         {
-            crouching = true;
+            // RELEASE in air: try to exit COIL immediately if we can fit the stand capsule.
+            if (coiling && CanStand())
+            {
+                coiling = false;
+                animator.SetBool("Coiling", false);
+                startedCrouchingInAir = false; // so landing isn't treated as "from coil"
+            }
+            // If there's no headroom yet, keep coiling; we'll re-check on the next release or on landing.
         }
-
-        sprinting = !crouching && sprintButtonHeld;
-        animator.SetBool("Crouching", crouching);
     }
 
     private void Slide()
