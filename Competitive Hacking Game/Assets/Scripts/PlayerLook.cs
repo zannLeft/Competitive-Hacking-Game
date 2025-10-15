@@ -19,6 +19,7 @@ public class PlayerLook : NetworkBehaviour
     [SerializeField] private Vector3 walkForwardLocalPos;
     [SerializeField] private Vector3 walkBackwardLocalPos;
     [SerializeField] private Vector3 walkSideLocalPos; // sideways (pure strafe or lateral-dominant diagonals)
+    [SerializeField] private Vector3 coilLocalPos;     // NEW: camera position while coiling (air-only)
 
     [Header("Strafe Handling")]
     [SerializeField] private float moveDirThreshold = 0.10f;
@@ -114,16 +115,17 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
-        if (motor.sliding && xRotation > 0f)
+        if ((motor.sliding || motor.Coiling) && xRotation > 0f)
             xRotation = Mathf.Lerp(xRotation, 0f, dt * 3.5f);
 
         bool actuallySprinting = motor != null && motor.IsActuallySprinting;
 
         // Select BASE target (no pitch here)
         Vector3 baseTargetPos;
-        if (actuallySprinting)            baseTargetPos = sprintingLocalPos;
-        else if (motor.sliding)           baseTargetPos = slidingLocalPos;
-        else if (motor.crouching)         baseTargetPos = crouchingLocalPos;
+        if (motor.sliding)                 baseTargetPos = slidingLocalPos;
+        else if (motor.Coiling)            baseTargetPos = coilLocalPos; // NEW: air-only coil position
+        else if (actuallySprinting)        baseTargetPos = sprintingLocalPos;
+        else if (motor.crouching)          baseTargetPos = crouchingLocalPos;
         else
         {
             Vector2 move = motor.inputDirection;
@@ -297,6 +299,9 @@ public class PlayerLook : NetworkBehaviour
         if (walkForwardLocalPos  == Vector3.zero) walkForwardLocalPos  = basePos + new Vector3(0f, -0.02f, +0.05f);
         if (walkBackwardLocalPos == Vector3.zero) walkBackwardLocalPos = basePos + new Vector3(0f,  0f,    -0.05f);
         if (walkSideLocalPos     == Vector3.zero) walkSideLocalPos     = basePos + new Vector3(0f, -0.02f, +0.04f);
+
+        // NEW: coil default = slightly tucked/raised
+        if (coilLocalPos         == Vector3.zero) coilLocalPos         = basePos + new Vector3(0f, -0.15f, -0.05f);
 
         // Default crouch pitch mirrors standing until you tune it
         if (Mathf.Approximately(crouchPitchForwardMax, 0f)) crouchPitchForwardMax = pitchForwardMax;

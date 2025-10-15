@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 1920
     height: 1037
   m_ShowMode: 4
-  m_Title: Animator
+  m_Title: Game
   m_RootView: {fileID: 4}
   m_MinSize: {x: 875, y: 332}
   m_MaxSize: {x: 10000, y: 10000}
@@ -43,8 +43,8 @@ MonoBehaviour:
     y: 419
     width: 373
     height: 210
-  m_MinSize: {x: 101, y: 126}
-  m_MaxSize: {x: 4001, y: 4026}
+  m_MinSize: {x: 100, y: 100}
+  m_MaxSize: {x: 4000, y: 4000}
   m_ActualView: {fileID: 20}
   m_Panes:
   - {fileID: 20}
@@ -171,7 +171,7 @@ MonoBehaviour:
   m_MinSize: {x: 300, y: 150}
   m_MaxSize: {x: 24288, y: 24288}
   vertical: 0
-  controlID: 193
+  controlID: 108
   draggingID: 0
 --- !u!114 &8
 MonoBehaviour:
@@ -197,7 +197,7 @@ MonoBehaviour:
   m_MinSize: {x: 200, y: 150}
   m_MaxSize: {x: 16192, y: 24288}
   vertical: 1
-  controlID: 85
+  controlID: 109
   draggingID: 0
 --- !u!114 &9
 MonoBehaviour:
@@ -244,8 +244,8 @@ MonoBehaviour:
     y: 0
     width: 373
     height: 419
-  m_MinSize: {x: 201, y: 226}
-  m_MaxSize: {x: 4001, y: 4026}
+  m_MinSize: {x: 200, y: 200}
+  m_MaxSize: {x: 4000, y: 4000}
   m_ActualView: {fileID: 17}
   m_Panes:
   - {fileID: 17}
@@ -270,8 +270,8 @@ MonoBehaviour:
     y: 0
     width: 1183
     height: 629
-  m_MinSize: {x: 102, y: 126}
-  m_MaxSize: {x: 4002, y: 4026}
+  m_MinSize: {x: 100, y: 100}
+  m_MaxSize: {x: 4000, y: 4000}
   m_ActualView: {fileID: 19}
   m_Panes:
   - {fileID: 18}
@@ -302,7 +302,7 @@ MonoBehaviour:
   m_MinSize: {x: 200, y: 50}
   m_MaxSize: {x: 16192, y: 8096}
   vertical: 0
-  controlID: 134
+  controlID: 110
   draggingID: 0
 --- !u!114 &13
 MonoBehaviour:
@@ -524,7 +524,7 @@ MonoBehaviour:
       scrollPos: {x: 0, y: 0}
       m_SelectedIDs: 
       m_LastClickedID: 0
-      m_ExpandedIDs: 0e29feff2629fefffa2bfeff3a2cfeff18fefeff30fefeff0401ffff4401ffff6c12ffff8412ffff5815ffff9615ffff4e7effff667effff3481ffff6e81ffff08fbffff
+      m_ExpandedIDs: c456fdffdc56fdffaa59fdffe459fdffd271fdffea71fdffbe74fdfffe74fdff664dfeff7e4dfeff5250feff9050feffae79ffffc679ffff9a7cffffda7cffff08fbffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -1086,9 +1086,9 @@ MonoBehaviour:
   m_AudioPlay: 0
   m_DebugDrawModesUseInteractiveLightBakingData: 0
   m_Position:
-    m_Target: {x: -8.322453, y: -3.5559828, z: -0.5640546}
+    m_Target: {x: -7.3501883, y: -4.044909, z: 0.68472576}
     speed: 2
-    m_Value: {x: -8.322453, y: -3.5559828, z: -0.5640546}
+    m_Value: {x: -7.3501883, y: -4.044909, z: 0.68472576}
   m_RenderMode: 0
   m_CameraMode:
     drawMode: 0
@@ -1134,13 +1134,13 @@ MonoBehaviour:
     m_GridAxis: 1
     m_gridOpacity: 0.5
   m_Rotation:
-    m_Target: {x: 0.08091127, y: -0.4627543, z: 0.042456646, w: 0.88177776}
+    m_Target: {x: 0.16122308, y: -0.41230395, z: 0.07438623, w: 0.8935899}
     speed: 2
-    m_Value: {x: 0.080910355, y: -0.46274906, z: 0.042456165, w: 0.88176775}
+    m_Value: {x: 0.16122118, y: -0.4122991, z: 0.07438535, w: 0.89357936}
   m_Size:
-    m_Target: 7.4986057
+    m_Target: 8.801066
     speed: 2
-    m_Value: 7.4986057
+    m_Value: 8.801066
   m_Ortho:
     m_Target: 0
     speed: 2
@@ -1251,14 +1251,14 @@ MonoBehaviour:
       e31: 0
       e32: 0
       e33: 1
-    - e00: 1.2392085
+    - e00: 0.8166132
       e01: 0
       e02: 0
-      e03: -328.18933
+      e03: 147.41324
       e10: 0
-      e11: 1.2392085
+      e11: 0.8166132
       e12: 0
-      e13: 207.46906
+      e13: 228.90445
       e20: 0
       e21: 0
       e22: 1
@@ -1328,7 +1328,7 @@ MonoBehaviour:
   m_MiniTool: 0
   m_LockTracker:
     m_IsLocked: 0
-  m_CurrentEditor: 0
+  m_CurrentEditor: 1
   m_LayerEditor:
     m_SelectedLayerIndex: 0
 --- !u!114 &20
@@ -1414,7 +1414,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/Resources/Models/Player/Animations/Jump
+    - Assets/Scripts
     m_Globs: []
     m_ProductIds: 
     m_AnyWithAssetOrigin: 0
@@ -1424,7 +1424,7 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 64
   m_LastFolders:
-  - Assets/Resources/Models/Player/Animations/Jump
+  - Assets/Scripts
   m_LastFoldersGridSize: -1
   m_LastProjectPath: C:\Users\Zanql\Desktop\Projects\Repository\Competitive-Hacking-Game\Competitive
     Hacking Game
@@ -1432,9 +1432,9 @@ MonoBehaviour:
     m_IsLocked: 0
   m_FolderTreeState:
     scrollPos: {x: 0, y: 31}
-    m_SelectedIDs: c81e0100
-    m_LastClickedID: 73416
-    m_ExpandedIDs: 000000003a1e01003c1e01003e1e0100401e0100421e0100441e0100461e0100481e0100b81e0100
+    m_SelectedIDs: d21e0100
+    m_LastClickedID: 73426
+    m_ExpandedIDs: 000000004a1e01004c1e01004e1e0100501e0100521e0100541e0100561e0100581e0100ca1e0100
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1463,7 +1463,7 @@ MonoBehaviour:
     scrollPos: {x: 0, y: 0}
     m_SelectedIDs: 
     m_LastClickedID: 0
-    m_ExpandedIDs: 000000003a1e01003c1e01003e1e0100401e0100421e0100441e0100461e0100481e0100
+    m_ExpandedIDs: 000000004a1e01004c1e01004e1e0100501e0100521e0100541e0100561e0100581e0100
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1560,7 +1560,7 @@ MonoBehaviour:
   m_ObjectsLockedBeforeSerialization: []
   m_InstanceIDsLockedBeforeSerialization: 
   m_PreviewResizer:
-    m_CachedPref: 151
+    m_CachedPref: 311
     m_ControlHash: -371814159
     m_PrefName: Preview_InspectorPreview
   m_LastInspectedObjectInstanceID: -1

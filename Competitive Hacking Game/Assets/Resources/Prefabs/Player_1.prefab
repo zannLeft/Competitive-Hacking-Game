@@ -1279,6 +1279,7 @@ MonoBehaviour:
   walkForwardLocalPos: {x: 0, y: -0.075, z: 0.2}
   walkBackwardLocalPos: {x: 0, y: -0.075, z: 0.25}
   walkSideLocalPos: {x: 0, y: -0.075, z: 0.3}
+  coilLocalPos: {x: 0, y: -0.45, z: 0.05}
   moveDirThreshold: 0.1
   xSensitivity: 20
   ySensitivity: 20
@@ -1321,11 +1322,18 @@ MonoBehaviour:
   jumpHeight: 2
   crouchHeight: 0.5
   standHeight: 1.685
+  crouchCenterY: 0.4375
+  standCenterY: 0.92
   slideSpeed: 9
   slideSpeedDecay: 6.3
   minSlideSpeed: 2
-  crouchCenterY: 0.4375
-  standCenterY: 0.92
+  slideCancelGrace: 0.33
+  coilHeight: 1
+  coiling: 0
+  standObstructionMask:
+    serializedVersion: 2
+    m_Bits: 3511
+  standCheckEpsilon: 0.01
   inputDirection: {x: 0, y: 0}
 --- !u!114 &5479793853021550010
 MonoBehaviour:
@@ -1403,14 +1411,14 @@ MonoBehaviour:
     Layer: 0
     OriginatingState: 1783681257
     DestinationState: 933656280
-    TransitionDuration: 0.25
+    TransitionDuration: 0.1
     TriggerNameHash: 125937960
     TransitionIndex: 2
   - IsCrossFadeExit: 0
     Layer: 0
     OriginatingState: 1783681257
     DestinationState: -844543045
-    TransitionDuration: 0.25
+    TransitionDuration: 0.1
     TriggerNameHash: 125937960
     TransitionIndex: 3
   m_Animator: {fileID: 7898741019774491149}

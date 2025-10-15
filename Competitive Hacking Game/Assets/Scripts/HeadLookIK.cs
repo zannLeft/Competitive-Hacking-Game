@@ -13,7 +13,7 @@ public class HeadLookIK : NetworkBehaviour
     const float MAX_PITCH_UP    = 60f;  // look up (deg; negative)
     const float MAX_PITCH_DOWN  = 45f;  // look down
 
-    const float BODY_W_DEFAULT  = 0.15f; // spine/chest influence when NOT crouching
+    const float BODY_W_DEFAULT  = 0.15f; // spine/chest influence when NOT crouching/coiling
     const float SEND_RATE_HZ    = 15f;   // owner → others (pitch,yaw) updates
     const float REMOTE_SMOOTH   = 12f;   // smoothing on receivers
 
@@ -82,13 +82,20 @@ public class HeadLookIK : NetworkBehaviour
     {
         if (!IsSpawned || animator == null || headBone == null) return;
 
+        // Read animator states
         bool isCrouching = animator.GetBool("Crouching");
-        float bodyW = isCrouching ? 0f : BODY_W_DEFAULT;
+        bool isCoiling   = animator.GetBool("Coiling"); // NEW
 
-        Quaternion lookRot =
-            transform.rotation *
-            Quaternion.Euler(0f, lerpedYaw, 0f) *
-            Quaternion.Euler(lerpedPitch, 0f, 0f);
+        // Ignore up/down (pitch) while crouching OR coiling
+        bool ignorePitch = isCrouching || isCoiling;
+
+        // Spine/chest influence off while crouching or coiling (same behavior)
+        float bodyW = ignorePitch ? 0f : BODY_W_DEFAULT;
+
+        // Build a yaw-only or full look rotation
+        Quaternion yawOnly = transform.rotation * Quaternion.Euler(0f, lerpedYaw, 0f);
+        Quaternion lookRot = ignorePitch ? yawOnly
+                                         : yawOnly * Quaternion.Euler(lerpedPitch, 0f, 0f);
 
         Vector3 headPos    = headBone.position;
         Vector3 lookTarget = headPos + (lookRot * Vector3.forward) * LOOK_DISTANCE;
