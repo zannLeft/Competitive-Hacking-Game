@@ -25,6 +25,7 @@ public class PlayerMotor : NetworkBehaviour
     private bool crouchButtonHeld = false;   // NEW: crouch is now a hold
     private bool jumpButtonHeld = false;
     private bool jumpedFromSlide = false;
+    private bool reCrouchAfterJump = false;
 
     // Tracks if crouch was pressed while airborne (coil trigger)
     private bool startedCrouchingInAir = false;
@@ -197,9 +198,19 @@ public class PlayerMotor : NetworkBehaviour
         // cannot jump while sliding
         if (jumpButtonHeld && isGrounded && !sliding && CanStand())
         {
+            bool jumpedFromCrouch = crouching;
+
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
             animator.SetTrigger("Jump");
             animator.SetBool("useMirror", useMirror);
+
+            // If we took off from crouch, stand up right away and mark for re-crouch on landing.
+            if (jumpedFromCrouch)
+            {
+                reCrouchAfterJump = true;
+                crouching = false;
+                animator.SetBool("Crouching", false);
+            }
 
             // (kept for clarity; condition excludes sliding so this won't run)
             if (sliding)
@@ -429,8 +440,8 @@ public class PlayerMotor : NetworkBehaviour
     public void Land()
     {
         // Robust effective speed at touchdown
-        float planarNow     = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
-        float effectiveSpeed = Mathf.Max(planarNow, lastAirbornePlanarSpeed);
+        float planarNow       = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        float effectiveSpeed  = Mathf.Max(planarNow, lastAirbornePlanarSpeed);
         lastAirbornePlanarSpeed = 0f;
 
         bool landedFromCoil = coiling || startedCrouchingInAir;
@@ -443,6 +454,7 @@ public class PlayerMotor : NetworkBehaviour
         }
         startedCrouchingInAir = false;
 
+        // --- COIL LANDING PATH (unchanged behavior) ---
         if (landedFromCoil)
         {
             // Slide ONLY if sprint + crouch are held and fast enough
@@ -451,19 +463,21 @@ public class PlayerMotor : NetworkBehaviour
                 crouching = false;
                 animator.SetBool("Crouching", false);
                 Slide();
+                reCrouchAfterJump = false; // slide overrides pending re-crouch
                 return;
             }
 
-            // If crouch is held on coil landing, go to crouch (priority)
+            // If crouch is held on coil landing, crouch (priority)
             if (crouchButtonHeld)
             {
                 crouching = true;
                 sprinting = false;
                 animator.SetBool("Crouching", true);
+                reCrouchAfterJump = false;
                 return;
             }
 
-            // Otherwise: stand if there’s headroom (and sprint if sprint is held), else crouch
+            // Otherwise stand if possible (and sprint if sprint is held), else crouch
             if (CanStand())
             {
                 crouching = false;
@@ -476,10 +490,26 @@ public class PlayerMotor : NetworkBehaviour
                 sprinting = false;
                 animator.SetBool("Crouching", true);
             }
+
+            reCrouchAfterJump = false;
             return;
         }
 
-        // Normal landing (unchanged)
+        // --- NEW: re-crouch after a "jump from crouch" if crouch is STILL held on touchdown ---
+        if (reCrouchAfterJump)
+        {
+            reCrouchAfterJump = false;
+            if (crouchButtonHeld)
+            {
+                crouching = true;
+                sprinting = false;
+                animator.SetBool("Crouching", true);
+                return; // crouch wins on landing
+            }
+            // else fall through to normal landing rules
+        }
+
+        // --- Normal landing rules (your original logic) ---
         if (sprintButtonHeld && !crouching)
         {
             sprinting = true;
