@@ -84,13 +84,13 @@ public class HeadLookIK : NetworkBehaviour
 
         // Read animator states
         bool isCrouching = animator.GetBool("Crouching");
-        bool isCoiling   = animator.GetBool("Coiling"); // NEW
+        bool isCoiling   = animator.GetBool("Coiling");
 
-        // Ignore up/down (pitch) while crouching OR coiling
-        bool ignorePitch = isCrouching || isCoiling;
+        // Keep head pitch while crouching; suppress pitch only when coiling
+        bool ignorePitch = isCoiling;
 
-        // Spine/chest influence off while crouching or coiling (same behavior)
-        float bodyW = ignorePitch ? 0f : BODY_W_DEFAULT;
+        // No spine/chest motion while crouching or coiling (head-only aim)
+        float bodyW = (isCrouching || isCoiling) ? 0f : BODY_W_DEFAULT;
 
         // Build a yaw-only or full look rotation
         Quaternion yawOnly = transform.rotation * Quaternion.Euler(0f, lerpedYaw, 0f);

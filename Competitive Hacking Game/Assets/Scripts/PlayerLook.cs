@@ -4,6 +4,7 @@ using UnityEngine;
 public class PlayerLook : NetworkBehaviour
 {
     private PlayerMotor motor;
+    private Animator    animator; // NEW: read IsGrounded & Z_Velocity
 
     [Header("References")]
     public Camera cam;
@@ -19,7 +20,11 @@ public class PlayerLook : NetworkBehaviour
     [SerializeField] private Vector3 walkForwardLocalPos;
     [SerializeField] private Vector3 walkBackwardLocalPos;
     [SerializeField] private Vector3 walkSideLocalPos; // sideways (pure strafe or lateral-dominant diagonals)
-    [SerializeField] private Vector3 coilLocalPos;     // NEW: camera position while coiling (air-only)
+    [SerializeField] private Vector3 coilLocalPos;     // camera position while coiling (air-only)
+    [SerializeField] private Vector3 sprintJumpLocalPos; // NEW: camera while sprint-jumping (air-only)
+
+    [Header("Sprint-Jump Detection")]
+    [SerializeField] private float sprintJumpZThreshold = 2.1f; // Animator Z_Velocity > this = sprint-jump
 
     [Header("Strafe Handling")]
     [SerializeField] private float moveDirThreshold = 0.10f;
@@ -27,6 +32,13 @@ public class PlayerLook : NetworkBehaviour
     [Header("Sensitivity")]
     public float xSensitivity = 30f;
     public float ySensitivity = 30f;
+
+    // ---------- Mouse Smoothing ----------
+    [Header("Mouse Smoothing")]
+    [SerializeField] private bool  smoothMouse = true;
+    [SerializeField] private float mouseSmoothingTime = 0.05f; // seconds (τ). 0.03–0.07 feels modern.
+
+    private Vector2 _smoothedDelta; // state for low-pass filter
 
     private float xRotation = 0f;
 
@@ -96,7 +108,8 @@ public class PlayerLook : NetworkBehaviour
             return;
         }
 
-        motor = GetComponent<PlayerMotor>();
+        motor    = GetComponent<PlayerMotor>();
+        animator = GetComponent<Animator>() ?? GetComponentInParent<Animator>();
 
         if (!useInspectorPositions) AutoFillFromCurrentCamera();
 
@@ -115,6 +128,7 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
+        // Recentre pitch toward horizon when looking down during slide or coil
         if ((motor.sliding || motor.Coiling) && xRotation > 0f)
             xRotation = Mathf.Lerp(xRotation, 0f, dt * 3.5f);
 
@@ -122,41 +136,59 @@ public class PlayerLook : NetworkBehaviour
 
         // Select BASE target (no pitch here)
         Vector3 baseTargetPos;
-        if (motor.sliding)                 baseTargetPos = slidingLocalPos;
-        else if (motor.Coiling)            baseTargetPos = coilLocalPos; // NEW: air-only coil position
-        else if (actuallySprinting)        baseTargetPos = sprintingLocalPos;
-        else if (motor.crouching)          baseTargetPos = crouchingLocalPos;
+
+        if (motor.sliding)                      
+        {
+            baseTargetPos = slidingLocalPos;
+        }
+        else if (motor.Coiling)                 
+        {
+            baseTargetPos = coilLocalPos; // air-only coil position
+        }
         else
         {
-            Vector2 move = motor.inputDirection;
-            float ax = Mathf.Abs(move.x);
-            float ay = Mathf.Abs(move.y);
-            float thr = moveDirThreshold;
-            bool moving = (ax > thr) || (ay > thr);
+            // NEW: sprint-jump camera when airborne and moving forward fast (by Animator)
+            bool isAirborne = animator != null && !animator.GetBool("IsGrounded");
+            float zVel      = animator != null ? animator.GetFloat("Z_Velocity") : 0f;
 
-            if (moving)
+            if (isAirborne && zVel > sprintJumpZThreshold)
             {
-                if (ax > ay)                  baseTargetPos = walkSideLocalPos;
-                else if (move.y >  0f)        baseTargetPos = walkForwardLocalPos;
-                else                          baseTargetPos = walkBackwardLocalPos;
+                baseTargetPos = sprintJumpLocalPos;
             }
-            else baseTargetPos = standingLocalPos;
+            else if (actuallySprinting)
+            {
+                baseTargetPos = sprintingLocalPos;
+            }
+            else if (motor.crouching)
+            {
+                baseTargetPos = crouchingLocalPos;
+            }
+            else
+            {
+                Vector2 move = motor.inputDirection;
+                float ax = Mathf.Abs(move.x);
+                float ay = Mathf.Abs(move.y);
+                float thr = moveDirThreshold;
+                bool moving = (ax > thr) || (ay > thr);
+
+                if (moving)
+                {
+                    if (ax > ay)                  baseTargetPos = walkSideLocalPos;
+                    else if (move.y >  0f)        baseTargetPos = walkForwardLocalPos;
+                    else                          baseTargetPos = walkBackwardLocalPos;
+                }
+                else baseTargetPos = standingLocalPos;
+            }
         }
 
-        // ---------- Base position: linear for crouch transitions, lerp otherwise ----------
+        // Base position: linear for crouch transitions, lerp otherwise
         bool useLinear = motor.crouching || _wasCrouching; // entering OR exiting crouch
         if (useLinear)
-        {
-            _smoothedBaseLocalPos = Vector3.MoveTowards(
-                _smoothedBaseLocalPos, baseTargetPos, crouchPositionSpeed * dt);
-        }
+            _smoothedBaseLocalPos = Vector3.MoveTowards(_smoothedBaseLocalPos, baseTargetPos, crouchPositionSpeed * dt);
         else
-        {
-            _smoothedBaseLocalPos = Vector3.Lerp(
-                _smoothedBaseLocalPos, baseTargetPos, dt * positionLerpSpeed);
-        }
+            _smoothedBaseLocalPos = Vector3.Lerp(_smoothedBaseLocalPos, baseTargetPos, dt * positionLerpSpeed);
 
-        // ---------- Instant pitch offset (Y and Z) ----------
+        // Instant pitch offset (Y and Z)
         float up01   = Mathf.Clamp01(-xRotation / 90f);
         float down01 = Mathf.Clamp01( xRotation / 90f);
 
@@ -188,10 +220,24 @@ public class PlayerLook : NetworkBehaviour
         if (!IsOwner) return;
 
         float dt = Time.deltaTime;
-        float mouseX = input.x;
-        float mouseY = input.y;
 
-        // PITCH
+        // ---------- Smooth the mouse delta ----------
+        Vector2 raw = input;
+        if (smoothMouse && mouseSmoothingTime > 0f)
+        {
+            // Exponential smoothing with time-constant τ (framerate independent)
+            float alpha = 1f - Mathf.Exp(-dt / mouseSmoothingTime);
+            _smoothedDelta = Vector2.Lerp(_smoothedDelta, raw, alpha);
+        }
+        else
+        {
+            _smoothedDelta = raw;
+        }
+
+        float mouseX = _smoothedDelta.x;
+        float mouseY = _smoothedDelta.y;
+
+        // PITCH (honor slide/coil pitch recentering rule)
         if (!(motor.sliding && xRotation > 0f && mouseY <= 0f))
         {
             xRotation -= mouseY * dt * ySensitivity;
@@ -199,7 +245,7 @@ public class PlayerLook : NetworkBehaviour
         }
         cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        // YAW
+        // YAW (w/ shoulder mode handling)
         bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
         bool shoulderMode =
             !hasMoveInput && !motor.sliding && !motor.sprinting &&
@@ -227,7 +273,15 @@ public class PlayerLook : NetworkBehaviour
         }
         else if (shoulderMode)
         {
-            yawOffset = Mathf.Clamp(yawOffset + yawDelta, -maxShoulderYaw, maxShoulderYaw);
+            // Decoupled yaw with overflow passthrough to avoid turn-speed cap
+            float newOffset = yawOffset + yawDelta;
+            float clamped   = Mathf.Clamp(newOffset, -maxShoulderYaw, maxShoulderYaw);
+            float overflow  = newOffset - clamped;
+
+            yawOffset = clamped;
+
+            if (Mathf.Abs(overflow) > 0.0001f)
+                transform.rotation *= Quaternion.Euler(0f, overflow, 0f);
 
             if (!catchingUpStationary && Mathf.Abs(yawOffset) >= (catchUpThreshold - 0.01f))
                 catchingUpStationary = true;
@@ -300,8 +354,8 @@ public class PlayerLook : NetworkBehaviour
         if (walkBackwardLocalPos == Vector3.zero) walkBackwardLocalPos = basePos + new Vector3(0f,  0f,    -0.05f);
         if (walkSideLocalPos     == Vector3.zero) walkSideLocalPos     = basePos + new Vector3(0f, -0.02f, +0.04f);
 
-        // NEW: coil default = slightly tucked/raised
         if (coilLocalPos         == Vector3.zero) coilLocalPos         = basePos + new Vector3(0f, -0.15f, -0.05f);
+        if (sprintJumpLocalPos   == Vector3.zero) sprintJumpLocalPos   = basePos + new Vector3(0f, -0.08f, +0.06f); // subtle forward/down tuck
 
         // Default crouch pitch mirrors standing until you tune it
         if (Mathf.Approximately(crouchPitchForwardMax, 0f)) crouchPitchForwardMax = pitchForwardMax;

@@ -1280,9 +1280,13 @@ MonoBehaviour:
   walkBackwardLocalPos: {x: 0, y: -0.075, z: 0.25}
   walkSideLocalPos: {x: 0, y: -0.075, z: 0.3}
   coilLocalPos: {x: 0, y: -0.45, z: 0.05}
+  sprintJumpLocalPos: {x: 0, y: -0.15, z: 0.25}
+  sprintJumpZThreshold: 2.1
   moveDirThreshold: 0.1
   xSensitivity: 20
   ySensitivity: 20
+  smoothMouse: 1
+  mouseSmoothingTime: 0.03
   defaultFOV: 90
   sprintFOV: 100
   fovTransitionSpeed: 5
@@ -1334,6 +1338,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 3511
   standCheckEpsilon: 0.01
+  fallLeaveGroundVy: 0.05
   inputDirection: {x: 0, y: 0}
 --- !u!114 &5479793853021550010
 MonoBehaviour:
