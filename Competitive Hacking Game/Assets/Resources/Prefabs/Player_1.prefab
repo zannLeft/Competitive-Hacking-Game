@@ -817,6 +817,7 @@ SkinnedMeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   serializedVersion: 2
   m_Quality: 0
   m_UpdateWhenOffscreen: 1
@@ -899,8 +900,8 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.01
-  far clip plane: 1000
+  near clip plane: 0.05
+  far clip plane: 5000
   field of view: 90
   orthographic: 0
   orthographic size: 5
@@ -1246,8 +1247,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 2057213198
+  GlobalObjectIdHash: 1182312238
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
+  DeferredDespawnTick: 0
+  Ownership: 1
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
   ActiveSceneSynchronization: 0
@@ -1269,6 +1272,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9d27cd7a084ec3c40bfa2059e177a639, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
   cam: {fileID: 2272284346070443280}
   cameraRoot: {fileID: 2698562056828817307}
   useInspectorPositions: 1
@@ -1318,6 +1322,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 313a456ca0cb51543ab67979438a5768, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
   sprinting: 0
   crouching: 0
   sliding: 0
@@ -1352,6 +1357,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8e6d2ed725f005b4fb38f929c1a737e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!114 &7528082831520240939
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1364,6 +1370,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 86fcf5d157e12f54e944e42ff9556bd0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
   headRenderer: {fileID: 9103178378047289684}
   bodyRenderer: {fileID: 3643557171636159750}
   ShirtIndex:
@@ -1404,6 +1411,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d79bda58f64ae5044b11d1852e40589e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
   TransitionStateInfoList:
   - IsCrossFadeExit: 0
     Layer: 0
@@ -1439,6 +1447,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c53998d785378b48a802ff53214a65c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
+  NetworkTransformExpanded: 0
+  AutoOwnerAuthorityTickOffset: 1
+  PositionInterpolationType: 0
+  RotationInterpolationType: 0
+  ScaleInterpolationType: 0
+  PositionLerpSmoothing: 1
+  PositionMaxInterpolationTime: 0.1
+  RotationLerpSmoothing: 1
+  RotationMaxInterpolationTime: 0.1
+  ScaleLerpSmoothing: 1
+  ScaleMaxInterpolationTime: 0.1
+  AuthorityMode: 0
+  TickSyncChildren: 0
   UseUnreliableDeltas: 0
   SyncPositionX: 1
   SyncPositionY: 1
@@ -1456,6 +1478,7 @@ MonoBehaviour:
   UseQuaternionCompression: 0
   UseHalfFloatPrecision: 0
   InLocalSpace: 0
+  SwitchTransformSpaceWhenParented: 0
   Interpolate: 1
   SlerpPosition: 0
 --- !u!114 &119657160423194826
@@ -1470,6 +1493,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 482c6fba7a86d2b498ec3b350fcd78e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HeadLookIK
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!114 &5216577995390182814
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1482,6 +1506,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 125379b1d678215419559147e9e41ac1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+  ShowTopMostFoldoutHeaderGroup: 1
   playerCamera: {fileID: 2272284346070443280}
   playerLook: {fileID: 6487965562487473033}
   rotationSmoothSpeed: 5
@@ -1501,6 +1526,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b07af9f3d7e4bd44a929ec6875bb3db, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerPhone
+  ShowTopMostFoldoutHeaderGroup: 1
   animator: {fileID: 7898741019774491149}
   targetHandler: {fileID: 5216577995390182814}
   phoneAttachR: {fileID: 5162219321685998565}
@@ -1646,6 +1672,7 @@ SkinnedMeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   serializedVersion: 2
   m_Quality: 0
   m_UpdateWhenOffscreen: 1
