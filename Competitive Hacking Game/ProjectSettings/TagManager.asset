@@ -7,6 +7,8 @@ TagManager:
   - Ground
   - CinemachineTarget
   - LobbyCamera
+  - LobbySpawn
+  - InteriorSpawn
   layers:
   - Default
   - TransparentFX

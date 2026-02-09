@@ -1,14 +1,14 @@
 using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class PauseMenuUI : MonoBehaviour
 {
     [SerializeField] private GameObject root;              // The top-level canvas/panel to toggle
     [SerializeField] private Button resumeButton;
     [SerializeField] private Button leaveLobbyButton;
-    [SerializeField] private Button endMatchButton;        // New button
+    [SerializeField] private Button endMatchButton;        // Host-only, match-only
 
     public static PauseMenuUI Instance { get; private set; }
     private bool isOpen;
@@ -21,16 +21,8 @@ public class PauseMenuUI : MonoBehaviour
         resumeButton.onClick.AddListener(Resume);
         leaveLobbyButton.onClick.AddListener(Leave);
 
-        // End match button only for host in GameScene
         if (endMatchButton != null)
-        {
             endMatchButton.onClick.AddListener(OnEndMatchClicked);
-            endMatchButton.gameObject.SetActive(
-                NetworkManager.Singleton != null &&
-                NetworkManager.Singleton.IsHost &&
-                SceneManager.GetActiveScene().name == "GameScene"
-            );
-        }
 
         root.SetActive(false);
     }
@@ -46,6 +38,8 @@ public class PauseMenuUI : MonoBehaviour
         isOpen = true;
         root.SetActive(true);
 
+        RefreshButtons();
+
         // Show mouse for UI
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -57,6 +51,17 @@ public class PauseMenuUI : MonoBehaviour
             var input = playerObj.GetComponent<InputManager>();
             if (input != null) input.SetGameplayEnabled(false);
         }
+    }
+
+    private void RefreshButtons()
+    {
+        if (endMatchButton == null) return;
+
+        bool isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+        bool inMatch = LobbyManager.Instance != null && LobbyManager.Instance.IsMatchInProgress;
+
+        // End Match button should appear only for host during match
+        endMatchButton.gameObject.SetActive(isHost && inMatch);
     }
 
     public void Resume()
@@ -78,40 +83,36 @@ public class PauseMenuUI : MonoBehaviour
 
     private void Leave()
     {
-        var current = SceneManager.GetActiveScene().name;
-        if (current == "GameScene")
+        // Close UI immediately
+        isOpen = false;
+        root.SetActive(false);
+
+        bool isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+        bool inMatch = LobbyManager.Instance != null && LobbyManager.Instance.IsMatchInProgress;
+
+        if (isHost && inMatch)
         {
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
-            {
-                // Host ends the match for everyone
-                LobbyManager.Instance.EndGameToLobbyForEveryone();
-            }
-            else
-            {
-                // Client leaves only themselves
-                LobbyManager.Instance.LeaveToLobbySelect();
-            }
+            // Host leaves during match: kick everyone out by shutting down session
+            LobbyManager.Instance.EndGameToLobbyForEveryone();
         }
         else
         {
-            isOpen = false;
-            root.SetActive(false);
-            // In LobbyScene, "Leave" just leaves the lobby
-            Debug.Log("ok bitch you clicked this i'm going to run LeaveToLobbySelect");
+            // Otherwise: leave lobby normally (host deletes lobby, client removes self)
             LobbyManager.Instance.LeaveToLobbySelect();
         }
 
-        // In lobby UI we want the mouse
+        // After leaving, we want cursor for menus (LobbySceneController will also enforce this)
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
     }
 
     private void OnEndMatchClicked()
     {
-        if (LobbyManager.Instance != null)
-        {
-            // Call the new EndMatch method that unlocks lobby, sets state, switches scene, and unpauses
-            LobbyManager.Instance.EndMatch();
-        }
+        // Host-only: end match but keep everyone connected, return to waiting rooftop
+        LobbyManager.Instance?.EndMatch();
+
+        // Close pause right away after clicking
+        isOpen = false;
+        root.SetActive(false);
     }
 }

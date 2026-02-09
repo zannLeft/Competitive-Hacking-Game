@@ -12,42 +12,58 @@ using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
 using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public class LobbyManager : MonoBehaviour
 {
-
     private const string KEY_RELAY_JOIN_CODE = "RelayJoinCode";
     private const int MAX_PLAYER_AMOUNT = 5;
+
     public event EventHandler<OnLobbyListChangedEventArgs> OnLobbyListChanged;
     public class OnLobbyListChangedEventArgs : EventArgs
     {
         public List<Lobby> lobbyList;
     }
+
     private Lobby joinedLobby;
     private float heartbeatTimer;
     private float listLobbiesTimer;
+
+    [Header("Scene UI refs (MainScene)")]
     [SerializeField] private GameObject lobbyUI;
     [SerializeField] private PregameUI pregameUI;
     [SerializeField] private LobbyCreateUI lobbyCreateUI;
-    [SerializeField] private GameObject cam;
+    [SerializeField] private GameObject cam; // Lobby overview cam
+
     public static LobbyManager Instance { get; private set; }
+
     private bool callbacksRegistered = false;
+    private bool teleportHandlerRegistered = false;
 
     [Header("Shirt materials (assign in inspector)")]
     [SerializeField] public List<Material> shirtMaterials = new List<Material>();
     [SerializeField] public Material blackShirtMaterial;
-
     private HashSet<int> usedShirtIndices = new HashSet<int>();
 
-    [SerializeField] private string lobbySceneName = "LobbyScene";
-    [SerializeField] private string gameSceneName = "GameScene";
+    [Header("Scene Names")]
+    [SerializeField] private string lobbySceneName = "MainScene";
+    [SerializeField] private string interiorSceneName = "Interior_01";
+
+    [Header("Teleport Tags")]
+    [SerializeField] private string lobbySpawnTag = "LobbySpawn";
+    [SerializeField] private string interiorSpawnTag = "InteriorSpawn";
+
+    public bool IsMatchInProgress { get; private set; } = false;
+
+    // ---- Custom message teleport (owner-authoritative safe) ----
+    private const string MSG_TELEPORT = "LM_Teleport";
 
     private void Awake()
     {
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+
         DontDestroyOnLoad(gameObject);
         InitializeUnityAuthentication();
 
@@ -56,28 +72,21 @@ public class LobbyManager : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (scene.name == "LobbyScene")
+        // Rebind scene-local refs when MainScene loads
+        if (scene.name == lobbySceneName)
         {
-            // Lobby UI
             if (lobbyUI == null)
             {
                 var ui = FindFirstObjectByType<LobbyUI>(FindObjectsInactive.Include);
                 if (ui != null) lobbyUI = ui.gameObject;
             }
 
-            // Pregame UI
             if (pregameUI == null)
-            {
                 pregameUI = FindFirstObjectByType<PregameUI>(FindObjectsInactive.Include);
-            }
 
-            // Lobby Create UI
             if (lobbyCreateUI == null)
-            {
                 lobbyCreateUI = FindFirstObjectByType<LobbyCreateUI>(FindObjectsInactive.Include);
-            }
 
-            // Lobby Camera
             if (cam == null)
             {
                 Camera camObj = null;
@@ -90,22 +99,16 @@ public class LobbyManager : MonoBehaviour
                         break;
                     }
                 }
-
-                if (camObj != null)
-                {
-                    cam = camObj.gameObject;
-                    Debug.Log("its not null babes");
-                }
+                if (camObj != null) cam = camObj.gameObject;
             }
         }
     }
-
 
     private async void InitializeUnityAuthentication()
     {
         if (UnityServices.State != ServicesInitializationState.Initialized)
         {
-            InitializationOptions initializationOptions = new InitializationOptions();
+            var initializationOptions = new InitializationOptions();
             initializationOptions.SetProfile(UnityEngine.Random.Range(0, 1000).ToString());
             await UnityServices.InitializeAsync(initializationOptions);
 
@@ -141,10 +144,8 @@ public class LobbyManager : MonoBehaviour
             heartbeatTimer -= Time.deltaTime;
             if (heartbeatTimer <= 0f)
             {
-                float heartbeatTimerMax = 15f;
-                heartbeatTimer = heartbeatTimerMax;
-
-                LobbyService.Instance.SendHeartbeatPingAsync(joinedLobby.Id);
+                heartbeatTimer = 15f;
+                _ = LobbyService.Instance.SendHeartbeatPingAsync(joinedLobby.Id);
             }
         }
     }
@@ -153,7 +154,6 @@ public class LobbyManager : MonoBehaviour
     {
         return joinedLobby != null && joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
     }
-
 
     private async void ListLobbies()
     {
@@ -164,8 +164,8 @@ public class LobbyManager : MonoBehaviour
                 Filters = new List<QueryFilter>
                 {
                     new QueryFilter(QueryFilter.FieldOptions.AvailableSlots, "0", QueryFilter.OpOptions.GT),
-                    new QueryFilter(QueryFilter.FieldOptions.IsLocked, "false", QueryFilter.OpOptions.EQ), // hide locked
-                    new QueryFilter(QueryFilter.FieldOptions.S1, "waiting", QueryFilter.OpOptions.EQ)      // only waiting
+                    new QueryFilter(QueryFilter.FieldOptions.IsLocked, "false", QueryFilter.OpOptions.EQ),
+                    new QueryFilter(QueryFilter.FieldOptions.S1, "waiting", QueryFilter.OpOptions.EQ)
                 }
             };
             QueryResponse queryResponse = await LobbyService.Instance.QueryLobbiesAsync(queryLobbiesOptions);
@@ -185,14 +185,11 @@ public class LobbyManager : MonoBehaviour
     {
         try
         {
-            Allocation allocation = await RelayService.Instance.CreateAllocationAsync(MAX_PLAYER_AMOUNT - 1);
-
-            return allocation;
+            return await RelayService.Instance.CreateAllocationAsync(MAX_PLAYER_AMOUNT - 1);
         }
         catch (RelayServiceException e)
         {
             Debug.Log(e);
-
             return default;
         }
     }
@@ -201,8 +198,7 @@ public class LobbyManager : MonoBehaviour
     {
         try
         {
-            string relayJoinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
-            return relayJoinCode;
+            return await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
         }
         catch (RelayServiceException e)
         {
@@ -215,8 +211,7 @@ public class LobbyManager : MonoBehaviour
     {
         try
         {
-            JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCode);
-            return joinAllocation;
+            return await RelayService.Instance.JoinAllocationAsync(joinCode);
         }
         catch (RelayServiceException e)
         {
@@ -224,6 +219,8 @@ public class LobbyManager : MonoBehaviour
             return default;
         }
     }
+
+    // ---------------------- CREATE / JOIN ----------------------
 
     public async void CreateLobby(string lobbyName, bool isPrivate)
     {
@@ -246,22 +243,28 @@ public class LobbyManager : MonoBehaviour
             await LobbyService.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
             {
                 Data = new Dictionary<string, DataObject> {
-                    { KEY_RELAY_JOIN_CODE , new DataObject(DataObject.VisibilityOptions.Member, relayJoinCode)}
+                    { KEY_RELAY_JOIN_CODE , new DataObject(DataObject.VisibilityOptions.Member, relayJoinCode) }
                 }
             });
 
             var relayServerData = AllocationUtils.ToRelayServerData(allocation, "dtls");
             NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
 
+            // IMPORTANT: subscribe before StartHost so we catch host connect event
+            RegisterConnectionCallbacks();
+
             NetworkManager.Singleton.StartHost();
 
-            RegisterNetworkCallbacks();
+            // Messaging manager is guaranteed after StartHost
+            RegisterTeleportHandlerIfNeeded();
 
-            HideUI();
-            lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
+            HideMenuUI();
+            lobbyCreateUI?.Hide();
+            pregameUI?.Show();
+            pregameUI?.SetPregameUI();
 
+            // Catch-up teleport for host (in case timing differs on some platforms)
+            StartCoroutine(TeleportClientToLobbySpawnWhenReady(NetworkManager.Singleton.LocalClientId));
         }
         catch (LobbyServiceException e)
         {
@@ -291,15 +294,14 @@ public class LobbyManager : MonoBehaviour
             var relayServerData = AllocationUtils.ToRelayServerData(joinAllocation, "dtls");
             NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
 
-
+            RegisterConnectionCallbacks();
             NetworkManager.Singleton.StartClient();
-            RegisterNetworkCallbacks();
+            RegisterTeleportHandlerIfNeeded();
 
-            HideUI();
-            lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
-
+            HideMenuUI();
+            lobbyCreateUI?.Hide();
+            pregameUI?.Show();
+            pregameUI?.SetPregameUI();
         }
         catch (LobbyServiceException e)
         {
@@ -307,10 +309,7 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    public Lobby GetLobby()
-    {
-        return joinedLobby;
-    }
+    public Lobby GetLobby() => joinedLobby;
 
     public async void JoinWithId(string lobbyId)
     {
@@ -318,21 +317,20 @@ public class LobbyManager : MonoBehaviour
         {
             joinedLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobbyId);
 
-
             string relayJoinCode = joinedLobby.Data[KEY_RELAY_JOIN_CODE].Value;
             JoinAllocation joinAllocation = await JoinRelay(relayJoinCode);
 
             var relayServerData = AllocationUtils.ToRelayServerData(joinAllocation, "dtls");
             NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
 
-
+            RegisterConnectionCallbacks();
             NetworkManager.Singleton.StartClient();
-            RegisterNetworkCallbacks();
+            RegisterTeleportHandlerIfNeeded();
 
-            HideUI();
-            lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
+            HideMenuUI();
+            lobbyCreateUI?.Hide();
+            pregameUI?.Show();
+            pregameUI?.SetPregameUI();
         }
         catch (LobbyServiceException e)
         {
@@ -346,27 +344,28 @@ public class LobbyManager : MonoBehaviour
         {
             joinedLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(lobbyCode);
 
-
             string relayJoinCode = joinedLobby.Data[KEY_RELAY_JOIN_CODE].Value;
             JoinAllocation joinAllocation = await JoinRelay(relayJoinCode);
 
             var relayServerData = AllocationUtils.ToRelayServerData(joinAllocation, "dtls");
             NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
 
-
+            RegisterConnectionCallbacks();
             NetworkManager.Singleton.StartClient();
-            RegisterNetworkCallbacks();
+            RegisterTeleportHandlerIfNeeded();
 
-            HideUI();
-            lobbyCreateUI.Hide();
-            pregameUI.Show();
-            pregameUI.SetPregameUI();
+            HideMenuUI();
+            lobbyCreateUI?.Hide();
+            pregameUI?.Show();
+            pregameUI?.SetPregameUI();
         }
         catch (LobbyServiceException e)
         {
             Debug.Log(e);
         }
     }
+
+    // ---------------------- LEAVE / DISCONNECT ----------------------
 
     public async void LeaveToLobbySelect()
     {
@@ -374,102 +373,54 @@ public class LobbyManager : MonoBehaviour
         {
             if (joinedLobby != null)
             {
-                Debug.Log("joined lobby NOT NULL!!!" + joinedLobby.Id);
                 if (IsLobbyHost())
-                {
-                    Debug.Log("BItch i am host i should deltee" + joinedLobby.Id);
                     await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
-                }
                 else
-                {
-                    Debug.Log("WTF i'm not hostP??" + joinedLobby.Id);
                     await LobbyService.Instance.RemovePlayerAsync(joinedLobby.Id, AuthenticationService.Instance.PlayerId);
-                }
-
-            }
-            else
-            {
-                Debug.Log("WTF joinedlobby is null???");
             }
         }
         catch (LobbyServiceException e) { Debug.Log(e); }
 
         if (NetworkManager.Singleton != null)
         {
-            UnregisterNetworkCallbacks();
+            UnregisterConnectionCallbacks();
+            UnregisterTeleportHandlerIfNeeded();
+
             if (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient)
                 NetworkManager.Singleton.Shutdown();
         }
 
         joinedLobby = null;
+        IsMatchInProgress = false;
 
-        // If we are NOT in LobbyScene, go there first; once loaded, show the selection UI.
-        if (SceneManager.GetActiveScene().name != lobbySceneName)
-        {
-            SceneManager.sceneLoaded += OnLobbySceneLoadedOnce;
-            SceneManager.LoadScene(lobbySceneName, LoadSceneMode.Single);
-        }
-        else
-        {
-            ShowLobbyScreen();
-        }
-    }
+        UnloadInteriorLocalIfLoaded();
 
-    private void OnLobbySceneLoadedOnce(Scene scene, LoadSceneMode mode)
-    {
-        if (scene.name == lobbySceneName)
-        {
-            SceneManager.sceneLoaded -= OnLobbySceneLoadedOnce;
-            ShowLobbyScreen();
-        }
-    }
-
-
-
-    private void HideUI()
-    {
-        lobbyUI.SetActive(false);
-        cam.SetActive(false);
-    }
-
-    private void RegisterNetworkCallbacks()
-    {
-        if (callbacksRegistered) return;
-        if (NetworkManager.Singleton == null) return;
-
-        NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-        callbacksRegistered = true;
-    }
-
-    private void UnregisterNetworkCallbacks()
-    {
-        if (!callbacksRegistered) return;
-        if (NetworkManager.Singleton == null) { callbacksRegistered = false; return; }
-
-        NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
-        callbacksRegistered = false;
+        ShowLobbyScreen();
     }
 
     private void OnClientDisconnected(ulong clientId)
     {
+        // If THIS local client got disconnected, go back to menu state.
         if (NetworkManager.Singleton != null &&
             !NetworkManager.Singleton.IsServer &&
             clientId == NetworkManager.Singleton.LocalClientId)
         {
             PauseMenuUI.Instance?.Resume();
-            LeaveToLobbySelect();
+
+            joinedLobby = null;
+            IsMatchInProgress = false;
+
+            UnloadInteriorLocalIfLoaded();
+            ShowLobbyScreen();
         }
     }
 
-    // Best-effort: if host closes the app, try to delete the lobby so it doesn't linger.
     private async void OnApplicationQuit()
     {
         try
         {
             if (IsLobbyHost() && joinedLobby != null)
-            {
                 await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
-            }
         }
         catch (LobbyServiceException e)
         {
@@ -477,7 +428,120 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    // Called by PlayerSetup on server when a player object spawns
+    // ---------------------- UI HELPERS ----------------------
+
+    private void HideMenuUI()
+    {
+        if (lobbyUI != null) lobbyUI.SetActive(false);
+        if (cam != null) cam.SetActive(false);
+    }
+
+    public void ShowLobbyScreen()
+    {
+        if (lobbyUI == null)
+        {
+            var ui = FindFirstObjectByType<LobbyUI>(FindObjectsInactive.Include);
+            if (ui != null) lobbyUI = ui.gameObject;
+        }
+        if (pregameUI == null) pregameUI = FindFirstObjectByType<PregameUI>(FindObjectsInactive.Include);
+        if (lobbyCreateUI == null) lobbyCreateUI = FindFirstObjectByType<LobbyCreateUI>(FindObjectsInactive.Include);
+
+        if (cam == null)
+        {
+            var camObj = GameObject.FindWithTag("LobbyCamera");
+            if (camObj != null) cam = camObj;
+        }
+
+        if (lobbyUI != null) lobbyUI.SetActive(true);
+        if (lobbyCreateUI != null) lobbyCreateUI.gameObject.SetActive(false);
+        if (pregameUI != null) pregameUI.gameObject.SetActive(false);
+        if (cam != null) cam.SetActive(true);
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    // ---------------------- CONNECTION CALLBACKS (SAFE ORDER) ----------------------
+
+    private void RegisterConnectionCallbacks()
+    {
+        if (callbacksRegistered) return;
+        if (NetworkManager.Singleton == null) return;
+
+        NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+
+        callbacksRegistered = true;
+    }
+
+    private void UnregisterConnectionCallbacks()
+    {
+        if (!callbacksRegistered) return;
+
+        if (NetworkManager.Singleton == null)
+        {
+            callbacksRegistered = false;
+            return;
+        }
+
+        NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+
+        callbacksRegistered = false;
+    }
+
+    private void OnClientConnected(ulong clientId)
+    {
+        // Only the server/host decides initial spawn placement
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
+
+        StartCoroutine(TeleportClientToLobbySpawnWhenReady(clientId));
+    }
+
+    private IEnumerator TeleportClientToLobbySpawnWhenReady(ulong clientId)
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm == null) yield break;
+
+        // Wait until server has a PlayerObject for that client
+        float timeout = 8f;
+        while (timeout > 0f)
+        {
+            if (nm.ConnectedClients != null &&
+                nm.ConnectedClients.TryGetValue(clientId, out var client) &&
+                client.PlayerObject != null)
+            {
+                break;
+            }
+
+            timeout -= Time.deltaTime;
+            yield return null;
+        }
+
+        if (nm.ConnectedClients == null ||
+            !nm.ConnectedClients.TryGetValue(clientId, out var cc) ||
+            cc.PlayerObject == null)
+        {
+            Debug.LogWarning($"[LobbyManager] PlayerObject not ready for client {clientId}, cannot teleport to LobbySpawn.");
+            yield break;
+        }
+
+        var spawns = GameObject.FindGameObjectsWithTag(lobbySpawnTag);
+        if (spawns == null || spawns.Length == 0)
+        {
+            Debug.LogWarning($"[LobbyManager] No objects tagged '{lobbySpawnTag}' found. Client {clientId} will spawn at default.");
+            yield break;
+        }
+
+        int idx = (int)(clientId % (ulong)spawns.Length);
+        Transform t = spawns[idx].transform;
+
+        // Owner-authoritative teleport: message the owning client (host teleports itself directly)
+        SendTeleportToClient(clientId, t.position, t.rotation);
+    }
+
+    // ---------------------- SHIRTS ----------------------
+
     public int AssignColorIndex()
     {
         if (shirtMaterials == null || shirtMaterials.Count == 0)
@@ -486,7 +550,6 @@ public class LobbyManager : MonoBehaviour
             return 0;
         }
 
-        // pick first unused index
         for (int i = 0; i < shirtMaterials.Count; i++)
         {
             if (!usedShirtIndices.Contains(i))
@@ -496,7 +559,6 @@ public class LobbyManager : MonoBehaviour
             }
         }
 
-        // If all used, fallback to picking a random index (or you could loop)
         int fallback = UnityEngine.Random.Range(0, shirtMaterials.Count);
         Debug.LogWarning($"[LobbyManager] All shirt indices used, falling back to {fallback}");
         return fallback;
@@ -524,38 +586,12 @@ public class LobbyManager : MonoBehaviour
         try
         {
             if (joinedLobby != null && IsLobbyHost())
-            {
                 await LobbyService.Instance.DeleteLobbyAsync(joinedLobby.Id);
-            }
         }
         catch (LobbyServiceException e) { Debug.Log(e); }
     }
 
-    // Call this after (re)loading LobbyScene to rebind scene refs and show the selection screen.
-    public void ShowLobbyScreen()
-    {
-        // Rebind scene-local refs if they've been destroyed during scene changes
-        if (lobbyUI == null)
-        {
-            var ui = FindFirstObjectByType<LobbyUI>(FindObjectsInactive.Include);
-            if (ui != null) lobbyUI = ui.gameObject;
-        }
-        if (pregameUI == null) pregameUI = FindFirstObjectByType<PregameUI>(FindObjectsInactive.Include);
-
-        if (cam == null)
-        {
-            // Tag your lobby camera as "LobbyCamera"
-            var camObj = GameObject.FindWithTag("LobbyCamera");
-            if (camObj != null) cam = camObj;
-        }
-
-        if (lobbyUI != null) lobbyUI.SetActive(true);
-        if (pregameUI != null) pregameUI.gameObject.SetActive(false);
-        if (cam != null) cam.SetActive(true);
-
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
-    }
+    // ---------------------- MATCH FLOW (ADDITIVE INTERIOR) ----------------------
 
     public async void StartGameAsHost()
     {
@@ -565,13 +601,11 @@ public class LobbyManager : MonoBehaviour
         {
             try
             {
-                // Lock (no new joins) and hide from browse queries during the match.
                 joinedLobby = await LobbyService.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
                 {
-                    IsLocked = true,   // blocks join by code
+                    IsLocked = true,
                     Data = new Dictionary<string, DataObject>
                     {
-                        // Optional: track state for your own UI / filters (indexed so it can be queried)
                         { "state", new DataObject(DataObject.VisibilityOptions.Public, "in-game", DataObject.IndexOptions.S1) }
                     }
                 });
@@ -582,59 +616,43 @@ public class LobbyManager : MonoBehaviour
             }
         }
 
-        NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
+        if (IsInteriorLoaded())
+        {
+            Debug.LogWarning("[LobbyManager] Interior already loaded; ignoring StartGameAsHost.");
+            return;
+        }
+
+        IsMatchInProgress = true;
+
+        var nsm = NetworkManager.Singleton.SceneManager;
+        nsm.OnLoadEventCompleted += OnInteriorLoadCompleted;
+        nsm.LoadScene(interiorSceneName, LoadSceneMode.Additive);
     }
 
-    public void EndGameToLobbyForEveryone()
+    private void OnInteriorLoadCompleted(string sceneName, LoadSceneMode mode,
+        List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
     {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
+        if (sceneName != interiorSceneName) return;
 
-        // Bring everyone back to the lobby scene (still connected)
-        NetworkManager.Singleton.SceneManager.LoadScene(lobbySceneName, LoadSceneMode.Single);
+        NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= OnInteriorLoadCompleted;
 
-        // After the scene load completes for everyone, shut the session down.
-        NetworkManager.Singleton.SceneManager.OnLoadEventCompleted += OnReturnToLobbyLoadedOnce;
+        TeleportAllClients(interiorSpawnTag);
     }
 
-    private void OnReturnToLobbyLoadedOnce(string sceneName, LoadSceneMode mode,
-        System.Collections.Generic.List<ulong> clientsCompleted,
-        System.Collections.Generic.List<ulong> clientsTimedOut)
-    {
-        if (sceneName != lobbySceneName) return;
-
-        NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= OnReturnToLobbyLoadedOnce;
-
-        // Give NGO one frame to settle, then shut down the network.
-        StartCoroutine(ShutdownNextFrame());
-    }
-
-    private System.Collections.IEnumerator ShutdownNextFrame()
-    {
-        yield return null;
-        if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient))
-            NetworkManager.Singleton.Shutdown();
-
-        // Show lobby UI locally for the host (clients handle it in OnClientDisconnected below)
-        ShowLobbyScreen();
-    }
-    
     public async void EndMatch()
     {
-        // Only the host should execute this
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
 
-        // Unlock the lobby and change its state back to "waiting"
         if (joinedLobby != null)
         {
             try
             {
-                Debug.Log("Ok i unlocked this lobby: " + joinedLobby.Id);
                 joinedLobby = await LobbyService.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
                 {
-                    IsLocked = false, // UNLOCK lobby (allows join by code)
+                    IsLocked = false,
                     Data = new Dictionary<string, DataObject>
                     {
-                        { "state", new DataObject(DataObject.VisibilityOptions.Public, "waiting", DataObject.IndexOptions.S1) } 
+                        { "state", new DataObject(DataObject.VisibilityOptions.Public, "waiting", DataObject.IndexOptions.S1) }
                     }
                 });
             }
@@ -644,15 +662,29 @@ public class LobbyManager : MonoBehaviour
             }
         }
 
-        Debug.Log("Ok before scene load " + joinedLobby.Id);
+        if (!IsInteriorLoaded())
+        {
+            IsMatchInProgress = false;
+            TeleportAllClients(lobbySpawnTag);
+            return;
+        }
 
-        // Load the lobby scene for everyone, keeping connections alive
-        GameManager.Instance.SetReturningFromMatch(true);
-        NetworkManager.Singleton.SceneManager.LoadScene(lobbySceneName, LoadSceneMode.Single);
+        IsMatchInProgress = false;
 
-        Debug.Log("ok after scene load " + joinedLobby.Id);
+        var nsm = NetworkManager.Singleton.SceneManager;
+        nsm.OnUnloadEventCompleted += OnInteriorUnloadCompleted;
 
-        // Unpause the local player and reset cursor...
+        Scene interior = SceneManager.GetSceneByName(interiorSceneName);
+        if (interior.IsValid() && interior.isLoaded)
+            nsm.UnloadScene(interior);
+        else
+        {
+            nsm.OnUnloadEventCompleted -= OnInteriorUnloadCompleted;
+            Debug.LogWarning("[LobbyManager] Interior scene not found/loaded when trying to unload.");
+            TeleportAllClients(lobbySpawnTag);
+        }
+
+        // unpause local
         var playerObj = NetworkManager.Singleton.LocalClient?.PlayerObject;
         if (playerObj != null)
         {
@@ -664,4 +696,179 @@ public class LobbyManager : MonoBehaviour
         Cursor.visible = false;
     }
 
+    private void OnInteriorUnloadCompleted(string sceneName, LoadSceneMode mode,
+        List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
+    {
+        if (sceneName != interiorSceneName) return;
+
+        NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted -= OnInteriorUnloadCompleted;
+
+        TeleportAllClients(lobbySpawnTag);
+    }
+
+    public void EndGameToLobbyForEveryone()
+    {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
+
+        if (IsInteriorLoaded())
+        {
+            var nsm = NetworkManager.Singleton.SceneManager;
+            nsm.OnUnloadEventCompleted += OnUnloadThenShutdown;
+
+            Scene interior = SceneManager.GetSceneByName(interiorSceneName);
+            if (interior.IsValid() && interior.isLoaded)
+                nsm.UnloadScene(interior);
+            else
+                StartCoroutine(ShutdownNextFrame());
+        }
+        else
+        {
+            StartCoroutine(ShutdownNextFrame());
+        }
+    }
+
+    private void OnUnloadThenShutdown(string sceneName, LoadSceneMode mode,
+        List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
+    {
+        if (sceneName != interiorSceneName) return;
+
+        NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted -= OnUnloadThenShutdown;
+        StartCoroutine(ShutdownNextFrame());
+    }
+
+    private IEnumerator ShutdownNextFrame()
+    {
+        yield return null;
+
+        IsMatchInProgress = false;
+
+        if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient))
+        {
+            UnregisterConnectionCallbacks();
+            UnregisterTeleportHandlerIfNeeded();
+            NetworkManager.Singleton.Shutdown();
+        }
+
+        joinedLobby = null;
+
+        UnloadInteriorLocalIfLoaded();
+        ShowLobbyScreen();
+    }
+
+    private bool IsInteriorLoaded()
+    {
+        Scene s = SceneManager.GetSceneByName(interiorSceneName);
+        return s.IsValid() && s.isLoaded;
+    }
+
+    private void UnloadInteriorLocalIfLoaded()
+    {
+        Scene s = SceneManager.GetSceneByName(interiorSceneName);
+        if (s.IsValid() && s.isLoaded)
+            SceneManager.UnloadSceneAsync(s);
+    }
+
+    // ---------------------- TELEPORT (MESSAGING) ----------------------
+
+    private void RegisterTeleportHandlerIfNeeded()
+    {
+        if (teleportHandlerRegistered) return;
+
+        var nm = NetworkManager.Singleton;
+        if (nm == null) return;
+
+        var cmm = nm.CustomMessagingManager;
+        if (cmm == null) return; // prevent null refs before NGO is started
+
+        cmm.RegisterNamedMessageHandler(MSG_TELEPORT, OnTeleportMessage);
+        teleportHandlerRegistered = true;
+    }
+
+    private void UnregisterTeleportHandlerIfNeeded()
+    {
+        if (!teleportHandlerRegistered) return;
+
+        var nm = NetworkManager.Singleton;
+        if (nm == null) { teleportHandlerRegistered = false; return; }
+
+        var cmm = nm.CustomMessagingManager;
+        if (cmm != null)
+            cmm.UnregisterNamedMessageHandler(MSG_TELEPORT);
+
+        teleportHandlerRegistered = false;
+    }
+
+    private void TeleportAllClients(string spawnTag)
+    {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost) return;
+
+        var spawns = GameObject.FindGameObjectsWithTag(spawnTag);
+        if (spawns == null || spawns.Length == 0)
+        {
+            Debug.LogWarning($"[LobbyManager] No spawn objects with tag '{spawnTag}' found.");
+            return;
+        }
+
+        int i = 0;
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            var player = client.PlayerObject;
+            if (player == null) continue;
+
+            Transform t = spawns[i % spawns.Length].transform;
+            i++;
+
+            SendTeleportToClient(client.ClientId, t.position, t.rotation);
+        }
+    }
+
+    private void SendTeleportToClient(ulong targetClientId, Vector3 pos, Quaternion rot)
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm == null) return;
+
+        // If it's us (host), teleport immediately (avoids race with message handler registration)
+        if (nm.IsConnectedClient && nm.LocalClientId == targetClientId)
+        {
+            TeleportLocalPlayer(pos, rot);
+            return;
+        }
+
+        var cmm = nm.CustomMessagingManager;
+        if (cmm == null)
+        {
+            Debug.LogWarning("[LobbyManager] CustomMessagingManager not ready; cannot send teleport yet.");
+            return;
+        }
+
+        using var writer = new FastBufferWriter(sizeof(float) * 7, Allocator.Temp);
+        writer.WriteValueSafe(pos);
+        writer.WriteValueSafe(rot);
+
+        cmm.SendNamedMessage(MSG_TELEPORT, targetClientId, writer);
+    }
+
+    private void OnTeleportMessage(ulong senderClientId, FastBufferReader reader)
+    {
+        reader.ReadValueSafe(out Vector3 pos);
+        reader.ReadValueSafe(out Quaternion rot);
+
+        TeleportLocalPlayer(pos, rot);
+    }
+
+    private void TeleportLocalPlayer(Vector3 pos, Quaternion rot)
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm == null) return;
+
+        var playerObj = nm.LocalClient?.PlayerObject;
+        if (playerObj == null) return;
+
+        var cc = playerObj.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        playerObj.transform.SetPositionAndRotation(pos, rot);
+
+        if (cc != null) cc.enabled = true;
+    }
 }
