@@ -5,16 +5,19 @@ using Unity.Services.Lobbies.Models;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class PregameUI : MonoBehaviour {
+public class PregameUI : MonoBehaviour
+{
+    [SerializeField]
+    private TextMeshProUGUI lobbyCodeText;
 
-    [SerializeField] private TextMeshProUGUI lobbyCodeText;
-    
-    public void SetPregameUI() {
+    public void SetPregameUI()
+    {
         Lobby lobby = LobbyManager.Instance.GetLobby();
         lobbyCodeText.text = lobby.Name + ": " + lobby.LobbyCode;
     }
 
-    public void Show() {
+    public void Show()
+    {
         gameObject.SetActive(true);
     }
 }

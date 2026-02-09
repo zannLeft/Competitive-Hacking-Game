@@ -1,9 +1,9 @@
 using Unity.Netcode.Components;
 
-    public class OwnerNetworkAnimator : NetworkAnimator
+public class OwnerNetworkAnimator : NetworkAnimator
+{
+    protected override bool OnIsServerAuthoritative()
     {
-        protected override bool OnIsServerAuthoritative()
-        {
-            return false;
-        }
+        return false;
     }
+}

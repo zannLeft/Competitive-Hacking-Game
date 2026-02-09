@@ -17,12 +17,12 @@ public class PlayerMotor : NetworkBehaviour
     private bool couldStand = true;
     private bool canStand = true;
 
-    public  bool sprinting = false;
-    public  bool crouching = false;
-    public  bool sliding = false;
+    public bool sprinting = false;
+    public bool crouching = false;
+    public bool sliding = false;
 
     private bool sprintButtonHeld = false;
-    private bool crouchButtonHeld = false;   // NEW: crouch is now a hold
+    private bool crouchButtonHeld = false; // NEW: crouch is now a hold
     private bool jumpButtonHeld = false;
     private bool jumpedFromSlide = false;
     private bool reCrouchAfterJump = false;
@@ -31,38 +31,65 @@ public class PlayerMotor : NetworkBehaviour
     private bool startedCrouchingInAir = false;
 
     [Header("Speeds")]
-    [SerializeField] private float speed = 5f;
-    [SerializeField] private float sprintSpeed = 7.5f;
-    [SerializeField] private float jumpHeight = 2f;
+    [SerializeField]
+    private float speed = 5f;
+
+    [SerializeField]
+    private float sprintSpeed = 7.5f;
+
+    [SerializeField]
+    private float jumpHeight = 2f;
 
     [Header("Collider (Stand/Crouch)")]
-    [SerializeField] private float crouchHeight = 0.80129076f;
-    [SerializeField] private float standHeight = 1.685f;
+    [SerializeField]
+    private float crouchHeight = 0.80129076f;
 
-    [SerializeField] private float crouchCenterY = 0.47814538f;
-    [SerializeField] private float standCenterY = 0.92f;
+    [SerializeField]
+    private float standHeight = 1.685f;
+
+    [SerializeField]
+    private float crouchCenterY = 0.47814538f;
+
+    [SerializeField]
+    private float standCenterY = 0.92f;
 
     [Header("Slide")]
-    [SerializeField] private float slideSpeed = 8f;
-    [SerializeField] private float slideSpeedDecay = 6f;
-    [SerializeField] private float minSlideSpeed = 2f;
-    [SerializeField] private float slideCancelGrace = 0.33f; // grace window before evaluating cancel
-    private float slideElapsed;                               // time since slide started
+    [SerializeField]
+    private float slideSpeed = 8f;
+
+    [SerializeField]
+    private float slideSpeedDecay = 6f;
+
+    [SerializeField]
+    private float minSlideSpeed = 2f;
+
+    [SerializeField]
+    private float slideCancelGrace = 0.33f; // grace window before evaluating cancel
+    private float slideElapsed; // time since slide started
     private float slideTimer;
     private const float slideTimerMax = 1.3f;
 
     [Header("Coil (Air-Only)")]
-    [SerializeField] private float coilHeight = 1.2f; // collider height while coiling (around center)
-    [SerializeField] private bool  coiling = false;   // visible in the inspector
-    public  bool Coiling => coiling;
+    [SerializeField]
+    private float coilHeight = 1.2f; // collider height while coiling (around center)
+
+    [SerializeField]
+    private bool coiling = false; // visible in the inspector
+    public bool Coiling => coiling;
 
     [Header("Stand Check")]
-    [Tooltip("Layers that can block standing up. Exclude Player, include ceilings/walls/level geo.")]
-    [SerializeField] private LayerMask standObstructionMask = ~0;
-    [SerializeField] private float    standCheckEpsilon = 0.01f;
+    [Tooltip(
+        "Layers that can block standing up. Exclude Player, include ceilings/walls/level geo."
+    )]
+    [SerializeField]
+    private LayerMask standObstructionMask = ~0;
+
+    [SerializeField]
+    private float standCheckEpsilon = 0.01f;
 
     [Header("Airborne Behavior")]
-    [SerializeField] private float fallLeaveGroundVy = 0.05f; // <= this means we fell (not jumped)
+    [SerializeField]
+    private float fallLeaveGroundVy = 0.05f; // <= this means we fell (not jumped)
 
     private float currentHeight;
     private Vector3 currentCenter;
@@ -73,7 +100,7 @@ public class PlayerMotor : NetworkBehaviour
     private float smoothSpeed = 7.5f;
     private float fallSpeed = 1.5f;
 
-    public  Vector2 inputDirection;
+    public Vector2 inputDirection;
 
     private int xVelHash;
     private int zVelHash;
@@ -85,7 +112,7 @@ public class PlayerMotor : NetworkBehaviour
     private float lastAirbornePlanarSpeed = 0f;
 
     public bool IsSprintHeld => sprintButtonHeld;
-    public bool IsCrouchHeld => crouchButtonHeld;     // NEW
+    public bool IsCrouchHeld => crouchButtonHeld; // NEW
     public bool IsActuallySprinting =>
         sprinting && isGrounded && !sliding && inputDirection.y > 0.01f && currentSpeed > 0.1f;
 
@@ -106,15 +133,16 @@ public class PlayerMotor : NetworkBehaviour
 
     void Update()
     {
-        if (!IsOwner) return;
+        if (!IsOwner)
+            return;
 
         // Gate sprint only while RMB is down; do not change the 'held' flag.
         if (look != null && look.IsRmbHeld && sprinting)
             sprinting = false;
 
         // Order matters
-        UpdateGroundStatus();   // may call Land() or BecameAirborne()
-        HandleSliding();        // consume slide state this frame
+        UpdateGroundStatus(); // may call Land() or BecameAirborne()
+        HandleSliding(); // consume slide state this frame
         HandleJumping();
         UpdateStandStatus();
         UpdateCharacterDimensions();
@@ -131,20 +159,23 @@ public class PlayerMotor : NetworkBehaviour
 
     private void HandleSliding()
     {
-        if (!sliding) return;
+        if (!sliding)
+            return;
 
         float dt = Time.deltaTime;
         slideElapsed += dt;
-        slideTimer   -= dt;
+        slideTimer -= dt;
 
         // slide speed decays but keeps a floor
         slideSpeed = Mathf.Max(slideSpeed - slideSpeedDecay * dt, minSlideSpeed);
 
         // Only evaluate "bad" conditions after a short grace window
         bool graceOver = slideElapsed >= slideCancelGrace;
-        if (slideTimer <= 0f
+        if (
+            slideTimer <= 0f
             || (graceOver && currentSpeed < 2f)
-            || (graceOver && currentSpeedVertical > 1f))
+            || (graceOver && currentSpeedVertical > 1f)
+        )
         {
             // END SLIDE:
             // 1) If crouch is held, remain/go to crouch (priority).
@@ -171,9 +202,9 @@ public class PlayerMotor : NetworkBehaviour
             animator.SetBool("Crouching", crouching);
 
             // Reset slide seeds
-            slideTimer   = slideTimerMax;
+            slideTimer = slideTimerMax;
             slideElapsed = 0f;
-            slideSpeed   = 8f;
+            slideSpeed = 8f;
         }
     }
 
@@ -277,19 +308,30 @@ public class PlayerMotor : NetworkBehaviour
             targetCenterY = standCenterY;
         }
 
-        if (Mathf.Abs(controller.height - targetHeight) > 0.001f ||
-            Mathf.Abs(controller.center.y - targetCenterY) > 0.001f)
+        if (
+            Mathf.Abs(controller.height - targetHeight) > 0.001f
+            || Mathf.Abs(controller.center.y - targetCenterY) > 0.001f
+        )
         {
             float dt = Time.deltaTime;
             float newHeight = Mathf.Lerp(controller.height, targetHeight, 20.0f * dt);
-            Vector3 desiredCenter = new Vector3(controller.center.x, targetCenterY, controller.center.z);
+            Vector3 desiredCenter = new Vector3(
+                controller.center.x,
+                targetCenterY,
+                controller.center.z
+            );
             Vector3 newCenter = Vector3.Lerp(controller.center, desiredCenter, 20.0f * dt);
 
             // Feet-lock when grounded
             if (isGrounded)
             {
-                float oldBottom = transform.position.y + controller.center.y - controller.height * 0.5f + controller.radius;
-                float newBottom = transform.position.y + newCenter.y       - newHeight       * 0.5f + controller.radius;
+                float oldBottom =
+                    transform.position.y
+                    + controller.center.y
+                    - controller.height * 0.5f
+                    + controller.radius;
+                float newBottom =
+                    transform.position.y + newCenter.y - newHeight * 0.5f + controller.radius;
 
                 controller.height = newHeight;
                 controller.center = newCenter;
@@ -320,9 +362,12 @@ public class PlayerMotor : NetworkBehaviour
 
         playerVelocity.y += Physics.gravity.y * Time.deltaTime * fallSpeed;
 
-        if (isGrounded && !sliding)       smoothSpeed = 9f;
-        else if (sliding)                 smoothSpeed = 0.5f;
-        else                               smoothSpeed = 1f;
+        if (isGrounded && !sliding)
+            smoothSpeed = 9f;
+        else if (sliding)
+            smoothSpeed = 0.5f;
+        else
+            smoothSpeed = 1f;
 
         Quaternion moveSpace = (look != null) ? look.MoveSpaceRotation : transform.rotation;
         Vector3 targetDirection = moveSpace * new Vector3(input.x, 0f, input.y);
@@ -394,7 +439,12 @@ public class PlayerMotor : NetworkBehaviour
         Vector3 capsuleTop = capsuleBottom + Vector3.up * standSpan;
 
         bool blocked = Physics.CheckCapsule(
-            capsuleBottom, capsuleTop, radius, standObstructionMask, QueryTriggerInteraction.Ignore);
+            capsuleBottom,
+            capsuleTop,
+            radius,
+            standObstructionMask,
+            QueryTriggerInteraction.Ignore
+        );
 
         Debug.DrawLine(capsuleBottom, capsuleTop, blocked ? Color.red : Color.green, 0.1f);
         return !blocked;
@@ -433,15 +483,16 @@ public class PlayerMotor : NetworkBehaviour
         }
         else
         {
-            if (!sliding) sprinting = false;
+            if (!sliding)
+                sprinting = false;
         }
     }
 
     public void Land()
     {
         // Robust effective speed at touchdown
-        float planarNow       = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
-        float effectiveSpeed  = Mathf.Max(planarNow, lastAirbornePlanarSpeed);
+        float planarNow = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        float effectiveSpeed = Mathf.Max(planarNow, lastAirbornePlanarSpeed);
         lastAirbornePlanarSpeed = 0f;
 
         bool landedFromCoil = coiling || startedCrouchingInAir;
@@ -539,14 +590,20 @@ public class PlayerMotor : NetworkBehaviour
         crouchButtonHeld = held;
 
         // Ignore crouch input while sliding
-        if (sliding) return;
+        if (sliding)
+            return;
 
         if (isGrounded)
         {
             if (held)
             {
                 // Press-to-slide on ground if sprinting & fast enough
-                if (!crouching && sprinting && currentSpeed > 5.85f && Mathf.Abs(inputDirection.x) == 0)
+                if (
+                    !crouching
+                    && sprinting
+                    && currentSpeed > 5.85f
+                    && Mathf.Abs(inputDirection.x) == 0
+                )
                 {
                     Slide();
                     return;

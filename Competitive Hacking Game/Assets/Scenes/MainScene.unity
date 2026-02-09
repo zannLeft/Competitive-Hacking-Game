@@ -5597,8 +5597,15 @@ GameObject:
   m_Component:
   - component: {fileID: 970040465351758276}
   - component: {fileID: 8712805426511540831}
+  - component: {fileID: 8712805426511540838}
+  - component: {fileID: 8712805426511540837}
+  - component: {fileID: 8712805426511540836}
+  - component: {fileID: 8712805426511540835}
+  - component: {fileID: 8712805426511540834}
+  - component: {fileID: 8712805426511540833}
+  - component: {fileID: 8712805426511540832}
   m_Layer: 0
-  m_Name: LobbyManager
+  m_Name: LobbySystem
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5678,21 +5685,107 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eba390cb4ec146d4cba63c17e7c12513, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  lobbyUI: {fileID: 1301652847}
-  pregameUI: {fileID: 2078672026}
-  lobbyCreateUI: {fileID: 502618968}
-  cam: {fileID: 1547934318}
-  shirtMaterials:
-  - {fileID: 2100000, guid: 53b02a6a1bcabff4a99b370f4e61838e, type: 2}
-  - {fileID: 2100000, guid: b4f4ad7bf5a0dc346a7c874b36f46932, type: 2}
-  - {fileID: 2100000, guid: caa3fd0d51947f94b86506f77e81ba30, type: 2}
-  - {fileID: 2100000, guid: 09bc943622489e44f86dfc75d3f54092, type: 2}
-  - {fileID: 2100000, guid: 50329d88a8be50648b35f80efb7f768b, type: 2}
-  blackShirtMaterial: {fileID: 2100000, guid: c871faa8fb13d69479f5fc6b8bf83afb, type: 2}
+  maxPlayers: 5
   lobbySceneName: MainScene
   interiorSceneName: Interior_01
   lobbySpawnTag: LobbySpawn
   interiorSpawnTag: InteriorSpawn
+--- !u!114 &8712805426511540832
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5970143812993203492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1bfc6802ea67d14f8a35061a46a559f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CosmeticsManager
+  shirtMaterials:
+  - {fileID: 2100000, guid: b4f4ad7bf5a0dc346a7c874b36f46932, type: 2}
+  - {fileID: 2100000, guid: 09bc943622489e44f86dfc75d3f54092, type: 2}
+  - {fileID: 2100000, guid: 53b02a6a1bcabff4a99b370f4e61838e, type: 2}
+  - {fileID: 2100000, guid: 50329d88a8be50648b35f80efb7f768b, type: 2}
+  - {fileID: 2100000, guid: caa3fd0d51947f94b86506f77e81ba30, type: 2}
+  blackShirtMaterial: {fileID: 2100000, guid: c871faa8fb13d69479f5fc6b8bf83afb, type: 2}
+--- !u!114 &8712805426511540833
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5970143812993203492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0aa149b3de425c248b51c431beecd67d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TeleportService
+--- !u!114 &8712805426511540834
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5970143812993203492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d8191e009dccba4b92109bda7e24b33, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RelayFacade
+--- !u!114 &8712805426511540835
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5970143812993203492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 52648ef8926b5cb4baf8e5727cad875d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkSessionManager
+--- !u!114 &8712805426511540836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5970143812993203492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aa2bf40d9605e4c4abea44cf39d71676, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MatchFlowManager
+--- !u!114 &8712805426511540837
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5970143812993203492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bc13ab1746826ec4598cad4de5ba04fb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LobbyServicesFacade
+--- !u!114 &8712805426511540838
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5970143812993203492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b669029a19a84924fbcc16f1178157de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LobbySceneUIController
+  lobbyUI: {fileID: 1301652847}
+  pregameUI: {fileID: 2078672026}
+  lobbyCreateUI: {fileID: 502618968}
+  lobbyCam: {fileID: 1547934318}
+  lobbyCameraTag: LobbyCamera
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

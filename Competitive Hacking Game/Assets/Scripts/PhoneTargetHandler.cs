@@ -6,21 +6,32 @@ using UnityEngine.SceneManagement;
 public class PhoneTargetHandler : NetworkBehaviour
 {
     [Header("References")]
-    [SerializeField] private Camera playerCamera;
-    [SerializeField] private PlayerLook playerLook;
+    [SerializeField]
+    private Camera playerCamera;
 
-    private const float offsetDistance   = 0.185f;
+    [SerializeField]
+    private PlayerLook playerLook;
+
+    private const float offsetDistance = 0.185f;
     private const float horizontalOffset = 0.2f;
-    private const float verticalOffset   = -0.06f;
+    private const float verticalOffset = -0.06f;
 
     [Header("Smoothing & Clamp")]
-    [SerializeField] private float rotationSmoothSpeed = 10f;
-    [SerializeField] private float maxPitchUp = 45f;
-    [SerializeField] private float maxPitchDown = -45f;
+    [SerializeField]
+    private float rotationSmoothSpeed = 10f;
+
+    [SerializeField]
+    private float maxPitchUp = 45f;
+
+    [SerializeField]
+    private float maxPitchDown = -45f;
 
     [Header("IK Anchor (child of PhoneTarget)")]
-    [SerializeField] private string ikAnchorName = "IKAnchor";
-    [SerializeField] private Vector3 ikAnchorLocalEuler = new Vector3(-12f, -160f, 0f); // <-- requested spawn rotation
+    [SerializeField]
+    private string ikAnchorName = "IKAnchor";
+
+    [SerializeField]
+    private Vector3 ikAnchorLocalEuler = new Vector3(-12f, -160f, 0f); // <-- requested spawn rotation
 
     private Transform phoneTarget;
     private Transform ikAnchor;
@@ -29,16 +40,18 @@ public class PhoneTargetHandler : NetworkBehaviour
     private bool _initialized;
     private Transform _camT;
 
-    public Transform Target   => phoneTarget;
+    public Transform Target => phoneTarget;
     public Transform IKAnchor => ikAnchor;
-    public bool IsActive      => isPhoneActive;
+    public bool IsActive => isPhoneActive;
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
-        if (!IsOwner) return;
+        if (!IsOwner)
+            return;
 
-        if (playerCamera == null) playerCamera = GetComponentInChildren<Camera>(true);
+        if (playerCamera == null)
+            playerCamera = GetComponentInChildren<Camera>(true);
         _camT = playerCamera ? playerCamera.transform : null;
 
         EnsurePhoneTarget();
@@ -78,9 +91,11 @@ public class PhoneTargetHandler : NetworkBehaviour
 
     void Update()
     {
-        if (!IsOwner || playerCamera == null || playerLook == null) return;
+        if (!IsOwner || playerCamera == null || playerLook == null)
+            return;
 
-        if (phoneTarget == null) EnsurePhoneTarget();
+        if (phoneTarget == null)
+            EnsurePhoneTarget();
 
         // keep it fresh even when IK isn't sampled (owner only)
         UpdateAnchorImmediate(Time.deltaTime);
@@ -91,7 +106,8 @@ public class PhoneTargetHandler : NetworkBehaviour
     /// </summary>
     public void UpdateAnchorImmediate(float dt)
     {
-        if (_camT == null || playerLook == null || phoneTarget == null) return;
+        if (_camT == null || playerLook == null || phoneTarget == null)
+            return;
 
         if (!_initialized)
         {
@@ -102,11 +118,15 @@ public class PhoneTargetHandler : NetworkBehaviour
 
         float pitch = Mathf.Clamp(playerLook.Pitch, maxPitchDown, maxPitchUp);
         Quaternion targetRotation = Quaternion.Euler(pitch, _camT.eulerAngles.y, 0f);
-        smoothedRotation = Quaternion.Slerp(smoothedRotation, targetRotation, rotationSmoothSpeed * dt);
+        smoothedRotation = Quaternion.Slerp(
+            smoothedRotation,
+            targetRotation,
+            rotationSmoothSpeed * dt
+        );
 
         Vector3 forwardOffset = smoothedRotation * Vector3.forward * offsetDistance;
-        Vector3 rightOffset   = smoothedRotation * Vector3.right   * horizontalOffset;
-        Vector3 upOffset      = smoothedRotation * Vector3.up      * verticalOffset;
+        Vector3 rightOffset = smoothedRotation * Vector3.right * horizontalOffset;
+        Vector3 upOffset = smoothedRotation * Vector3.up * verticalOffset;
 
         Vector3 targetPosition = _camT.position + forwardOffset + rightOffset + upOffset;
 
@@ -118,12 +138,14 @@ public class PhoneTargetHandler : NetworkBehaviour
 
     public void SetPhoneActive(bool value)
     {
-        if (!IsOwner) return;
+        if (!IsOwner)
+            return;
 
         if (value && phoneTarget == null)
             EnsurePhoneTarget();
 
-        if (value == isPhoneActive) return;
+        if (value == isPhoneActive)
+            return;
         isPhoneActive = value;
 
         if (phoneTarget != null)
@@ -135,7 +157,8 @@ public class PhoneTargetHandler : NetworkBehaviour
 
     private void EnsurePhoneTarget()
     {
-        if (phoneTarget != null) return;
+        if (phoneTarget != null)
+            return;
 
         var name = $"PhoneTarget_{(NetworkManager ? NetworkManager.LocalClientId : 0)}";
         GameObject targetObj = new GameObject(name);
@@ -151,7 +174,8 @@ public class PhoneTargetHandler : NetworkBehaviour
 
     private void CreateOrFindIKAnchor()
     {
-        if (phoneTarget == null) return;
+        if (phoneTarget == null)
+            return;
 
         var t = phoneTarget.Find(ikAnchorName);
         if (t == null)

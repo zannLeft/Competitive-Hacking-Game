@@ -5,18 +5,23 @@ using Unity.Services.Lobbies.Models;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class LobbyListSingleUI : MonoBehaviour {
-
-    [SerializeField] private TextMeshProUGUI lobbyNameText;
+public class LobbyListSingleUI : MonoBehaviour
+{
+    [SerializeField]
+    private TextMeshProUGUI lobbyNameText;
     private Lobby lobby;
 
-
-    private void Awake() {
-        GetComponent<Button>().onClick.AddListener(() => {
-            LobbyManager.Instance.JoinWithId(lobby.Id);
-        });
+    private void Awake()
+    {
+        GetComponent<Button>()
+            .onClick.AddListener(() =>
+            {
+                LobbyManager.Instance.JoinWithId(lobby.Id);
+            });
     }
-    public void SetLobby(Lobby lobby) {
+
+    public void SetLobby(Lobby lobby)
+    {
         this.lobby = lobby;
         lobbyNameText.text = lobby.Name;
     }

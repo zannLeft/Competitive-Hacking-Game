@@ -33,15 +33,15 @@ public class InputManager : NetworkBehaviour
     {
         if (IsOwner)
         {
-            onFoot.Jump.started   += OnJumpStarted;
-            onFoot.Jump.canceled  += OnJumpCanceled;
+            onFoot.Jump.started += OnJumpStarted;
+            onFoot.Jump.canceled += OnJumpCanceled;
 
             onFoot.Sprint.started += OnSprintStarted;
-            onFoot.Sprint.canceled+= OnSprintCanceled;
+            onFoot.Sprint.canceled += OnSprintCanceled;
 
             // CROUCH is now a HOLD:
-            onFoot.Crouch.started += OnCrouchStarted;   // send true
-            onFoot.Crouch.canceled+= OnCrouchCanceled;  // send false
+            onFoot.Crouch.started += OnCrouchStarted; // send true
+            onFoot.Crouch.canceled += OnCrouchCanceled; // send false
 
             onFoot.Enable();
 
@@ -49,7 +49,7 @@ public class InputManager : NetworkBehaviour
             ui.Pause.performed += OnPausePerformed;
             ui.Enable();
 
-            onFoot.Phone.started  += OnPhoneHoldStarted;
+            onFoot.Phone.started += OnPhoneHoldStarted;
             onFoot.Phone.canceled += OnPhoneHoldCanceled;
 
             onFoot.Flashlight.performed += OnFlashlightPerformed;
@@ -61,18 +61,23 @@ public class InputManager : NetworkBehaviour
         PauseMenuUI.Instance?.Toggle();
     }
 
-    private void OnJumpStarted (InputAction.CallbackContext ctx) => motor.Jump(true);
+    private void OnJumpStarted(InputAction.CallbackContext ctx) => motor.Jump(true);
+
     private void OnJumpCanceled(InputAction.CallbackContext ctx) => motor.Jump(false);
+
     private void OnSprintStarted(InputAction.CallbackContext ctx) => motor.Sprint(true);
-    private void OnSprintCanceled(InputAction.CallbackContext ctx)=> motor.Sprint(false);
+
+    private void OnSprintCanceled(InputAction.CallbackContext ctx) => motor.Sprint(false);
 
     // NEW: crouch hold
-    private void OnCrouchStarted (InputAction.CallbackContext ctx) => motor.Crouch(true);
+    private void OnCrouchStarted(InputAction.CallbackContext ctx) => motor.Crouch(true);
+
     private void OnCrouchCanceled(InputAction.CallbackContext ctx) => motor.Crouch(false);
 
     void Update()
     {
-        if (!IsOwner) return;
+        if (!IsOwner)
+            return;
         motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
         look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
@@ -81,14 +86,14 @@ public class InputManager : NetworkBehaviour
     {
         if (IsOwner)
         {
-            onFoot.Jump.started   -= OnJumpStarted;
-            onFoot.Jump.canceled  -= OnJumpCanceled;
+            onFoot.Jump.started -= OnJumpStarted;
+            onFoot.Jump.canceled -= OnJumpCanceled;
 
             onFoot.Sprint.started -= OnSprintStarted;
-            onFoot.Sprint.canceled-= OnSprintCanceled;
+            onFoot.Sprint.canceled -= OnSprintCanceled;
 
             // remove old .performed, add started/canceled unsubscribes
-            onFoot.Crouch.started  -= OnCrouchStarted;
+            onFoot.Crouch.started -= OnCrouchStarted;
             onFoot.Crouch.canceled -= OnCrouchCanceled;
 
             ui.Pause.performed -= OnPausePerformed;
@@ -97,7 +102,7 @@ public class InputManager : NetworkBehaviour
             onFoot.Disable();
             ui.Disable();
 
-            onFoot.Phone.started  -= OnPhoneHoldStarted;
+            onFoot.Phone.started -= OnPhoneHoldStarted;
             onFoot.Phone.canceled -= OnPhoneHoldCanceled;
 
             onFoot.Flashlight.performed -= OnFlashlightPerformed;
@@ -106,8 +111,12 @@ public class InputManager : NetworkBehaviour
 
     public void SetGameplayEnabled(bool enabled)
     {
-        if (!IsOwner) return;
-        if (enabled) onFoot.Enable(); else onFoot.Disable();
+        if (!IsOwner)
+            return;
+        if (enabled)
+            onFoot.Enable();
+        else
+            onFoot.Disable();
     }
 
     private void OnStartPerformed(InputAction.CallbackContext ctx)
@@ -140,7 +149,8 @@ public class InputManager : NetworkBehaviour
 
     private void OnFlashlightPerformed(InputAction.CallbackContext ctx)
     {
-        if (phone == null) return;
+        if (phone == null)
+            return;
 
         phone.ToggleFlashlight();
 

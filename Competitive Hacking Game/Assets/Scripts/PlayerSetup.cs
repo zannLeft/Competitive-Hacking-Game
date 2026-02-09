@@ -1,23 +1,19 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
 using Unity.Netcode;
+using UnityEngine;
 using UnityEngine.Rendering;
 
 public class PlayerSetup : NetworkBehaviour
 {
     [Header("Renderers (assign in inspector)")]
-    public SkinnedMeshRenderer headRenderer; // head mesh (3 materials; index 2 is shirt)
-    public SkinnedMeshRenderer bodyRenderer; // body mesh (10 materials; indices 1,2,6,7 are shirt)
+    public SkinnedMeshRenderer headRenderer;
+    public SkinnedMeshRenderer bodyRenderer;
 
-    // networked shirt index. Server is authoritative for assignment.
     public NetworkVariable<int> ShirtIndex = new NetworkVariable<int>(
         0,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
 
-    // later we'll add IsBadGuy; keep it ready for next steps.
     public NetworkVariable<bool> IsBadGuy = new NetworkVariable<bool>(
         false,
         NetworkVariableReadPermission.Everyone,
@@ -26,16 +22,13 @@ public class PlayerSetup : NetworkBehaviour
 
     private void Start()
     {
-        // keep compatibility with your old Start that set shadow mode
         if (headRenderer != null)
         {
-            if (IsOwner)
-                headRenderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
-            else
-                headRenderer.shadowCastingMode = ShadowCastingMode.On;
+            headRenderer.shadowCastingMode = IsOwner
+                ? ShadowCastingMode.ShadowsOnly
+                : ShadowCastingMode.On;
         }
 
-        // layers logic from your original Start
         if (IsOwner)
             SetLayerRecursively(gameObject, LayerMask.NameToLayer("MyPlayer"));
         else
@@ -46,76 +39,67 @@ public class PlayerSetup : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
-        // Only the server assigns shirt indices when player object spawns on the server
         if (IsServer)
         {
-            // Ask LobbyManager to assign next available index
-            if (LobbyManager.Instance != null)
+            var cosmetics = LobbyManager.Instance != null ? LobbyManager.Instance.Cosmetics : null;
+            if (cosmetics != null)
             {
-                int idx = LobbyManager.Instance.AssignColorIndex();
-                ShirtIndex.Value = idx;
-                Debug.Log($"[Server] Assigned shirt index {idx} to client {OwnerClientId}");
+                ShirtIndex.Value = cosmetics.AssignColorIndex();
+                Debug.Log(
+                    $"[Server] Assigned shirt index {ShirtIndex.Value} to client {OwnerClientId}"
+                );
             }
             else
             {
-                Debug.LogWarning("[PlayerSetup] LobbyManager.Instance is null on server when assigning shirt index");
+                Debug.LogWarning(
+                    "[PlayerSetup] CosmeticsManager not found when assigning shirt index"
+                );
             }
         }
 
-        // Always apply local materials when the network variable changes
-        ShirtIndex.OnValueChanged += (oldVal, newVal) => ApplyShirtMaterial();
-        IsBadGuy.OnValueChanged += (oldVal, newVal) => ApplyShirtMaterial();
+        ShirtIndex.OnValueChanged += (_, __) => ApplyShirtMaterial();
+        IsBadGuy.OnValueChanged += (_, __) => ApplyShirtMaterial();
 
-        // If the variables already have values (e.g. after scene change), apply them now
         ApplyShirtMaterial();
     }
 
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
-        // release the index back to LobbyManager so it can be reused
-        if (IsServer && LobbyManager.Instance != null)
-        {
-            LobbyManager.Instance.ReleaseColorIndex(ShirtIndex.Value);
-        }
+
+        if (IsServer && LobbyManager.Instance != null && LobbyManager.Instance.Cosmetics != null)
+            LobbyManager.Instance.Cosmetics.ReleaseColorIndex(ShirtIndex.Value);
     }
 
     private void ApplyShirtMaterial()
     {
-        // Defensive checks
-        if (headRenderer == null || bodyRenderer == null) return;
-        if (LobbyManager.Instance == null) return;
+        if (headRenderer == null || bodyRenderer == null)
+            return;
+        if (LobbyManager.Instance == null)
+            return;
 
-        Material shirtMaterial = LobbyManager.Instance.GetShirtMaterial(ShirtIndex.Value);
+        var cosmetics = LobbyManager.Instance.Cosmetics;
+        if (cosmetics == null)
+            return;
 
-        // If this player is the bad guy, use the black material (will be set in LobbyManager inspector).
-        if (IsBadGuy.Value && LobbyManager.Instance.blackShirtMaterial != null)
-        {
-            shirtMaterial = LobbyManager.Instance.blackShirtMaterial;
-        }
+        Material shirtMaterial = cosmetics.GetShirtMaterial(ShirtIndex.Value);
 
-        // Apply to head mesh: element 2
+        if (IsBadGuy.Value && cosmetics.BlackShirtMaterial != null)
+            shirtMaterial = cosmetics.BlackShirtMaterial;
+
         var headMats = headRenderer.materials;
         if (headMats.Length > 2)
         {
             headMats[2] = shirtMaterial;
             headRenderer.materials = headMats;
         }
-        else
-        {
-            Debug.LogWarning($"[PlayerSetup] headRenderer does not have element 2. Count: {headMats.Length}");
-        }
 
-        // Apply to body mesh: elements 1, 2, 6, 7
         var bodyMats = bodyRenderer.materials;
-        int[] bodyIndices = new int[] { 1, 2, 6, 7 };
-        foreach (int i in bodyIndices)
-        {
+        int[] indices = { 1, 2, 6, 7 };
+        foreach (var i in indices)
             if (bodyMats.Length > i)
                 bodyMats[i] = shirtMaterial;
-            else
-                Debug.LogWarning($"[PlayerSetup] bodyRenderer missing material index {i}. Count: {bodyMats.Length}");
-        }
+
         bodyRenderer.materials = bodyMats;
     }
 

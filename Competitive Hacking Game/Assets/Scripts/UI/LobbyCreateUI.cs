@@ -4,18 +4,27 @@ using UnityEngine.UI;
 
 public class LobbyCreateUI : MonoBehaviour
 {
-    [SerializeField] private Button closeButton;
-    [SerializeField] private Button createPublicButton;
-    [SerializeField] private Button createPrivateButton;
-    [SerializeField] private TMP_InputField lobbyNameInputField;
+    [SerializeField]
+    private Button closeButton;
+
+    [SerializeField]
+    private Button createPublicButton;
+
+    [SerializeField]
+    private Button createPrivateButton;
+
+    [SerializeField]
+    private TMP_InputField lobbyNameInputField;
 
     private void Awake()
     {
-        createPublicButton.onClick.AddListener(() => {
+        createPublicButton.onClick.AddListener(() =>
+        {
             LobbyManager.Instance.CreateLobby(lobbyNameInputField.text, false);
         });
 
-        createPrivateButton.onClick.AddListener(() => {
+        createPrivateButton.onClick.AddListener(() =>
+        {
             LobbyManager.Instance.CreateLobby(lobbyNameInputField.text, true);
         });
 

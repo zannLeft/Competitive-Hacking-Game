@@ -1,5 +1,5 @@
-using UnityEngine;
 using Unity.Netcode;
+using UnityEngine;
 using UnityEngine.Experimental.Rendering; // GraphicsFormat + SystemInfo support checks
 
 /// Controls the phone “screen” rendering.
@@ -9,29 +9,44 @@ using UnityEngine.Experimental.Rendering; // GraphicsFormat + SystemInfo support
 public class PhoneScreenController : MonoBehaviour
 {
     [Header("References")]
-    [SerializeField] private Camera uiCam;            // PhoneUI_Cam
-    [SerializeField] private Canvas uiCanvas;         // PhoneUI (Screen Space - Camera)
-    [SerializeField] private MeshRenderer screenMR;   // Renderer that contains the screen sub-material
-    [SerializeField] private int screenMaterialIndex = 1;
+    [SerializeField]
+    private Camera uiCam; // PhoneUI_Cam
+
+    [SerializeField]
+    private Canvas uiCanvas; // PhoneUI (Screen Space - Camera)
+
+    [SerializeField]
+    private MeshRenderer screenMR; // Renderer that contains the screen sub-material
+
+    [SerializeField]
+    private int screenMaterialIndex = 1;
 
     [Header("Materials")]
-    [SerializeField] private Material remoteSolidMat; // What remotes (and local when screen off) see (Unlit solid color)
+    [SerializeField]
+    private Material remoteSolidMat; // What remotes (and local when screen off) see (Unlit solid color)
 
     [Header("RenderTexture (local only)")]
-    [SerializeField] private int rtWidth  = 1024;
-    [SerializeField] private int rtHeight = 2048;
-    [SerializeField] private bool useMipmaps = false;
+    [SerializeField]
+    private int rtWidth = 1024;
+
+    [SerializeField]
+    private int rtHeight = 2048;
+
+    [SerializeField]
+    private bool useMipmaps = false;
 
     // Runtime
     private RenderTexture _rt;
-    private Material _runtimeMat;   // per-instance copy so we never touch shared assets
+    private Material _runtimeMat; // per-instance copy so we never touch shared assets
     private PlayerPhone _ownerPhone;
     private bool _isOwner;
 
     void Awake()
     {
-        if (uiCam)    uiCam.enabled = false;
-        if (uiCanvas) uiCanvas.enabled = false;
+        if (uiCam)
+            uiCam.enabled = false;
+        if (uiCanvas)
+            uiCanvas.enabled = false;
 
         _ownerPhone = GetComponentInParent<PlayerPhone>();
         _isOwner = (_ownerPhone && _ownerPhone.IsOwner);
@@ -41,7 +56,8 @@ public class PhoneScreenController : MonoBehaviour
 
     private void ConfigureOnce()
     {
-        if (!screenMR) return;
+        if (!screenMR)
+            return;
 
         // Defend against bad indices
         int idx = Mathf.Clamp(screenMaterialIndex, 0, screenMR.sharedMaterials.Length - 1);
@@ -55,30 +71,32 @@ public class PhoneScreenController : MonoBehaviour
             screenMR.materials = mats;
 
             // 2) Create a private RT with a valid depth-stencil format (fixes RenderGraph warning)
-            var colorGF = (QualitySettings.activeColorSpace == ColorSpace.Linear)
-                ? GraphicsFormat.R8G8B8A8_SRGB
-                : GraphicsFormat.R8G8B8A8_UNorm;
+            var colorGF =
+                (QualitySettings.activeColorSpace == ColorSpace.Linear)
+                    ? GraphicsFormat.R8G8B8A8_SRGB
+                    : GraphicsFormat.R8G8B8A8_UNorm;
 
             var desc = new RenderTextureDescriptor(rtWidth, rtHeight)
             {
-                graphicsFormat     = colorGF,
-                depthStencilFormat = GraphicsFormat.D32_SFloat_S8_UInt,  // <- MUST NOT be None in URP/RenderGraph
-                msaaSamples        = 1,
-                mipCount           = useMipmaps ? -1 : 1, // -1 lets Unity pick a full chain
-                useMipMap          = useMipmaps,
-                autoGenerateMips   = useMipmaps,
-                sRGB               = (QualitySettings.activeColorSpace == ColorSpace.Linear),
+                graphicsFormat = colorGF,
+                depthStencilFormat = GraphicsFormat.D32_SFloat_S8_UInt, // <- MUST NOT be None in URP/RenderGraph
+                msaaSamples = 1,
+                mipCount = useMipmaps ? -1 : 1, // -1 lets Unity pick a full chain
+                useMipMap = useMipmaps,
+                autoGenerateMips = useMipmaps,
+                sRGB = (QualitySettings.activeColorSpace == ColorSpace.Linear),
                 // URP will handle dynamic scaling if enabled in pipeline; keep RT simple here.
             };
 
             _rt = new RenderTexture(desc)
             {
                 anisoLevel = 4,
-                name = _ownerPhone ? $"PhoneHUD_{_ownerPhone.OwnerClientId}" : "PhoneHUD"
+                name = _ownerPhone ? $"PhoneHUD_{_ownerPhone.OwnerClientId}" : "PhoneHUD",
             };
             _rt.Create();
 
-            if (uiCam) uiCam.targetTexture = _rt;
+            if (uiCam)
+                uiCam.targetTexture = _rt;
 
             // Assign to the material. Prefer BaseMap; also set EmissionMap if present.
             if (_runtimeMat.HasProperty("_BaseMap"))
@@ -93,8 +111,10 @@ public class PhoneScreenController : MonoBehaviour
         else
         {
             // Remotes: never render the UI camera; swap to a simple solid color material
-            if (uiCam)    uiCam.enabled = false;
-            if (uiCanvas) uiCanvas.enabled = false;
+            if (uiCam)
+                uiCam.enabled = false;
+            if (uiCanvas)
+                uiCanvas.enabled = false;
 
             if (remoteSolidMat)
             {
@@ -121,12 +141,16 @@ public class PhoneScreenController : MonoBehaviour
     /// </summary>
     public void SetScreenOn(bool on)
     {
-        if (!_isOwner) return;
+        if (!_isOwner)
+            return;
 
-        if (uiCam)    uiCam.enabled = on;
-        if (uiCanvas) uiCanvas.enabled = on;
+        if (uiCam)
+            uiCam.enabled = on;
+        if (uiCanvas)
+            uiCanvas.enabled = on;
 
-        if (!screenMR) return;
+        if (!screenMR)
+            return;
 
         int idx = Mathf.Clamp(screenMaterialIndex, 0, screenMR.materials.Length - 1);
         var mats = screenMR.materials;
@@ -148,19 +172,24 @@ public class PhoneScreenController : MonoBehaviour
     /// </summary>
     public void SetRenderingActive(bool active)
     {
-        if (!_isOwner) return;
-        if (uiCam)    uiCam.enabled = active;
-        if (uiCanvas) uiCanvas.enabled = active;
+        if (!_isOwner)
+            return;
+        if (uiCam)
+            uiCam.enabled = active;
+        if (uiCanvas)
+            uiCanvas.enabled = active;
     }
 
     void OnDestroy()
     {
         if (_rt)
         {
-            if (uiCam) uiCam.targetTexture = null;
+            if (uiCam)
+                uiCam.targetTexture = null;
             _rt.Release();
             Destroy(_rt);
         }
-        if (_runtimeMat) Destroy(_runtimeMat);
+        if (_runtimeMat)
+            Destroy(_runtimeMat);
     }
 }

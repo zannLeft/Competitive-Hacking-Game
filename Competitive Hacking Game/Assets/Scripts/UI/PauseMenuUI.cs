@@ -5,17 +5,28 @@ using UnityEngine.UI;
 
 public class PauseMenuUI : MonoBehaviour
 {
-    [SerializeField] private GameObject root;              // The top-level canvas/panel to toggle
-    [SerializeField] private Button resumeButton;
-    [SerializeField] private Button leaveLobbyButton;
-    [SerializeField] private Button endMatchButton;        // Host-only, match-only
+    [SerializeField]
+    private GameObject root; // The top-level canvas/panel to toggle
+
+    [SerializeField]
+    private Button resumeButton;
+
+    [SerializeField]
+    private Button leaveLobbyButton;
+
+    [SerializeField]
+    private Button endMatchButton; // Host-only, match-only
 
     public static PauseMenuUI Instance { get; private set; }
     private bool isOpen;
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
 
         resumeButton.onClick.AddListener(Resume);
@@ -29,8 +40,10 @@ public class PauseMenuUI : MonoBehaviour
 
     public void Toggle()
     {
-        if (isOpen) Resume();
-        else Show();
+        if (isOpen)
+            Resume();
+        else
+            Show();
     }
 
     private void Show()
@@ -45,17 +58,36 @@ public class PauseMenuUI : MonoBehaviour
         Cursor.visible = true;
 
         // Disable only local gameplay inputs
-        var playerObj = NetworkManager.Singleton != null ? NetworkManager.Singleton.LocalClient?.PlayerObject : null;
+        var playerObj =
+            NetworkManager.Singleton != null
+                ? NetworkManager.Singleton.LocalClient?.PlayerObject
+                : null;
         if (playerObj != null)
         {
             var input = playerObj.GetComponent<InputManager>();
-            if (input != null) input.SetGameplayEnabled(false);
+            if (input != null)
+                input.SetGameplayEnabled(false);
         }
+    }
+
+    private void RestoreCursorForCurrentState()
+    {
+        var nm = NetworkManager.Singleton;
+
+        bool inGameplay =
+            nm != null
+            && nm.IsConnectedClient
+            && nm.LocalClient != null
+            && nm.LocalClient.PlayerObject != null;
+
+        Cursor.lockState = inGameplay ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !inGameplay;
     }
 
     private void RefreshButtons()
     {
-        if (endMatchButton == null) return;
+        if (endMatchButton == null)
+            return;
 
         bool isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
         bool inMatch = LobbyManager.Instance != null && LobbyManager.Instance.IsMatchInProgress;
@@ -69,16 +101,18 @@ public class PauseMenuUI : MonoBehaviour
         isOpen = false;
         root.SetActive(false);
 
-        var playerObj = NetworkManager.Singleton != null ? NetworkManager.Singleton.LocalClient?.PlayerObject : null;
+        var playerObj =
+            NetworkManager.Singleton != null
+                ? NetworkManager.Singleton.LocalClient?.PlayerObject
+                : null;
         if (playerObj != null)
         {
             var input = playerObj.GetComponent<InputManager>();
-            if (input != null) input.SetGameplayEnabled(true);
+            if (input != null)
+                input.SetGameplayEnabled(true);
         }
 
-        // Lock mouse back for gameplay
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        RestoreCursorForCurrentState();
     }
 
     private void Leave()

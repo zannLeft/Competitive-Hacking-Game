@@ -3,7 +3,8 @@ using UnityEngine.SceneManagement;
 
 public class LoadCityBase : MonoBehaviour
 {
-    [SerializeField] private string cityBaseSceneName = "City_Base";
+    [SerializeField]
+    private string cityBaseSceneName = "City_Base";
 
     private void Awake()
     {
