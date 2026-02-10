@@ -12,30 +12,48 @@ public class PhoneTargetHandler : NetworkBehaviour
     [SerializeField]
     private PlayerLook playerLook;
 
-    private const float offsetDistance = 0.185f;
-    private const float horizontalOffset = 0.2f;
-    private const float verticalOffset = -0.06f;
+    [Header("Offsets (camera/yaw space)")]
+    [SerializeField]
+    private float offsetDistance = 0.185f; // forward
 
-    [Header("Smoothing & Clamp")]
+    [SerializeField]
+    private float horizontalOffset = 0.20f; // right
+
+    [SerializeField]
+    private float verticalOffset = -0.06f; // world up (negative = down)
+
+    [Header("Rotation (what the phone faces)")]
     [SerializeField]
     private float rotationSmoothSpeed = 10f;
 
     [SerializeField]
-    private float maxPitchUp = 45f;
+    private float maxRotPitchUp = 75f;
 
     [SerializeField]
-    private float maxPitchDown = -45f;
+    private float maxRotPitchDown = -75f;
+
+    [Header("Position pitch influence (prevents extreme stretch)")]
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float positionPitchInfluence = 0.35f;
+
+    [SerializeField]
+    private float maxPosPitchUp = 35f;
+
+    [SerializeField]
+    private float maxPosPitchDown = -35f;
 
     [Header("IK Anchor (child of PhoneTarget)")]
     [SerializeField]
     private string ikAnchorName = "IKAnchor";
 
     [SerializeField]
-    private Vector3 ikAnchorLocalEuler = new Vector3(-12f, -160f, 0f); // <-- requested spawn rotation
+    private Vector3 ikAnchorLocalEuler = new Vector3(-12f, -160f, 0f);
 
     private Transform phoneTarget;
     private Transform ikAnchor;
     private bool isPhoneActive = false;
+
     private Quaternion smoothedRotation;
     private bool _initialized;
     private Transform _camT;
@@ -58,14 +76,11 @@ public class PhoneTargetHandler : NetworkBehaviour
         SceneManager.activeSceneChanged += OnActiveSceneChanged;
     }
 
-    private void OnActiveSceneChanged(Scene oldScene, Scene newScene)
-    {
-        _initialized = false; // reseed smoothing after teleports/loads
-    }
+    private void OnActiveSceneChanged(Scene oldScene, Scene newScene) => _initialized = false;
 
     public override void OnDestroy()
     {
-        base.OnDestroy(); // keep NetworkBehaviour cleanup
+        base.OnDestroy();
         SceneManager.activeSceneChanged -= OnActiveSceneChanged;
 
         if (IsOwner && phoneTarget != null)
@@ -91,48 +106,71 @@ public class PhoneTargetHandler : NetworkBehaviour
 
     void Update()
     {
-        if (!IsOwner || playerCamera == null || playerLook == null)
+        if (!IsOwner || playerLook == null || _camT == null)
             return;
 
         if (phoneTarget == null)
             EnsurePhoneTarget();
 
-        // keep it fresh even when IK isn't sampled (owner only)
         UpdateAnchorImmediate(Time.deltaTime);
     }
 
-    /// <summary>
-    /// Update the anchor NOW (call from OnAnimatorIK before sampling IK target).
-    /// </summary>
     public void UpdateAnchorImmediate(float dt)
     {
         if (_camT == null || playerLook == null || phoneTarget == null)
             return;
 
+        // --- Stable yaw, even at pitch = +/-90 ---
+        // Prefer camera forward projected onto ground.
+        Vector3 flatForward = _camT.forward;
+        flatForward.y = 0f;
+
+        // If looking straight up/down, projected forward collapses -> use right vector to rebuild forward.
+        if (flatForward.sqrMagnitude < 1e-6f)
+        {
+            Vector3 flatRight = _camT.right;
+            flatRight.y = 0f;
+            if (flatRight.sqrMagnitude < 1e-6f)
+                flatRight = transform.right;
+
+            flatRight.Normalize();
+
+            // ✅ IMPORTANT: right × up = forward (NOT up × right)
+            flatForward = Vector3.Cross(flatRight, Vector3.up);
+        }
+
+        flatForward.Normalize();
+        Quaternion yawRot = Quaternion.LookRotation(flatForward, Vector3.up);
+
+        // --- Rotation: full pitch (clamped) ---
+        float rawPitch = playerLook.Pitch;
+        float rotPitch = Mathf.Clamp(rawPitch, maxRotPitchDown, maxRotPitchUp);
+        Quaternion rotPitchQ = Quaternion.AngleAxis(rotPitch, yawRot * Vector3.right);
+        Quaternion targetRotation = rotPitchQ * yawRot;
+
         if (!_initialized)
         {
-            float initPitch = Mathf.Clamp(playerLook.Pitch, maxPitchDown, maxPitchUp);
-            smoothedRotation = Quaternion.Euler(initPitch, _camT.eulerAngles.y, 0f);
+            smoothedRotation = targetRotation;
             _initialized = true;
         }
 
-        float pitch = Mathf.Clamp(playerLook.Pitch, maxPitchDown, maxPitchUp);
-        Quaternion targetRotation = Quaternion.Euler(pitch, _camT.eulerAngles.y, 0f);
         smoothedRotation = Quaternion.Slerp(
             smoothedRotation,
             targetRotation,
             rotationSmoothSpeed * dt
         );
 
-        Vector3 forwardOffset = smoothedRotation * Vector3.forward * offsetDistance;
-        Vector3 rightOffset = smoothedRotation * Vector3.right * horizontalOffset;
-        Vector3 upOffset = smoothedRotation * Vector3.up * verticalOffset;
+        // --- Position: reduced/clamped pitch influence ---
+        float posPitch =
+            Mathf.Clamp(rawPitch, maxPosPitchDown, maxPosPitchUp) * positionPitchInfluence;
+        Quaternion posPitchQ = Quaternion.AngleAxis(posPitch, yawRot * Vector3.right);
+        Quaternion posRot = posPitchQ * yawRot;
 
-        Vector3 targetPosition = _camT.position + forwardOffset + rightOffset + upOffset;
+        Vector3 forwardOffset = (posRot * Vector3.forward) * offsetDistance;
+        Vector3 rightOffset = (yawRot * Vector3.right) * horizontalOffset;
+        Vector3 upOffset = Vector3.up * verticalOffset;
 
-        phoneTarget.position = targetPosition;
-
-        // Restore original facing logic so palm orientation matches the old setup
+        phoneTarget.position = _camT.position + forwardOffset + rightOffset + upOffset;
         phoneTarget.rotation = smoothedRotation;
     }
 
@@ -165,7 +203,7 @@ public class PhoneTargetHandler : NetworkBehaviour
         phoneTarget = targetObj.transform;
 
         phoneTarget.parent = null;
-        Object.DontDestroyOnLoad(targetObj);
+        DontDestroyOnLoad(targetObj);
         phoneTarget.gameObject.SetActive(isPhoneActive);
 
         CreateOrFindIKAnchor();
@@ -184,7 +222,7 @@ public class PhoneTargetHandler : NetworkBehaviour
             t = go.transform;
             t.SetParent(phoneTarget, worldPositionStays: false);
             t.localPosition = Vector3.zero;
-            t.localRotation = Quaternion.Euler(ikAnchorLocalEuler); // <-- apply spawn rotation
+            t.localRotation = Quaternion.Euler(ikAnchorLocalEuler);
         }
         ikAnchor = t;
     }

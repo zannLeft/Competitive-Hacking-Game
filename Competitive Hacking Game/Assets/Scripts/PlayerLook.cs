@@ -4,7 +4,7 @@ using UnityEngine;
 public class PlayerLook : NetworkBehaviour
 {
     private PlayerMotor motor;
-    private Animator animator; // NEW: read IsGrounded & Z_Velocity
+    private Animator animator;
 
     [Header("References")]
     public Camera cam;
@@ -16,7 +16,7 @@ public class PlayerLook : NetworkBehaviour
 
     [Header("Camera Positions (Inspector)")]
     [SerializeField]
-    private bool useInspectorPositions = true; // if false, we auto-fill from current on Start
+    private bool useInspectorPositions = true;
 
     [SerializeField]
     private Vector3 standingLocalPos;
@@ -37,17 +37,17 @@ public class PlayerLook : NetworkBehaviour
     private Vector3 walkBackwardLocalPos;
 
     [SerializeField]
-    private Vector3 walkSideLocalPos; // sideways (pure strafe or lateral-dominant diagonals)
+    private Vector3 walkSideLocalPos;
 
     [SerializeField]
-    private Vector3 coilLocalPos; // camera position while coiling (air-only)
+    private Vector3 coilLocalPos;
 
     [SerializeField]
-    private Vector3 sprintJumpLocalPos; // NEW: camera while sprint-jumping (air-only)
+    private Vector3 sprintJumpLocalPos;
 
     [Header("Sprint-Jump Detection")]
     [SerializeField]
-    private float sprintJumpZThreshold = 2.1f; // Animator Z_Velocity > this = sprint-jump
+    private float sprintJumpZThreshold = 2.1f;
 
     [Header("Strafe Handling")]
     [SerializeField]
@@ -57,16 +57,14 @@ public class PlayerLook : NetworkBehaviour
     public float xSensitivity = 30f;
     public float ySensitivity = 30f;
 
-    // ---------- Mouse Smoothing ----------
     [Header("Mouse Smoothing")]
     [SerializeField]
     private bool smoothMouse = true;
 
     [SerializeField]
-    private float mouseSmoothingTime = 0.05f; // seconds (τ). 0.03–0.07 feels modern.
+    private float mouseSmoothingTime = 0.05f;
 
-    private Vector2 _smoothedDelta; // state for low-pass filter
-
+    private Vector2 _smoothedDelta;
     private float xRotation = 0f;
 
     [Header("FOV")]
@@ -89,7 +87,35 @@ public class PlayerLook : NetworkBehaviour
     public bool instantCatchUpOnMove = true;
     public float catchUpOnMoveSpeed = 1080f;
 
-    // ---------- PITCH (Instant) ----------
+    [Header("Phone Aim Anti-Jank (Shoulder Look still works)")]
+    [SerializeField]
+    private bool disableInstantCatchUpWhilePhone = true;
+
+    [SerializeField, Range(0.1f, 1f)]
+    private float phoneCatchUpSpeedMultiplier = 0.45f;
+
+    [Header("Phone Pitch Lock (RMB)")]
+    [SerializeField]
+    private bool lockPitchWhilePhoneUp = true;
+
+    [SerializeField]
+    private float phonePitchSmoothTime = 0.22f;
+
+    [SerializeField]
+    private float phonePitchMaxSpeed = 0f;
+
+    [SerializeField]
+    private float phonePitchSnapEps = 0.10f;
+
+    private float _phonePitchVel;
+
+    [Header("Crouch + Phone Yaw Lock")]
+    [SerializeField]
+    private float crouchPhoneAlignEps = 0.02f; // degrees
+
+    [SerializeField]
+    private float crouchPhoneAlignSpeedMultiplier = 1.0f; // 1 = same as bodyCatchUpSpeed
+
     [Header("Pitch Offset (Instant) – Standing/Walking/Sprinting")]
     [SerializeField]
     private float pitchForwardMax = 0.10f;
@@ -117,11 +143,9 @@ public class PlayerLook : NetworkBehaviour
     private float crouchPitchUpY = 0.03f;
 
     [Header("Base Position Smoothing")]
-    [Tooltip("Lerp speed for all non-crouch transitions.")]
     [SerializeField]
     private float positionLerpSpeed = 7f;
 
-    [Tooltip("LINEAR speed (units/sec) for crouch <-> uncrouch camera movement.")]
     [SerializeField]
     private float crouchPositionSpeed = 4f;
 
@@ -129,23 +153,17 @@ public class PlayerLook : NetworkBehaviour
     private bool catchingUpStationary = false;
     private bool wasMoving = false;
 
-    // We smooth ONLY the base/local camera position (without pitch offset)
     private Vector3 _smoothedBaseLocalPos;
-    private bool _wasCrouching; // track last-frame crouch state
+    private bool _wasCrouching;
 
     public float Pitch => xRotation;
     public float YawOffset => yawOffset;
 
-    // Phone/aim flags
     private bool phoneAimActive = false;
     public bool IsPhoneAiming => phoneAimActive;
+
     private bool rmbHeld = false;
     public bool IsRmbHeld => rmbHeld;
-
-    public Quaternion WorldLookRotation =>
-        transform.rotation * Quaternion.Euler(0f, yawOffset, 0f) * Quaternion.Euler(Pitch, 0f, 0f);
-
-    public Vector3 WorldLookDirection => WorldLookRotation * Vector3.forward;
 
     void Start()
     {
@@ -163,7 +181,9 @@ public class PlayerLook : NetworkBehaviour
             AutoFillFromCurrentCamera();
 
         _smoothedBaseLocalPos = standingLocalPos;
-        cam.fieldOfView = defaultFOV;
+
+        if (cam != null)
+            cam.fieldOfView = defaultFOV;
 
         if (cameraRoot == null && cam != null)
             cameraRoot = cam.transform.parent;
@@ -178,41 +198,29 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
-        // Recentre pitch toward horizon when looking down during slide or coil
+        // Keep your existing slide/coil "recentre from looking down" behavior
         if ((motor.sliding || motor.Coiling) && xRotation > 0f)
             xRotation = Mathf.Lerp(xRotation, 0f, dt * 3.5f);
 
         bool actuallySprinting = motor != null && motor.IsActuallySprinting;
 
-        // Select BASE target (no pitch here)
         Vector3 baseTargetPos;
 
         if (motor.sliding)
-        {
             baseTargetPos = slidingLocalPos;
-        }
         else if (motor.Coiling)
-        {
-            baseTargetPos = coilLocalPos; // air-only coil position
-        }
+            baseTargetPos = coilLocalPos;
         else
         {
-            // NEW: sprint-jump camera when airborne and moving forward fast (by Animator)
             bool isAirborne = animator != null && !animator.GetBool("IsGrounded");
             float zVel = animator != null ? animator.GetFloat("Z_Velocity") : 0f;
 
             if (isAirborne && zVel > sprintJumpZThreshold)
-            {
                 baseTargetPos = sprintJumpLocalPos;
-            }
             else if (actuallySprinting)
-            {
                 baseTargetPos = sprintingLocalPos;
-            }
             else if (motor.crouching)
-            {
                 baseTargetPos = crouchingLocalPos;
-            }
             else
             {
                 Vector2 move = motor.inputDirection;
@@ -235,8 +243,7 @@ public class PlayerLook : NetworkBehaviour
             }
         }
 
-        // Base position: linear for crouch transitions, lerp otherwise
-        bool useLinear = motor.crouching || _wasCrouching; // entering OR exiting crouch
+        bool useLinear = motor.crouching || _wasCrouching;
         if (useLinear)
             _smoothedBaseLocalPos = Vector3.MoveTowards(
                 _smoothedBaseLocalPos,
@@ -250,7 +257,6 @@ public class PlayerLook : NetworkBehaviour
                 dt * positionLerpSpeed
             );
 
-        // Instant pitch offset (Y and Z)
         float up01 = Mathf.Clamp01(-xRotation / 90f);
         float down01 = Mathf.Clamp01(xRotation / 90f);
 
@@ -263,17 +269,17 @@ public class PlayerLook : NetworkBehaviour
         float yPitch = (-down01 * downMaxY) + (up01 * upMaxY);
         float zPitch = (down01 * fwdMax) - (up01 * backMax);
 
-        cam.transform.localPosition = _smoothedBaseLocalPos + new Vector3(0f, yPitch, zPitch);
+        if (cam != null)
+            cam.transform.localPosition = _smoothedBaseLocalPos + new Vector3(0f, yPitch, zPitch);
 
-        // FOV
         bool fastState = actuallySprinting || motor.sliding;
         float targetFOV = fastState ? sprintFOV : defaultFOV;
-        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovTransitionSpeed);
+        if (cam != null)
+            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovTransitionSpeed);
 
         if (cameraRoot != null)
             cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
 
-        // remember crouch state for next frame
         _wasCrouching = motor.crouching;
     }
 
@@ -284,11 +290,9 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
-        // ---------- Smooth the mouse delta ----------
         Vector2 raw = input;
         if (smoothMouse && mouseSmoothingTime > 0f)
         {
-            // Exponential smoothing with time-constant τ (framerate independent)
             float alpha = 1f - Mathf.Exp(-dt / mouseSmoothingTime);
             _smoothedDelta = Vector2.Lerp(_smoothedDelta, raw, alpha);
         }
@@ -300,45 +304,111 @@ public class PlayerLook : NetworkBehaviour
         float mouseX = _smoothedDelta.x;
         float mouseY = _smoothedDelta.y;
 
-        // PITCH (honor slide/coil pitch recentering rule)
-        if (!(motor.sliding && xRotation > 0f && mouseY <= 0f))
-        {
-            xRotation -= mouseY * dt * ySensitivity;
-            xRotation = Mathf.Clamp(xRotation, -90f, 90f);
-        }
-        cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        bool phoneAllowedNow = phoneAimActive && motor != null && !motor.sliding && !motor.Coiling;
 
-        // YAW (w/ shoulder mode handling)
+        // ---------------- PITCH ----------------
+        if (lockPitchWhilePhoneUp && phoneAllowedNow)
+        {
+            float smoothTime = Mathf.Max(0.0001f, phonePitchSmoothTime);
+            float maxSpeed =
+                (phonePitchMaxSpeed <= 0f) ? float.PositiveInfinity : phonePitchMaxSpeed;
+
+            xRotation = Mathf.SmoothDampAngle(
+                xRotation,
+                0f,
+                ref _phonePitchVel,
+                smoothTime,
+                maxSpeed,
+                dt
+            );
+
+            if (Mathf.Abs(xRotation) <= phonePitchSnapEps)
+            {
+                xRotation = 0f;
+                _phonePitchVel = 0f;
+            }
+        }
+        else
+        {
+            _phonePitchVel = 0f;
+
+            if (!(motor.sliding && xRotation > 0f && mouseY <= 0f))
+            {
+                xRotation -= mouseY * dt * ySensitivity;
+                xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+            }
+        }
+
+        if (cam != null)
+            cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+
+        // ---------------- YAW ----------------
+        float yawDelta = mouseX * dt * xSensitivity;
+
         bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
+
+        // ✅ Phone up while crouching:
+        // - If we already had yawOffset (looked sideways before raising phone), smoothly align (catch up) first.
+        // - Once aligned, body rotates instantly with the camera (yawOffset stays 0).
+        if (phoneAllowedNow && motor.crouching)
+        {
+            float speedMul = phoneCatchUpSpeedMultiplier;
+            float alignStep =
+                bodyCatchUpSpeed
+                * dt
+                * speedMul
+                * Mathf.Max(0.01f, crouchPhoneAlignSpeedMultiplier);
+
+            if (Mathf.Abs(yawOffset) > crouchPhoneAlignEps)
+            {
+                // Keep normal shoulder-style yawOffset accumulation (with overflow passthrough)
+                float newOffset = yawOffset + yawDelta;
+                float clamped = Mathf.Clamp(newOffset, -maxShoulderYaw, maxShoulderYaw);
+                float overflow = newOffset - clamped;
+
+                yawOffset = clamped;
+
+                if (Mathf.Abs(overflow) > 0.0001f)
+                    transform.rotation *= Quaternion.Euler(0f, overflow, 0f);
+
+                // No threshold: always catch up while aligning
+                CatchUp(alignStep);
+
+                if (Mathf.Abs(yawOffset) <= crouchPhoneAlignEps)
+                    yawOffset = 0f;
+
+                catchingUpStationary = false;
+            }
+            else
+            {
+                // Already aligned: instant body rotation
+                yawOffset = 0f;
+                transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
+                catchingUpStationary = false;
+            }
+
+            if (cameraRoot != null)
+                cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
+
+            wasMoving = hasMoveInput;
+            return;
+        }
+
+        // Normal shoulder mode (including crouch-without-phone)
         bool shoulderMode =
             !hasMoveInput
             && !motor.sliding
             && !motor.sprinting
             && (motor.crouching ? shoulderWhileCrouching : true);
 
-        float yawDelta = mouseX * dt * xSensitivity;
+        // ✅ Restore: while phone is up, do NOT allow instant catch-up (so raising phone doesn't snap the body)
+        bool allowInstantCatchUp =
+            instantCatchUpOnMove && !(phoneAllowedNow && disableInstantCatchUpWhilePhone);
 
-        if (phoneAimActive)
-        {
-            transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
+        float speedMulNormal = phoneAllowedNow ? phoneCatchUpSpeedMultiplier : 1f;
 
-            if (Mathf.Abs(yawOffset) > 0.01f)
-            {
-                if (instantCatchUpOnMove)
-                {
-                    transform.rotation *= Quaternion.Euler(0f, yawOffset, 0f);
-                    yawOffset = 0f;
-                }
-                else
-                {
-                    CatchUp(catchUpOnMoveSpeed * dt);
-                }
-            }
-            catchingUpStationary = false;
-        }
-        else if (shoulderMode)
+        if (shoulderMode)
         {
-            // Decoupled yaw with overflow passthrough to avoid turn-speed cap
             float newOffset = yawOffset + yawDelta;
             float clamped = Mathf.Clamp(newOffset, -maxShoulderYaw, maxShoulderYaw);
             float overflow = newOffset - clamped;
@@ -353,7 +423,7 @@ public class PlayerLook : NetworkBehaviour
 
             if (catchingUpStationary)
             {
-                CatchUp(bodyCatchUpSpeed * dt);
+                CatchUp(bodyCatchUpSpeed * dt * speedMulNormal);
                 if (Mathf.Abs(yawOffset) <= 0.01f)
                     catchingUpStationary = false;
             }
@@ -362,21 +432,21 @@ public class PlayerLook : NetworkBehaviour
         {
             if (hasMoveInput && !wasMoving && Mathf.Abs(yawOffset) > 0.01f)
             {
-                if (instantCatchUpOnMove)
+                if (allowInstantCatchUp)
                 {
                     transform.rotation *= Quaternion.Euler(0f, yawOffset, 0f);
                     yawOffset = 0f;
                 }
                 else
                 {
-                    CatchUp(catchUpOnMoveSpeed * dt);
+                    CatchUp(catchUpOnMoveSpeed * dt * speedMulNormal);
                 }
             }
 
             transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
 
-            if (!instantCatchUpOnMove && hasMoveInput && Mathf.Abs(yawOffset) > 0.01f)
-                CatchUp(catchUpOnMoveSpeed * dt);
+            if (!allowInstantCatchUp && hasMoveInput && Mathf.Abs(yawOffset) > 0.01f)
+                CatchUp(catchUpOnMoveSpeed * dt * speedMulNormal);
 
             catchingUpStationary = false;
         }
@@ -430,9 +500,8 @@ public class PlayerLook : NetworkBehaviour
         if (coilLocalPos == Vector3.zero)
             coilLocalPos = basePos + new Vector3(0f, -0.15f, -0.05f);
         if (sprintJumpLocalPos == Vector3.zero)
-            sprintJumpLocalPos = basePos + new Vector3(0f, -0.08f, +0.06f); // subtle forward/down tuck
+            sprintJumpLocalPos = basePos + new Vector3(0f, -0.08f, +0.06f);
 
-        // Default crouch pitch mirrors standing until you tune it
         if (Mathf.Approximately(crouchPitchForwardMax, 0f))
             crouchPitchForwardMax = pitchForwardMax;
         if (Mathf.Approximately(crouchPitchBackwardMax, 0f))

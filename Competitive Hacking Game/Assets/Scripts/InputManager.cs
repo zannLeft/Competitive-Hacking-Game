@@ -1,5 +1,4 @@
-using System.Collections;
-using System.Collections.Generic;
+// InputManager.cs  (RMB phone only, no flashlight input here)
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -13,9 +12,6 @@ public class InputManager : NetworkBehaviour
     private PlayerMotor motor;
     private PlayerLook look;
     private PlayerPhone phone;
-    private PhoneTargetHandler phoneTarget;
-
-    private bool _rmbHeld;
 
     void Awake()
     {
@@ -26,34 +22,30 @@ public class InputManager : NetworkBehaviour
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
         phone = GetComponent<PlayerPhone>();
-        phoneTarget = GetComponent<PhoneTargetHandler>();
     }
 
     public override void OnNetworkSpawn()
     {
-        if (IsOwner)
-        {
-            onFoot.Jump.started += OnJumpStarted;
-            onFoot.Jump.canceled += OnJumpCanceled;
+        if (!IsOwner)
+            return;
 
-            onFoot.Sprint.started += OnSprintStarted;
-            onFoot.Sprint.canceled += OnSprintCanceled;
+        onFoot.Jump.started += OnJumpStarted;
+        onFoot.Jump.canceled += OnJumpCanceled;
 
-            // CROUCH is now a HOLD:
-            onFoot.Crouch.started += OnCrouchStarted; // send true
-            onFoot.Crouch.canceled += OnCrouchCanceled; // send false
+        onFoot.Sprint.started += OnSprintStarted;
+        onFoot.Sprint.canceled += OnSprintCanceled;
 
-            onFoot.Enable();
+        onFoot.Crouch.started += OnCrouchStarted;
+        onFoot.Crouch.canceled += OnCrouchCanceled;
 
-            ui.Start.performed += OnStartPerformed;
-            ui.Pause.performed += OnPausePerformed;
-            ui.Enable();
+        onFoot.Phone.started += OnPhoneHoldStarted;
+        onFoot.Phone.canceled += OnPhoneHoldCanceled;
 
-            onFoot.Phone.started += OnPhoneHoldStarted;
-            onFoot.Phone.canceled += OnPhoneHoldCanceled;
+        onFoot.Enable();
 
-            onFoot.Flashlight.performed += OnFlashlightPerformed;
-        }
+        ui.Start.performed += OnStartPerformed;
+        ui.Pause.performed += OnPausePerformed;
+        ui.Enable();
     }
 
     private void OnPausePerformed(InputAction.CallbackContext ctx)
@@ -69,7 +61,6 @@ public class InputManager : NetworkBehaviour
 
     private void OnSprintCanceled(InputAction.CallbackContext ctx) => motor.Sprint(false);
 
-    // NEW: crouch hold
     private void OnCrouchStarted(InputAction.CallbackContext ctx) => motor.Crouch(true);
 
     private void OnCrouchCanceled(InputAction.CallbackContext ctx) => motor.Crouch(false);
@@ -78,41 +69,40 @@ public class InputManager : NetworkBehaviour
     {
         if (!IsOwner)
             return;
+
         motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
         look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
 
     private void OnDisable()
     {
-        if (IsOwner)
-        {
-            onFoot.Jump.started -= OnJumpStarted;
-            onFoot.Jump.canceled -= OnJumpCanceled;
+        if (!IsOwner)
+            return;
 
-            onFoot.Sprint.started -= OnSprintStarted;
-            onFoot.Sprint.canceled -= OnSprintCanceled;
+        onFoot.Jump.started -= OnJumpStarted;
+        onFoot.Jump.canceled -= OnJumpCanceled;
 
-            // remove old .performed, add started/canceled unsubscribes
-            onFoot.Crouch.started -= OnCrouchStarted;
-            onFoot.Crouch.canceled -= OnCrouchCanceled;
+        onFoot.Sprint.started -= OnSprintStarted;
+        onFoot.Sprint.canceled -= OnSprintCanceled;
 
-            ui.Pause.performed -= OnPausePerformed;
-            ui.Start.performed -= OnStartPerformed;
+        onFoot.Crouch.started -= OnCrouchStarted;
+        onFoot.Crouch.canceled -= OnCrouchCanceled;
 
-            onFoot.Disable();
-            ui.Disable();
+        onFoot.Phone.started -= OnPhoneHoldStarted;
+        onFoot.Phone.canceled -= OnPhoneHoldCanceled;
 
-            onFoot.Phone.started -= OnPhoneHoldStarted;
-            onFoot.Phone.canceled -= OnPhoneHoldCanceled;
+        ui.Pause.performed -= OnPausePerformed;
+        ui.Start.performed -= OnStartPerformed;
 
-            onFoot.Flashlight.performed -= OnFlashlightPerformed;
-        }
+        onFoot.Disable();
+        ui.Disable();
     }
 
     public void SetGameplayEnabled(bool enabled)
     {
         if (!IsOwner)
             return;
+
         if (enabled)
             onFoot.Enable();
         else
@@ -127,34 +117,19 @@ public class InputManager : NetworkBehaviour
 
     private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
-        _rmbHeld = true;
         phone?.SetHolding(true);
         look?.SetAimHeld(true);
-        look?.SetPhoneAim(true);
+        look?.SetPhoneAim(true); // this triggers pitch lock + anti-jank catch-up
     }
 
     private void OnPhoneHoldCanceled(InputAction.CallbackContext ctx)
     {
-        _rmbHeld = false;
-
         phone?.SetHolding(false);
 
-        bool aiming = phone != null && phone.IsFlashlightOn;
-        look?.SetPhoneAim(aiming);
+        look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
         if (motor != null && motor.IsSprintHeld)
             motor.Sprint(true);
-    }
-
-    private void OnFlashlightPerformed(InputAction.CallbackContext ctx)
-    {
-        if (phone == null)
-            return;
-
-        phone.ToggleFlashlight();
-
-        bool aiming = _rmbHeld || phone.IsFlashlightOn;
-        look?.SetPhoneAim(aiming);
     }
 }

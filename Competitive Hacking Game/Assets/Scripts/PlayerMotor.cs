@@ -136,10 +136,6 @@ public class PlayerMotor : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        // Gate sprint only while RMB is down; do not change the 'held' flag.
-        if (look != null && look.IsRmbHeld && sprinting)
-            sprinting = false;
-
         // Order matters
         UpdateGroundStatus(); // may call Land() or BecameAirborne()
         HandleSliding(); // consume slide state this frame
