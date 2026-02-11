@@ -94,15 +94,27 @@ public class PlayerLook : NetworkBehaviour
     [SerializeField, Range(0.1f, 1f)]
     private float phoneCatchUpSpeedMultiplier = 0.45f;
 
-    [Header("Phone Pitch Lock (RMB)")]
+    [Header("Phone Pitch Centering (RMB)")]
     [SerializeField]
     private bool lockPitchWhilePhoneUp = true;
 
+    [Tooltip(
+        "If ON: you can still move pitch a bit, but it's constantly pulled toward 0 (soft spring). If OFF: hard lock to 0."
+    )]
     [SerializeField]
-    private float phonePitchSmoothTime = 0.22f;
+    private bool phoneSoftPitchCentering = true;
+
+    [Tooltip(
+        "How much mouse pitch input is allowed while phone is up. Lower = stronger 'resistance'."
+    )]
+    [SerializeField, Range(0f, 1f)]
+    private float phonePitchInputScale = 0.35f;
 
     [SerializeField]
-    private float phonePitchMaxSpeed = 0f;
+    private float phonePitchSmoothTime = 0.22f; // spring return smoothness
+
+    [SerializeField]
+    private float phonePitchMaxSpeed = 0f; // 0 = unlimited
 
     [SerializeField]
     private float phonePitchSnapEps = 0.10f;
@@ -198,7 +210,7 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
-        // Keep your existing slide/coil "recentre from looking down" behavior
+        // slide/coil "recentre from looking down"
         if ((motor.sliding || motor.Coiling) && xRotation > 0f)
             xRotation = Mathf.Lerp(xRotation, 0f, dt * 3.5f);
 
@@ -313,19 +325,46 @@ public class PlayerLook : NetworkBehaviour
             float maxSpeed =
                 (phonePitchMaxSpeed <= 0f) ? float.PositiveInfinity : phonePitchMaxSpeed;
 
-            xRotation = Mathf.SmoothDampAngle(
-                xRotation,
-                0f,
-                ref _phonePitchVel,
-                smoothTime,
-                maxSpeed,
-                dt
-            );
-
-            if (Mathf.Abs(xRotation) <= phonePitchSnapEps)
+            if (phoneSoftPitchCentering)
             {
-                xRotation = 0f;
-                _phonePitchVel = 0f;
+                // apply reduced pitch input (so you can "resist" the pull)
+                float inputPitch = -mouseY * dt * ySensitivity * phonePitchInputScale;
+                xRotation += inputPitch;
+
+                // soft spring toward center (no clamp)
+                xRotation = Mathf.SmoothDampAngle(
+                    xRotation,
+                    0f,
+                    ref _phonePitchVel,
+                    smoothTime,
+                    maxSpeed,
+                    dt
+                );
+
+                // snap only when basically centered AND not pushing pitch
+                if (Mathf.Abs(xRotation) <= phonePitchSnapEps && Mathf.Abs(mouseY) < 0.001f)
+                {
+                    xRotation = 0f;
+                    _phonePitchVel = 0f;
+                }
+            }
+            else
+            {
+                // hard lock to center (old behavior)
+                xRotation = Mathf.SmoothDampAngle(
+                    xRotation,
+                    0f,
+                    ref _phonePitchVel,
+                    smoothTime,
+                    maxSpeed,
+                    dt
+                );
+
+                if (Mathf.Abs(xRotation) <= phonePitchSnapEps)
+                {
+                    xRotation = 0f;
+                    _phonePitchVel = 0f;
+                }
             }
         }
         else
@@ -344,12 +383,9 @@ public class PlayerLook : NetworkBehaviour
 
         // ---------------- YAW ----------------
         float yawDelta = mouseX * dt * xSensitivity;
-
         bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
 
-        // ✅ Phone up while crouching:
-        // - If we already had yawOffset (looked sideways before raising phone), smoothly align (catch up) first.
-        // - Once aligned, body rotates instantly with the camera (yawOffset stays 0).
+        // phone up while crouching: smooth align if offset existed, then instant
         if (phoneAllowedNow && motor.crouching)
         {
             float speedMul = phoneCatchUpSpeedMultiplier;
@@ -361,7 +397,6 @@ public class PlayerLook : NetworkBehaviour
 
             if (Mathf.Abs(yawOffset) > crouchPhoneAlignEps)
             {
-                // Keep normal shoulder-style yawOffset accumulation (with overflow passthrough)
                 float newOffset = yawOffset + yawDelta;
                 float clamped = Mathf.Clamp(newOffset, -maxShoulderYaw, maxShoulderYaw);
                 float overflow = newOffset - clamped;
@@ -371,7 +406,6 @@ public class PlayerLook : NetworkBehaviour
                 if (Mathf.Abs(overflow) > 0.0001f)
                     transform.rotation *= Quaternion.Euler(0f, overflow, 0f);
 
-                // No threshold: always catch up while aligning
                 CatchUp(alignStep);
 
                 if (Mathf.Abs(yawOffset) <= crouchPhoneAlignEps)
@@ -381,7 +415,6 @@ public class PlayerLook : NetworkBehaviour
             }
             else
             {
-                // Already aligned: instant body rotation
                 yawOffset = 0f;
                 transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
                 catchingUpStationary = false;
@@ -394,14 +427,13 @@ public class PlayerLook : NetworkBehaviour
             return;
         }
 
-        // Normal shoulder mode (including crouch-without-phone)
         bool shoulderMode =
             !hasMoveInput
             && !motor.sliding
             && !motor.sprinting
             && (motor.crouching ? shoulderWhileCrouching : true);
 
-        // ✅ Restore: while phone is up, do NOT allow instant catch-up (so raising phone doesn't snap the body)
+        // while phone is up, no instant catch-up (avoid snapping body)
         bool allowInstantCatchUp =
             instantCatchUpOnMove && !(phoneAllowedNow && disableInstantCatchUpWhilePhone);
 
