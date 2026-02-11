@@ -1303,6 +1303,9 @@ MonoBehaviour:
   disableInstantCatchUpWhilePhone: 1
   phoneCatchUpSpeedMultiplier: 0.45
   lockPitchWhilePhoneUp: 1
+  phonePitchTargetDegrees: 35
+  phoneSoftPitchCentering: 1
+  phonePitchInputScale: 0.35
   phonePitchSmoothTime: 0.22
   phonePitchMaxSpeed: 0
   phonePitchSnapEps: 0.1
@@ -1503,10 +1506,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HeadLookIK
   ShowTopMostFoldoutHeaderGroup: 1
   phoneMaskParam: PhoneMask
-  bodyWeightDefault: 0.15
-  bodyWeightPhoneUp: 1
-  bodyWeightSmoothTime: 0.14
-  bodyWeightMaxSpeed: 0
+  phoneBodyWeight: 1
+  phonePitchScale: 0.3
+  phoneBlendThreshold: 0.02
+  bodyWeightSmoothTime: 0.1
+  pitchScaleSmoothTime: 0.1
+  crouchExitHoldTime: 0.2
 --- !u!114 &5216577995390182814
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1523,23 +1528,22 @@ MonoBehaviour:
   playerCamera: {fileID: 2272284346070443280}
   playerLook: {fileID: 6487965562487473033}
   motor: {fileID: 0}
-  offsetDistance: 0.185
+  offsetDistance: 0.1
   horizontalOffset: 0.2
-  verticalOffset: -0.06
-  sprintDistanceMultiplier: 0.755
-  sprintVerticalDelta: -0.05
-  sprintAdjustSmoothTime: 0.5
-  sprintAdjustMaxSpeed: 0
+  verticalOffset: -0.2
   rotationSmoothSpeed: 5
-  swayResponsivenessMultiplier: 2
-  phoneFacingOffsetEuler: {x: 0, y: 15, z: 0}
   maxRotPitchUp: 75
   maxRotPitchDown: -75
   positionPitchInfluence: 0.35
   maxPosPitchUp: 35
   maxPosPitchDown: -35
+  sprintDistanceMultiplier: 0.4
+  sprintVerticalDelta: 0
+  sprintAdjustSmooth: 0.5
+  sidewaysOnlyThreshold: 0.1
   ikAnchorName: IKAnchor
   ikAnchorLocalEuler: {x: -12, y: -160, z: 0}
+  faceCameraYawOffset: 15
 --- !u!114 &8878162043686913073
 MonoBehaviour:
   m_ObjectHideFlags: 0
