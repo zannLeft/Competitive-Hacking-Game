@@ -114,12 +114,16 @@ public class PlayerLook : NetworkBehaviour
     private float phonePitchSmoothTime = 0.22f;
 
     [SerializeField]
-    private float phonePitchMaxSpeed = 0f;
+    private float phonePitchMaxSpeed = 0f; // 0 = unlimited
 
     [SerializeField]
     private float phonePitchSnapEps = 0.10f;
 
     private float _phonePitchVel;
+
+    // Down-only centering velocities (same feel as phone, but only when pitch > 0)
+    private float _slidePitchVel;
+    private float _coilPitchVel;
 
     [Header("Crouch + Phone Yaw Lock")]
     [SerializeField]
@@ -212,10 +216,6 @@ public class PlayerLook : NetworkBehaviour
             return;
 
         float dt = Time.deltaTime;
-
-        // slide/coil "recentre from looking down"
-        if ((motor.sliding || motor.Coiling) && xRotation > 0f)
-            xRotation = Mathf.Lerp(xRotation, 0f, dt * 3.5f);
 
         bool actuallySprinting = motor != null && motor.IsActuallySprinting;
 
@@ -319,7 +319,12 @@ public class PlayerLook : NetworkBehaviour
         float mouseX = _smoothedDelta.x;
         float mouseY = _smoothedDelta.y;
 
-        bool phoneAllowedNow = phoneAimActive && motor != null && !motor.sliding && !motor.Coiling;
+        bool isSliding = motor != null && motor.sliding;
+        bool isCoiling = motor != null && motor.Coiling;
+
+        bool phoneAllowedNow = phoneAimActive && motor != null && !isSliding && !isCoiling;
+
+        float rawPitchDelta = -mouseY * dt * ySensitivity;
 
         // ---------------- PITCH ----------------
         if (lockPitchWhilePhoneUp && phoneAllowedNow)
@@ -330,9 +335,7 @@ public class PlayerLook : NetworkBehaviour
 
             if (phoneSoftPitchCentering)
             {
-                float inputPitch = -mouseY * dt * ySensitivity * phonePitchInputScale;
-                xRotation += inputPitch;
-
+                xRotation += rawPitchDelta * phonePitchInputScale;
                 xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
 
                 xRotation = Mathf.SmoothDampAngle(
@@ -376,16 +379,86 @@ public class PlayerLook : NetworkBehaviour
                     _phonePitchVel = 0f;
                 }
             }
+
+            _slidePitchVel = 0f;
+            _coilPitchVel = 0f;
+        }
+        else if ((isSliding || isCoiling) && xRotation > 0f)
+        {
+            // ✅ Slide/Coil: "phone-like" soft centering, but ONLY when looking down (pitch > 0).
+            // If you push up enough to cross 0, you get free look up immediately (no clamp at 0).
+
+            float smoothTime = Mathf.Max(0.0001f, phonePitchSmoothTime);
+            float maxSpeed =
+                (phonePitchMaxSpeed <= 0f) ? float.PositiveInfinity : phonePitchMaxSpeed;
+
+            // Resist input like phone
+            xRotation += rawPitchDelta * phonePitchInputScale;
+            xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
+
+            if (isSliding)
+            {
+                xRotation = Mathf.SmoothDampAngle(
+                    xRotation,
+                    0f,
+                    ref _slidePitchVel,
+                    smoothTime,
+                    maxSpeed,
+                    dt
+                );
+
+                // prevent overshoot above center when we're in "down-only" mode
+                if (xRotation < 0f)
+                {
+                    xRotation = 0f;
+                    _slidePitchVel = 0f;
+                }
+
+                if (xRotation <= phonePitchSnapEps && Mathf.Abs(mouseY) < 0.001f)
+                {
+                    xRotation = 0f;
+                    _slidePitchVel = 0f;
+                }
+
+                _coilPitchVel = 0f;
+            }
+            else
+            {
+                xRotation = Mathf.SmoothDampAngle(
+                    xRotation,
+                    0f,
+                    ref _coilPitchVel,
+                    smoothTime,
+                    maxSpeed,
+                    dt
+                );
+
+                if (xRotation < 0f)
+                {
+                    xRotation = 0f;
+                    _coilPitchVel = 0f;
+                }
+
+                if (xRotation <= phonePitchSnapEps && Mathf.Abs(mouseY) < 0.001f)
+                {
+                    xRotation = 0f;
+                    _coilPitchVel = 0f;
+                }
+
+                _slidePitchVel = 0f;
+            }
+
+            _phonePitchVel = 0f;
         }
         else
         {
+            // Normal pitch (also used for slide/coil when looking UP or centered)
             _phonePitchVel = 0f;
+            _slidePitchVel = 0f;
+            _coilPitchVel = 0f;
 
-            if (!(motor.sliding && xRotation > 0f && mouseY <= 0f))
-            {
-                xRotation -= mouseY * dt * ySensitivity;
-                xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
-            }
+            xRotation += rawPitchDelta;
+            xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
         }
 
         if (cam != null)
@@ -395,7 +468,7 @@ public class PlayerLook : NetworkBehaviour
         float yawDelta = mouseX * dt * xSensitivity;
         bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
 
-        // ✅ Phone up while crouching: align/catch-up at FULL standing speed
+        // Phone up while crouching: align/catch-up at FULL standing speed
         if (phoneAllowedNow && motor.crouching)
         {
             float alignStep =
@@ -412,7 +485,6 @@ public class PlayerLook : NetworkBehaviour
                 if (Mathf.Abs(overflow) > 0.0001f)
                     transform.rotation *= Quaternion.Euler(0f, overflow, 0f);
 
-                // No threshold here; always align until centered
                 CatchUp(alignStep);
 
                 if (Mathf.Abs(yawOffset) <= crouchPhoneAlignEps)
@@ -440,7 +512,6 @@ public class PlayerLook : NetworkBehaviour
             && !motor.sprinting
             && (motor.crouching ? shoulderWhileCrouching : true);
 
-        // While phone is up, no instant catch-up (avoid snapping body)
         bool allowInstantCatchUp =
             instantCatchUpOnMove && !(phoneAllowedNow && disableInstantCatchUpWhilePhone);
 
