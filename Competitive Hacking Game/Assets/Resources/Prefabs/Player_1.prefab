@@ -1300,6 +1300,14 @@ MonoBehaviour:
   shoulderWhileCrouching: 1
   instantCatchUpOnMove: 0
   catchUpOnMoveSpeed: 250
+  disableInstantCatchUpWhilePhone: 1
+  phoneCatchUpSpeedMultiplier: 0.45
+  lockPitchWhilePhoneUp: 1
+  phonePitchSmoothTime: 0.22
+  phonePitchMaxSpeed: 0
+  phonePitchSnapEps: 0.1
+  crouchPhoneAlignEps: 0.02
+  crouchPhoneAlignSpeedMultiplier: 1
   pitchForwardMax: 0.1
   pitchBackwardMax: 0.3
   pitchDownY: 0.1
@@ -1494,6 +1502,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HeadLookIK
   ShowTopMostFoldoutHeaderGroup: 1
+  phoneMaskParam: PhoneMask
+  bodyWeightDefault: 0.15
+  bodyWeightPhoneUp: 1
+  bodyWeightSmoothTime: 0.14
+  bodyWeightMaxSpeed: 0
 --- !u!114 &5216577995390182814
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1509,9 +1522,22 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   playerCamera: {fileID: 2272284346070443280}
   playerLook: {fileID: 6487965562487473033}
+  motor: {fileID: 0}
+  offsetDistance: 0.185
+  horizontalOffset: 0.2
+  verticalOffset: -0.06
+  sprintDistanceMultiplier: 0.755
+  sprintVerticalDelta: -0.05
+  sprintAdjustSmoothTime: 0.5
+  sprintAdjustMaxSpeed: 0
   rotationSmoothSpeed: 5
-  maxPitchUp: 45
-  maxPitchDown: -90
+  swayResponsivenessMultiplier: 2
+  phoneFacingOffsetEuler: {x: 0, y: 15, z: 0}
+  maxRotPitchUp: 75
+  maxRotPitchDown: -75
+  positionPitchInfluence: 0.35
+  maxPosPitchUp: 35
+  maxPosPitchDown: -35
   ikAnchorName: IKAnchor
   ikAnchorLocalEuler: {x: -12, y: -160, z: 0}
 --- !u!114 &8878162043686913073
@@ -1542,7 +1568,6 @@ MonoBehaviour:
   ikEaseOutTime: 0.1
   ikMaxSpeed: 0
   idleIKMax: 1
-  sprintIKMax: 0.01
   slideIKMax: 0.01
   approxDistance: 0.35
   approxHorizontal: 0.06
@@ -1550,8 +1575,6 @@ MonoBehaviour:
   remoteRotOffsetEuler: {x: -20, y: -160, z: -7.8}
   rightElbowHint: {fileID: 0}
   elbowHintWeight: 0.5
-  flashlightNodeName: FlashLight
-  flareSRP: {fileID: 0}
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0
