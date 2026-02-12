@@ -1,4 +1,7 @@
 // PlayerPhone.cs (FULL) — RMB-only, and DISABLED while sliding or coiling
+// UPDATED: Stabilize phone while moving by allowing full IK lock while walking/sprinting
+//          + IK rotation weight now matches IK position weight (prevents jitter from mixed weights)
+
 using Unity.Netcode;
 using UnityEngine;
 
@@ -55,6 +58,14 @@ public class PlayerPhone : NetworkBehaviour
     [Range(0f, 1f)]
     [SerializeField]
     private float idleIKMax = 1.00f;
+
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float movingIKMax = 1.00f; // NEW: keep phone stable while walking
+
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float sprintIKMax = 1.00f; // NEW: keep phone stable while sprinting
 
     [Range(0f, 1f)]
     [SerializeField]
@@ -260,8 +271,9 @@ public class PlayerPhone : NetworkBehaviour
         if (animator == null)
             return;
 
+        // UPDATED: Make rotation lock follow IK weight too (prevents jitter from mixed weights)
         float posW = _ikWeight;
-        float rotW = _maskWeight;
+        float rotW = _ikWeight;
 
         animator.SetIKPositionWeight(AvatarIKGoal.RightHand, posW);
         animator.SetIKRotationWeight(AvatarIKGoal.RightHand, rotW);
@@ -366,10 +378,14 @@ public class PlayerPhone : NetworkBehaviour
             return slideIKMax;
 
         bool isMoving = motor.inputDirection.sqrMagnitude > 0.0001f;
+        bool isSprinting = motor.IsActuallySprinting;
 
-        float walkCap = 0.5f;
-        float idleCap = 1.0f;
+        if (isSprinting)
+            return sprintIKMax;
 
-        return isMoving ? walkCap : idleCap;
+        if (isMoving)
+            return movingIKMax;
+
+        return idleIKMax;
     }
 }

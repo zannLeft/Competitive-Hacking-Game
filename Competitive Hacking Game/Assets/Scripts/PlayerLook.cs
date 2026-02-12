@@ -98,19 +98,15 @@ public class PlayerLook : NetworkBehaviour
     [SerializeField]
     private bool lockPitchWhilePhoneUp = true;
 
-    [Tooltip("Target pitch while phone is up (positive = look down).")]
+    [Tooltip("Optional tiny offset if your camera prefab isn't perfectly level. Try -2..+2.")]
     [SerializeField]
-    private float phonePitchTargetDegrees = 35f;
+    private float phoneHorizonOffsetDegrees = 0f;
 
-    [Tooltip(
-        "If ON: you can still move pitch a bit, but it's constantly pulled toward the target (soft spring). If OFF: hard lock to target."
-    )]
+    [Tooltip("If ON: you can still move pitch a bit, but it's constantly pulled toward horizon.")]
     [SerializeField]
     private bool phoneSoftPitchCentering = true;
 
-    [Tooltip(
-        "How much mouse pitch input is allowed while phone is up. Lower = stronger 'resistance'."
-    )]
+    [Tooltip("How much mouse pitch input is allowed while phone is up.")]
     [SerializeField, Range(0f, 1f)]
     private float phonePitchInputScale = 0.35f;
 
@@ -180,19 +176,9 @@ public class PlayerLook : NetworkBehaviour
     public float YawOffset => yawOffset;
 
     private bool phoneAimActive = false;
-    public bool IsPhoneAiming => phoneAimActive;
-
     private bool rmbHeld = false;
-    public bool IsRmbHeld => rmbHeld;
 
     private const float PitchClamp = 90f;
-
-    // --- NEW: remember/restore pitch around RMB ---
-    private bool _prevRmbHeld;
-    private float _pitchBeforePhone;
-    private bool _restorePitchActive;
-    private float _restorePitchVel;
-    private const float RestoreCancelInputEps = 0.001f;
 
     void Start()
     {
@@ -218,9 +204,6 @@ public class PlayerLook : NetworkBehaviour
             cameraRoot = cam.transform.parent;
 
         _wasCrouching = motor != null && motor.crouching;
-
-        _prevRmbHeld = rmbHeld;
-        _pitchBeforePhone = xRotation;
     }
 
     void Update()
@@ -229,7 +212,6 @@ public class PlayerLook : NetworkBehaviour
             return;
 
         float dt = Time.deltaTime;
-
         bool actuallySprinting = motor != null && motor.IsActuallySprinting;
 
         Vector3 baseTargetPos;
@@ -318,23 +300,6 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
-        // RMB edge detect: remember pitch on press, restore on release
-        if (rmbHeld && !_prevRmbHeld)
-        {
-            _pitchBeforePhone = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
-            _restorePitchActive = false;
-            _restorePitchVel = 0f;
-        }
-        else if (!rmbHeld && _prevRmbHeld)
-        {
-            // start restoring only in normal states (avoid weird delayed restore after slide/coil)
-            bool isSlidingNow = motor != null && motor.sliding;
-            bool isCoilingNow = motor != null && motor.Coiling;
-
-            _restorePitchActive = !(isSlidingNow || isCoilingNow);
-            _restorePitchVel = 0f;
-        }
-
         Vector2 raw = input;
         if (smoothMouse && mouseSmoothingTime > 0f)
         {
@@ -359,7 +324,8 @@ public class PlayerLook : NetworkBehaviour
         // ---------------- PITCH ----------------
         if (lockPitchWhilePhoneUp && phoneAllowedNow)
         {
-            float target = Mathf.Clamp(phonePitchTargetDegrees, -PitchClamp, PitchClamp);
+            // ALWAYS center to horizon (0) + optional tiny calibration offset
+            float target = Mathf.Clamp(0f + phoneHorizonOffsetDegrees, -PitchClamp, PitchClamp);
 
             float smoothTime = Mathf.Max(0.0001f, phonePitchSmoothTime);
             float maxSpeed =
@@ -378,22 +344,6 @@ public class PlayerLook : NetworkBehaviour
                     maxSpeed,
                     dt
                 );
-
-                float clamped = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
-                if (!Mathf.Approximately(clamped, xRotation))
-                {
-                    xRotation = clamped;
-                    _phonePitchVel = 0f;
-                }
-
-                if (
-                    Mathf.Abs(Mathf.DeltaAngle(xRotation, target)) <= phonePitchSnapEps
-                    && Mathf.Abs(mouseY) < 0.001f
-                )
-                {
-                    xRotation = target;
-                    _phonePitchVel = 0f;
-                }
             }
             else
             {
@@ -405,23 +355,22 @@ public class PlayerLook : NetworkBehaviour
                     maxSpeed,
                     dt
                 );
+            }
 
-                xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
+            xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
 
-                if (Mathf.Abs(Mathf.DeltaAngle(xRotation, target)) <= phonePitchSnapEps)
-                {
-                    xRotation = target;
-                    _phonePitchVel = 0f;
-                }
+            // Snap purely by closeness (no mouseY condition)
+            if (Mathf.Abs(Mathf.DeltaAngle(xRotation, target)) <= phonePitchSnapEps)
+            {
+                xRotation = target;
+                _phonePitchVel = 0f;
             }
 
             _slidePitchVel = 0f;
             _coilPitchVel = 0f;
-            _restorePitchActive = false; // while phone is up, no restore
         }
         else if ((isSliding || isCoiling) && xRotation > 0f)
         {
-            // Slide/Coil: phone-like soft centering to 0, only while looking down (pitch > 0).
             float smoothTime = Mathf.Max(0.0001f, phonePitchSmoothTime);
             float maxSpeed =
                 (phonePitchMaxSpeed <= 0f) ? float.PositiveInfinity : phonePitchMaxSpeed;
@@ -439,19 +388,11 @@ public class PlayerLook : NetworkBehaviour
                     maxSpeed,
                     dt
                 );
-
                 if (xRotation < 0f)
                 {
                     xRotation = 0f;
                     _slidePitchVel = 0f;
                 }
-
-                if (xRotation <= phonePitchSnapEps && Mathf.Abs(mouseY) < 0.001f)
-                {
-                    xRotation = 0f;
-                    _slidePitchVel = 0f;
-                }
-
                 _coilPitchVel = 0f;
             }
             else
@@ -464,75 +405,32 @@ public class PlayerLook : NetworkBehaviour
                     maxSpeed,
                     dt
                 );
-
                 if (xRotation < 0f)
                 {
                     xRotation = 0f;
                     _coilPitchVel = 0f;
                 }
-
-                if (xRotation <= phonePitchSnapEps && Mathf.Abs(mouseY) < 0.001f)
-                {
-                    xRotation = 0f;
-                    _coilPitchVel = 0f;
-                }
-
                 _slidePitchVel = 0f;
             }
 
+            if (xRotation <= phonePitchSnapEps)
+            {
+                xRotation = 0f;
+                _slidePitchVel = 0f;
+                _coilPitchVel = 0f;
+            }
+
             _phonePitchVel = 0f;
-            _restorePitchActive = false;
-            _restorePitchVel = 0f;
         }
         else
         {
-            // Normal pitch
+            // Normal pitch (NO restore on RMB release)
             _phonePitchVel = 0f;
             _slidePitchVel = 0f;
             _coilPitchVel = 0f;
 
             xRotation += rawPitchDelta;
             xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
-
-            // NEW: after releasing RMB, smoothly return to remembered pitch
-            if (_restorePitchActive && !rmbHeld && !isSliding && !isCoiling)
-            {
-                // if the player is actively moving pitch, stop restoring
-                if (Mathf.Abs(mouseY) > RestoreCancelInputEps)
-                {
-                    _restorePitchActive = false;
-                    _restorePitchVel = 0f;
-                }
-                else
-                {
-                    float smoothTime = Mathf.Max(0.0001f, phonePitchSmoothTime);
-                    float maxSpeed =
-                        (phonePitchMaxSpeed <= 0f) ? float.PositiveInfinity : phonePitchMaxSpeed;
-                    float target = Mathf.Clamp(_pitchBeforePhone, -PitchClamp, PitchClamp);
-
-                    xRotation = Mathf.SmoothDampAngle(
-                        xRotation,
-                        target,
-                        ref _restorePitchVel,
-                        smoothTime,
-                        maxSpeed,
-                        dt
-                    );
-
-                    xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
-
-                    if (Mathf.Abs(Mathf.DeltaAngle(xRotation, target)) <= phonePitchSnapEps)
-                    {
-                        xRotation = target;
-                        _restorePitchVel = 0f;
-                        _restorePitchActive = false;
-                    }
-                }
-            }
-            else
-            {
-                _restorePitchVel = 0f;
-            }
         }
 
         if (cam != null)
@@ -542,7 +440,6 @@ public class PlayerLook : NetworkBehaviour
         float yawDelta = mouseX * dt * xSensitivity;
         bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
 
-        // Phone up while crouching: align/catch-up at FULL standing speed
         if (phoneAllowedNow && motor.crouching)
         {
             float alignStep =
@@ -577,7 +474,6 @@ public class PlayerLook : NetworkBehaviour
                 cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
 
             wasMoving = hasMoveInput;
-            _prevRmbHeld = rmbHeld;
             return;
         }
 
@@ -640,9 +536,6 @@ public class PlayerLook : NetworkBehaviour
             cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
 
         wasMoving = hasMoveInput;
-
-        // update edge state
-        _prevRmbHeld = rmbHeld;
     }
 
     private void CatchUp(float stepDegrees)

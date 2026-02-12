@@ -1303,7 +1303,7 @@ MonoBehaviour:
   disableInstantCatchUpWhilePhone: 1
   phoneCatchUpSpeedMultiplier: 0.45
   lockPitchWhilePhoneUp: 1
-  phonePitchTargetDegrees: 35
+  phoneHorizonOffsetDegrees: 0
   phoneSoftPitchCentering: 1
   phonePitchInputScale: 0.35
   phonePitchSmoothTime: 0.22
@@ -1528,19 +1528,25 @@ MonoBehaviour:
   playerCamera: {fileID: 2272284346070443280}
   playerLook: {fileID: 6487965562487473033}
   motor: {fileID: 0}
-  offsetDistance: 0.1
+  offsetDistance: 0.2
   horizontalOffset: 0.2
-  verticalOffset: -0.2
+  verticalOffset: -0.1
   rotationSmoothSpeed: 5
   maxRotPitchUp: 75
   maxRotPitchDown: -75
   positionPitchInfluence: 0.35
   maxPosPitchUp: 35
   maxPosPitchDown: -35
-  sprintDistanceMultiplier: 0.4
-  sprintVerticalDelta: 0
+  sprintDistanceMultiplier: 0.75
+  sprintVerticalDelta: -0.05
   sprintAdjustSmooth: 0.5
-  sidewaysOnlyThreshold: 0.1
+  enableSway: 1
+  swaySmoothSpeed: 10
+  walkSwayFrequency: 1
+  sprintSwayFrequency: 1.2
+  walkSwayAmplitude: {x: 0.006, y: 0.004, z: 0.0025}
+  sprintSwayAmplitudeMultiplier: 1.8
+  swayMoveScale: 1
   ikAnchorName: IKAnchor
   ikAnchorLocalEuler: {x: -12, y: -160, z: 0}
   faceCameraYawOffset: 15
@@ -1572,6 +1578,8 @@ MonoBehaviour:
   ikEaseOutTime: 0.1
   ikMaxSpeed: 0
   idleIKMax: 1
+  movingIKMax: 1
+  sprintIKMax: 1
   slideIKMax: 0.01
   approxDistance: 0.35
   approxHorizontal: 0.06

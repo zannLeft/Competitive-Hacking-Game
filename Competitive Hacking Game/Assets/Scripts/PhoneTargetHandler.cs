@@ -13,7 +13,7 @@ public class PhoneTargetHandler : NetworkBehaviour
     private PlayerLook playerLook;
 
     [SerializeField]
-    private PlayerMotor motor; // NEW: read input + states
+    private PlayerMotor motor; // read input + states
 
     [Header("Offsets (camera/yaw space)")]
     [SerializeField]
@@ -47,7 +47,7 @@ public class PhoneTargetHandler : NetworkBehaviour
     private float maxPosPitchDown = -35f;
 
     [Header("Move adjust (closer + lower)")]
-    [Tooltip("Distance multiplier when the move-adjust is active (sprint/crouch-move/sideways).")]
+    [Tooltip("Distance multiplier when the move-adjust is active (sprint/crouch-move).")]
     [SerializeField]
     private float sprintDistanceMultiplier = 0.755f;
 
@@ -59,9 +59,33 @@ public class PhoneTargetHandler : NetworkBehaviour
     [SerializeField]
     private float sprintAdjustSmooth = 0.5f;
 
-    [Tooltip("Threshold for treating input as sideways-only (A/D).")]
+    [Header("Sway (procedural bob)")]
     [SerializeField]
-    private float sidewaysOnlyThreshold = 0.10f;
+    private bool enableSway = true;
+
+    [Tooltip("How quickly sway offsets smooth toward their target.")]
+    [SerializeField]
+    private float swaySmoothSpeed = 10f;
+
+    [Tooltip("Walk sway frequency (Hz-ish).")]
+    [SerializeField]
+    private float walkSwayFrequency = 6.5f;
+
+    [Tooltip("Sprint sway frequency (Hz-ish).")]
+    [SerializeField]
+    private float sprintSwayFrequency = 9.0f;
+
+    [Tooltip("Walk sway amplitude in meters (Right, Up, Forward). Keep small for readability.")]
+    [SerializeField]
+    private Vector3 walkSwayAmplitude = new Vector3(0.006f, 0.004f, 0.0025f);
+
+    [Tooltip("Multiplier applied to sway amplitude while sprinting.")]
+    [SerializeField]
+    private float sprintSwayAmplitudeMultiplier = 1.8f;
+
+    [Tooltip("Scale sway by movement magnitude (0..1).")]
+    [SerializeField]
+    private float swayMoveScale = 1.0f;
 
     [Header("IK Anchor (child of PhoneTarget)")]
     [SerializeField]
@@ -83,7 +107,11 @@ public class PhoneTargetHandler : NetworkBehaviour
 
     // move-adjust smoothing
     private float _moveAdj01; // 0..1
-    private float _moveAdjVel; // SmoothDamp velocity
+    private float _moveAdjVel;
+
+    // sway smoothing
+    private Vector3 _swayLocal; // smoothed sway (in yaw space basis)
+    private Vector3 _swayVel; // smooth damp velocity (optional, but we’ll use MoveTowards/Lerp style)
 
     public Transform Target => phoneTarget;
     public Transform IKAnchor => ikAnchor;
@@ -194,18 +222,13 @@ public class PhoneTargetHandler : NetworkBehaviour
         if (isPhoneActive && motor != null)
         {
             Vector2 inDir = motor.inputDirection;
-
             bool isMoving = inDir.sqrMagnitude > 0.0001f;
-
-            // sideways-only = A/D with essentially no W/S
-            bool sidewaysOnly =
-                Mathf.Abs(inDir.x) > sidewaysOnlyThreshold
-                && Mathf.Abs(inDir.y) < sidewaysOnlyThreshold;
 
             bool sprinting = motor.IsActuallySprinting;
             bool crouchMoving = motor.crouching && isMoving;
 
-            applyMoveAdjust = sprinting || crouchMoving || sidewaysOnly;
+            // NOTE: per your request, NO special "sideways only" handling here.
+            applyMoveAdjust = sprinting || crouchMoving;
         }
 
         float targetAdj = applyMoveAdjust ? 1f : 0f;
@@ -226,7 +249,6 @@ public class PhoneTargetHandler : NetworkBehaviour
         Quaternion posPitchQ = Quaternion.AngleAxis(posPitch, yawRot * Vector3.right);
         Quaternion posRot = posPitchQ * yawRot;
 
-        // Apply move adjust to forward + vertical offsets
         float dist = offsetDistance * Mathf.Lerp(1f, sprintDistanceMultiplier, _moveAdj01);
         float vert = verticalOffset + (sprintVerticalDelta * _moveAdj01);
 
@@ -234,7 +256,67 @@ public class PhoneTargetHandler : NetworkBehaviour
         Vector3 rightOffset = (yawRot * Vector3.right) * horizontalOffset;
         Vector3 upOffset = Vector3.up * vert;
 
-        phoneTarget.position = _camT.position + forwardOffset + rightOffset + upOffset;
+        // --- Procedural sway (owner-only, while phone active) ---
+        Vector3 swayOffset = Vector3.zero;
+        if (enableSway && isPhoneActive && motor != null)
+        {
+            Vector2 inDir = motor.inputDirection;
+            float move01 = Mathf.Clamp01(inDir.magnitude) * swayMoveScale;
+
+            if (move01 > 0.001f)
+            {
+                bool sprinting = motor.IsActuallySprinting;
+                float freq = sprinting ? sprintSwayFrequency : walkSwayFrequency;
+
+                Vector3 amp = walkSwayAmplitude * (sprinting ? sprintSwayAmplitudeMultiplier : 1f);
+
+                // time phase
+                float t = Time.time;
+                float phase = t * freq * Mathf.PI * 2f;
+
+                // nice readable bob:
+                // - X: side sway
+                // - Y: bob (double frequency feels step-like)
+                // - Z: slight fore/aft counter-motion
+                float sx = Mathf.Sin(phase) * amp.x;
+                float sy = Mathf.Sin(phase * 2f) * amp.y;
+                float sz = Mathf.Sin(phase + Mathf.PI * 0.5f) * amp.z;
+
+                Vector3 targetSway =
+                    (yawRot * Vector3.right) * sx
+                    + Vector3.up * sy
+                    + (yawRot * Vector3.forward) * sz;
+
+                // Smooth it so it never jitters
+                _swayLocal = Vector3.Lerp(
+                    _swayLocal,
+                    targetSway,
+                    1f - Mathf.Exp(-swaySmoothSpeed * dt)
+                );
+            }
+            else
+            {
+                // return to zero when stopping
+                _swayLocal = Vector3.Lerp(
+                    _swayLocal,
+                    Vector3.zero,
+                    1f - Mathf.Exp(-swaySmoothSpeed * dt)
+                );
+            }
+
+            swayOffset = _swayLocal;
+        }
+        else
+        {
+            // if phone off, smoothly reset sway
+            _swayLocal = Vector3.Lerp(
+                _swayLocal,
+                Vector3.zero,
+                1f - Mathf.Exp(-swaySmoothSpeed * dt)
+            );
+        }
+
+        phoneTarget.position = _camT.position + forwardOffset + rightOffset + upOffset + swayOffset;
         phoneTarget.rotation = smoothedRotation * Quaternion.Euler(0f, faceCameraYawOffset, 0f);
     }
 
@@ -256,9 +338,6 @@ public class PhoneTargetHandler : NetworkBehaviour
 
         if (isPhoneActive && ikAnchor == null)
             CreateOrFindIKAnchor();
-
-        // When turning off, blend the move-adjust back to 0 smoothly
-        // (no snap; just changes targetAdj in UpdateAnchorImmediate)
     }
 
     private void EnsurePhoneTarget()
