@@ -51,10 +51,11 @@ public class HeadLookIK : NetworkBehaviour
         "When Crouching turns false, keep 'crouch rules' for this long, so LookAt doesn't hit the spine during the first frames of the stand-up transition."
     )]
     [SerializeField]
-    private float crouchExitHoldTime = 0.08f; // try 0.06–0.12
+    private float crouchExitHoldTime = 0.08f;
 
     Animator animator;
     PlayerLook look; // owner only
+    PlayerSitAction sitAction; // NEW: laptop/sitting state
     Transform headBone;
 
     // (pitch, yawOffset) in degrees: x = pitch, y = yaw
@@ -86,6 +87,7 @@ public class HeadLookIK : NetworkBehaviour
     {
         animator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>();
         look = GetComponent<PlayerLook>() ?? GetComponentInParent<PlayerLook>();
+        sitAction = GetComponent<PlayerSitAction>() ?? GetComponentInParent<PlayerSitAction>();
 
         if (animator)
         {
@@ -133,7 +135,9 @@ public class HeadLookIK : NetworkBehaviour
             {
                 sendTimer = 0f;
                 Vector2 v = new Vector2(pitch, yaw);
-                if ((netLook.Value - v).sqrMagnitude > 0.25f) // ~0.5°
+
+                // ~0.5 degrees threshold
+                if ((netLook.Value - v).sqrMagnitude > 0.25f)
                     netLook.Value = v;
             }
 
@@ -162,6 +166,10 @@ public class HeadLookIK : NetworkBehaviour
         bool isCrouching = animator.GetBool("Crouching");
         bool isCoiling = animator.GetBool("Coiling");
 
+        // NEW: while sitting / sitting down / standing up, do not use torso LookAt.
+        bool isLaptopSitting =
+            sitAction != null && sitAction.IsSittingOrTransitioning;
+
         // Start the exit-hold when crouch turns off
         if (_wasCrouching && !isCrouching)
             _crouchExitHoldTimer = Mathf.Max(0f, crouchExitHoldTime);
@@ -173,11 +181,11 @@ public class HeadLookIK : NetworkBehaviour
 
         bool treatAsCrouching = isCrouching || (_crouchExitHoldTimer > 0f);
 
-        // Keep head pitch while crouching; suppress pitch only when coiling
+        // Keep head pitch while crouching/sitting; suppress pitch only when coiling
         bool ignorePitch = isCoiling;
 
-        // ---- Compute TARGET values (then smooth) ----
-        bool spineLocked = treatAsCrouching || isCoiling;
+        // Sitting locks spine/torso LookAt, same idea as crouch/coil.
+        bool spineLocked = treatAsCrouching || isCoiling || isLaptopSitting;
 
         float targetBodyW = spineLocked ? 0f : BODY_W_DEFAULT;
         float targetPitchScale = 1f;
@@ -188,7 +196,7 @@ public class HeadLookIK : NetworkBehaviour
             targetPitchScale = Mathf.Lerp(1f, phonePitchScale, _phoneBlend);
         }
 
-        // Smooth them so crouch->stand doesn't pop through a bad intermediate pose
+        // Smooth body weight and pitch scale so state changes don't pop.
         float bwSmooth = Mathf.Max(0.0001f, bodyWeightSmoothTime);
         float psSmooth = Mathf.Max(0.0001f, pitchScaleSmoothTime);
 
@@ -200,6 +208,7 @@ public class HeadLookIK : NetworkBehaviour
             Mathf.Infinity,
             dt
         );
+
         _smPitchScale = Mathf.SmoothDamp(
             _smPitchScale,
             targetPitchScale,
@@ -212,7 +221,7 @@ public class HeadLookIK : NetworkBehaviour
         _smBodyW = Mathf.Clamp01(_smBodyW);
         _smPitchScale = Mathf.Clamp01(_smPitchScale);
 
-        // ---- Build look target ----
+        // Build look target
         Quaternion yawOnly = transform.rotation * Quaternion.Euler(0f, lerpedYaw, 0f);
 
         float appliedPitch = ignorePitch ? 0f : (lerpedPitch * _smPitchScale);

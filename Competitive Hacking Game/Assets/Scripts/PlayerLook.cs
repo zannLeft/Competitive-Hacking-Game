@@ -9,10 +9,11 @@ public class PlayerLook : NetworkBehaviour
     [Header("References")]
     public Camera cam;
 
-    [Tooltip(
-        "Parent pivot of the main camera (your empty 'Camera' object in the middle of the player)."
-    )]
+    [Tooltip("Parent pivot of the main camera (your empty 'Camera' object in the middle of the player).")]
     public Transform cameraRoot;
+
+    [SerializeField]
+    private PlayerSitAction sitAction;
 
     [Header("Camera Positions (Inspector)")]
     [SerializeField]
@@ -44,6 +45,25 @@ public class PlayerLook : NetworkBehaviour
 
     [SerializeField]
     private Vector3 sprintJumpLocalPos;
+
+    [Header("Laptop / Sitting Camera")]
+    [SerializeField]
+    private Vector3 sittingLocalPos;
+
+    [Tooltip("Bigger = slower camera lowering/rising while sitting/standing.")]
+    [SerializeField]
+    private float sittingCameraSmoothTime = 0.8f;
+
+    [Tooltip("How close the camera must be before the sitting/standing transition is considered finished.")]
+    [SerializeField]
+    private float sittingCameraArriveDistance = 0.01f;
+
+    [Tooltip("FOV while laptop is open/focused.")]
+    [SerializeField]
+    private float laptopFocusFOV = 40f;
+
+    [SerializeField]
+    private float laptopFocusFOVSpeed = 1f;
 
     [Header("Sprint-Jump Detection")]
     [SerializeField]
@@ -83,6 +103,13 @@ public class PlayerLook : NetworkBehaviour
     public float bodyCatchUpSpeed = 720f;
     public bool shoulderWhileCrouching = true;
 
+    [Header("Sitting Look Limit")]
+    [SerializeField]
+    private bool lockBodyYawWhileSitting = true;
+
+    [SerializeField]
+    private float sittingMaxYaw = 80f;
+
     [Header("Catch-up on Move")]
     public bool instantCatchUpOnMove = true;
     public float catchUpOnMoveSpeed = 1080f;
@@ -114,20 +141,19 @@ public class PlayerLook : NetworkBehaviour
     private float phonePitchSmoothTime = 0.22f;
 
     [SerializeField]
-    private float phonePitchMaxSpeed = 0f; // 0 = unlimited
+    private float phonePitchMaxSpeed = 0f;
 
     [SerializeField]
     private float phonePitchSnapEps = 0.10f;
 
     private float _phonePitchVel;
 
-    // Down-only centering velocities (slide/coil)
     private float _slidePitchVel;
     private float _coilPitchVel;
 
     [Header("Crouch + Phone Yaw Lock")]
     [SerializeField]
-    private float crouchPhoneAlignEps = 0.02f; // degrees
+    private float crouchPhoneAlignEps = 0.02f;
 
     [SerializeField]
     private float crouchPhoneAlignSpeedMultiplier = 1.0f;
@@ -170,7 +196,13 @@ public class PlayerLook : NetworkBehaviour
     private bool wasMoving = false;
 
     private Vector3 _smoothedBaseLocalPos;
+    private Vector3 _sittingCamVel;
+
     private bool _wasCrouching;
+    private bool _wasUsingSittingCamera;
+    private bool _wasLaptopFocus;
+
+    private bool _sittingCameraTransitionActive;
 
     public float Pitch => xRotation;
     public float YawOffset => yawOffset;
@@ -192,6 +224,9 @@ public class PlayerLook : NetworkBehaviour
         motor = GetComponent<PlayerMotor>();
         animator = GetComponent<Animator>() ?? GetComponentInParent<Animator>();
 
+        if (sitAction == null)
+            sitAction = GetComponent<PlayerSitAction>();
+
         if (!useInspectorPositions)
             AutoFillFromCurrentCamera();
 
@@ -204,6 +239,9 @@ public class PlayerLook : NetworkBehaviour
             cameraRoot = cam.transform.parent;
 
         _wasCrouching = motor != null && motor.crouching;
+        _wasUsingSittingCamera = sitAction != null && sitAction.UseSittingCameraPosition;
+        _wasLaptopFocus = sitAction != null && sitAction.LaptopCameraFocus;
+        _sittingCameraTransitionActive = false;
     }
 
     void Update()
@@ -212,28 +250,45 @@ public class PlayerLook : NetworkBehaviour
             return;
 
         float dt = Time.deltaTime;
+
         bool actuallySprinting = motor != null && motor.IsActuallySprinting;
+        bool useSittingCamera = sitAction != null && sitAction.UseSittingCameraPosition;
+        bool laptopFocus = sitAction != null && sitAction.LaptopCameraFocus;
 
         Vector3 baseTargetPos;
 
-        if (motor.sliding)
+        if (useSittingCamera || laptopFocus)
+        {
+            baseTargetPos = sittingLocalPos;
+        }
+        else if (motor != null && motor.sliding)
+        {
             baseTargetPos = slidingLocalPos;
-        else if (motor.Coiling)
+        }
+        else if (motor != null && motor.Coiling)
+        {
             baseTargetPos = coilLocalPos;
+        }
         else
         {
             bool isAirborne = animator != null && !animator.GetBool("IsGrounded");
             float zVel = animator != null ? animator.GetFloat("Z_Velocity") : 0f;
 
             if (isAirborne && zVel > sprintJumpZThreshold)
+            {
                 baseTargetPos = sprintJumpLocalPos;
+            }
             else if (actuallySprinting)
+            {
                 baseTargetPos = sprintingLocalPos;
-            else if (motor.crouching)
+            }
+            else if (motor != null && motor.crouching)
+            {
                 baseTargetPos = crouchingLocalPos;
+            }
             else
             {
-                Vector2 move = motor.inputDirection;
+                Vector2 move = motor != null ? motor.inputDirection : Vector2.zero;
                 float ax = Mathf.Abs(move.x);
                 float ay = Mathf.Abs(move.y);
                 float thr = moveDirThreshold;
@@ -249,28 +304,70 @@ public class PlayerLook : NetworkBehaviour
                         baseTargetPos = walkBackwardLocalPos;
                 }
                 else
+                {
                     baseTargetPos = standingLocalPos;
+                }
             }
         }
 
-        bool useLinear = motor.crouching || _wasCrouching;
-        if (useLinear)
-            _smoothedBaseLocalPos = Vector3.MoveTowards(
+        bool sittingCameraState = useSittingCamera || laptopFocus;
+        bool previousSittingCameraState = _wasUsingSittingCamera || _wasLaptopFocus;
+
+        // Start a smooth camera transition whenever we enter OR leave sitting camera mode.
+        if (sittingCameraState != previousSittingCameraState)
+            _sittingCameraTransitionActive = true;
+
+        if (sittingCameraState || _sittingCameraTransitionActive)
+        {
+            _smoothedBaseLocalPos = Vector3.SmoothDamp(
                 _smoothedBaseLocalPos,
                 baseTargetPos,
-                crouchPositionSpeed * dt
+                ref _sittingCamVel,
+                Mathf.Max(0.0001f, sittingCameraSmoothTime),
+                Mathf.Infinity,
+                dt
             );
+
+            // When leaving sitting mode, keep SmoothDamp active until we actually arrive.
+            if (!sittingCameraState)
+            {
+                float dist = Vector3.Distance(_smoothedBaseLocalPos, baseTargetPos);
+                if (dist <= sittingCameraArriveDistance)
+                {
+                    _smoothedBaseLocalPos = baseTargetPos;
+                    _sittingCamVel = Vector3.zero;
+                    _sittingCameraTransitionActive = false;
+                }
+            }
+        }
         else
-            _smoothedBaseLocalPos = Vector3.Lerp(
-                _smoothedBaseLocalPos,
-                baseTargetPos,
-                dt * positionLerpSpeed
-            );
+        {
+            _sittingCamVel = Vector3.zero;
+
+            bool useLinear = (motor != null && motor.crouching) || _wasCrouching;
+
+            if (useLinear)
+            {
+                _smoothedBaseLocalPos = Vector3.MoveTowards(
+                    _smoothedBaseLocalPos,
+                    baseTargetPos,
+                    crouchPositionSpeed * dt
+                );
+            }
+            else
+            {
+                _smoothedBaseLocalPos = Vector3.Lerp(
+                    _smoothedBaseLocalPos,
+                    baseTargetPos,
+                    dt * positionLerpSpeed
+                );
+            }
+        }
 
         float up01 = Mathf.Clamp01(-xRotation / 90f);
         float down01 = Mathf.Clamp01(xRotation / 90f);
 
-        bool isCrouched = motor.crouching;
+        bool isCrouched = motor != null && motor.crouching;
         float fwdMax = isCrouched ? crouchPitchForwardMax : pitchForwardMax;
         float backMax = isCrouched ? crouchPitchBackwardMax : pitchBackwardMax;
         float downMaxY = isCrouched ? crouchPitchDownY : pitchDownY;
@@ -280,17 +377,23 @@ public class PlayerLook : NetworkBehaviour
         float zPitch = (down01 * fwdMax) - (up01 * backMax);
 
         if (cam != null)
-            cam.transform.localPosition = _smoothedBaseLocalPos + new Vector3(0f, yPitch, zPitch);
+            cam.transform.localPosition =
+                _smoothedBaseLocalPos + new Vector3(0f, yPitch, zPitch);
 
-        bool fastState = actuallySprinting || motor.sliding;
-        float targetFOV = fastState ? sprintFOV : defaultFOV;
+        bool fastState = actuallySprinting || (motor != null && motor.sliding);
+
+        float targetFOV = laptopFocus ? laptopFocusFOV : (fastState ? sprintFOV : defaultFOV);
+        float fovSpeed = (laptopFocus || _wasLaptopFocus) ? laptopFocusFOVSpeed : fovTransitionSpeed;
+
         if (cam != null)
-            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovTransitionSpeed);
+            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovSpeed);
 
         if (cameraRoot != null)
             cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
 
-        _wasCrouching = motor.crouching;
+        _wasCrouching = motor != null && motor.crouching;
+        _wasUsingSittingCamera = useSittingCamera;
+        _wasLaptopFocus = laptopFocus;
     }
 
     public void ProcessLook(Vector2 input)
@@ -324,7 +427,6 @@ public class PlayerLook : NetworkBehaviour
         // ---------------- PITCH ----------------
         if (lockPitchWhilePhoneUp && phoneAllowedNow)
         {
-            // ALWAYS center to horizon (0) + optional tiny calibration offset
             float target = Mathf.Clamp(0f + phoneHorizonOffsetDegrees, -PitchClamp, PitchClamp);
 
             float smoothTime = Mathf.Max(0.0001f, phonePitchSmoothTime);
@@ -359,7 +461,6 @@ public class PlayerLook : NetworkBehaviour
 
             xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
 
-            // Snap purely by closeness (no mouseY condition)
             if (Mathf.Abs(Mathf.DeltaAngle(xRotation, target)) <= phonePitchSnapEps)
             {
                 xRotation = target;
@@ -388,11 +489,13 @@ public class PlayerLook : NetworkBehaviour
                     maxSpeed,
                     dt
                 );
+
                 if (xRotation < 0f)
                 {
                     xRotation = 0f;
                     _slidePitchVel = 0f;
                 }
+
                 _coilPitchVel = 0f;
             }
             else
@@ -405,11 +508,13 @@ public class PlayerLook : NetworkBehaviour
                     maxSpeed,
                     dt
                 );
+
                 if (xRotation < 0f)
                 {
                     xRotation = 0f;
                     _coilPitchVel = 0f;
                 }
+
                 _slidePitchVel = 0f;
             }
 
@@ -424,7 +529,6 @@ public class PlayerLook : NetworkBehaviour
         }
         else
         {
-            // Normal pitch (NO restore on RMB release)
             _phonePitchVel = 0f;
             _slidePitchVel = 0f;
             _coilPitchVel = 0f;
@@ -438,9 +542,34 @@ public class PlayerLook : NetworkBehaviour
 
         // ---------------- YAW ----------------
         float yawDelta = mouseX * dt * xSensitivity;
-        bool hasMoveInput = motor.inputDirection.sqrMagnitude > 0.0001f;
+        bool hasMoveInput = motor != null && motor.inputDirection.sqrMagnitude > 0.0001f;
 
-        if (phoneAllowedNow && motor.crouching)
+        // ---------------- SITTING YAW LOCK ----------------
+        // While sitting / sitting down / standing up, allow camera shoulder-look,
+        // but do NOT rotate the whole player body. Just clamp at the sitting limit.
+        bool sittingYawLocked =
+            lockBodyYawWhileSitting
+            && sitAction != null
+            && sitAction.IsSittingOrTransitioning;
+
+        if (sittingYawLocked)
+        {
+            yawOffset = Mathf.Clamp(
+                yawOffset + yawDelta,
+                -Mathf.Abs(sittingMaxYaw),
+                Mathf.Abs(sittingMaxYaw)
+            );
+
+            catchingUpStationary = false;
+
+            if (cameraRoot != null)
+                cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
+
+            wasMoving = hasMoveInput;
+            return;
+        }
+
+        if (phoneAllowedNow && motor != null && motor.crouching)
         {
             float alignStep =
                 bodyCatchUpSpeed * dt * Mathf.Max(0.01f, crouchPhoneAlignSpeedMultiplier);
@@ -479,6 +608,7 @@ public class PlayerLook : NetworkBehaviour
 
         bool shoulderMode =
             !hasMoveInput
+            && motor != null
             && !motor.sliding
             && !motor.sprinting
             && (motor.crouching ? shoulderWhileCrouching : true);
@@ -566,6 +696,7 @@ public class PlayerLook : NetworkBehaviour
             return;
 
         var basePos = cam.transform.localPosition;
+
         standingLocalPos = basePos;
         crouchingLocalPos = basePos + new Vector3(0f, -1.1f, 0f);
         slidingLocalPos = basePos + new Vector3(0f, -1.1f, -0.1f);
@@ -582,6 +713,9 @@ public class PlayerLook : NetworkBehaviour
             coilLocalPos = basePos + new Vector3(0f, -0.15f, -0.05f);
         if (sprintJumpLocalPos == Vector3.zero)
             sprintJumpLocalPos = basePos + new Vector3(0f, -0.08f, +0.06f);
+
+        if (sittingLocalPos == Vector3.zero)
+            sittingLocalPos = basePos + new Vector3(0f, -1f, 0.1f);
 
         if (Mathf.Approximately(crouchPitchForwardMax, 0f))
             crouchPitchForwardMax = pitchForwardMax;

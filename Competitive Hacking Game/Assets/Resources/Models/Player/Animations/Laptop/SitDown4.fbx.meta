@@ -55,6 +55,13 @@ ModelImporter:
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
       curves: []
       events:
+      - time: 0.06329114
+        functionName: AE_CameraUseSittingPosition
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
       - time: 0.21636409
         functionName: AE_LaptopShowInHand
         data: 
@@ -69,7 +76,14 @@ ModelImporter:
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.2853752
+      - time: 0.2987013
+        functionName: AE_LaptopCameraFocusOn
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
+      - time: 0.2990568
         functionName: AE_LaptopOpen
         data: 
         objectReferenceParameter: {instanceID: 0}
@@ -105,6 +119,13 @@ ModelImporter:
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
       curves: []
       events:
+      - time: 0.19432262
+        functionName: AE_CameraUseNormalPosition
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
       - time: 0.21839081
         functionName: AE_LaptopHide
         data: 
@@ -119,7 +140,14 @@ ModelImporter:
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.30459768
+      - time: 0.32323232
+        functionName: AE_LaptopCameraFocusOff
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
+      - time: 0.3232544
         functionName: AE_LaptopClose
         data: 
         objectReferenceParameter: {instanceID: 0}
