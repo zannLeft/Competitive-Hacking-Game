@@ -1,4 +1,4 @@
-// InputManager.cs  (RMB phone only, no flashlight input here)
+// InputManager.cs  (RMB phone only, plus SitDown action)
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -12,6 +12,7 @@ public class InputManager : NetworkBehaviour
     private PlayerMotor motor;
     private PlayerLook look;
     private PlayerPhone phone;
+    private PlayerSitAction sit; // NEW
 
     void Awake()
     {
@@ -22,6 +23,7 @@ public class InputManager : NetworkBehaviour
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
         phone = GetComponent<PlayerPhone>();
+        sit = GetComponent<PlayerSitAction>(); // NEW
     }
 
     public override void OnNetworkSpawn()
@@ -40,6 +42,9 @@ public class InputManager : NetworkBehaviour
 
         onFoot.Phone.started += OnPhoneHoldStarted;
         onFoot.Phone.canceled += OnPhoneHoldCanceled;
+
+        // NEW: SitDown (Q)
+        onFoot.SitDown.performed += OnSitDownPerformed;
 
         onFoot.Enable();
 
@@ -64,6 +69,11 @@ public class InputManager : NetworkBehaviour
     private void OnCrouchStarted(InputAction.CallbackContext ctx) => motor.Crouch(true);
 
     private void OnCrouchCanceled(InputAction.CallbackContext ctx) => motor.Crouch(false);
+
+    private void OnSitDownPerformed(InputAction.CallbackContext ctx)
+    {
+        sit?.TriggerSitDown();
+    }
 
     void Update()
     {
@@ -90,6 +100,9 @@ public class InputManager : NetworkBehaviour
 
         onFoot.Phone.started -= OnPhoneHoldStarted;
         onFoot.Phone.canceled -= OnPhoneHoldCanceled;
+
+        // NEW: SitDown
+        onFoot.SitDown.performed -= OnSitDownPerformed;
 
         ui.Pause.performed -= OnPausePerformed;
         ui.Start.performed -= OnStartPerformed;
@@ -119,7 +132,7 @@ public class InputManager : NetworkBehaviour
     {
         phone?.SetHolding(true);
         look?.SetAimHeld(true);
-        look?.SetPhoneAim(true); // this triggers pitch lock + anti-jank catch-up
+        look?.SetPhoneAim(true);
     }
 
     private void OnPhoneHoldCanceled(InputAction.CallbackContext ctx)
