@@ -1279,8 +1279,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   cam: {fileID: 2272284346070443280}
   cameraRoot: {fileID: 2698562056828817307}
-  useInspectorPositions: 1
   sitAction: {fileID: 0}
+  useInspectorPositions: 1
   standingLocalPos: {x: 0, y: 0, z: 0.2}
   crouchingLocalPos: {x: 0, y: -1.1, z: 0.2}
   slidingLocalPos: {x: 0, y: -1.1, z: 0.1}
@@ -1290,7 +1290,11 @@ MonoBehaviour:
   walkSideLocalPos: {x: 0, y: -0.075, z: 0.3}
   coilLocalPos: {x: 0, y: -0.45, z: 0.05}
   sprintJumpLocalPos: {x: 0, y: -0.15, z: 0.25}
-  sittingLocalPos: {x: 0, y: -1.1, z: 0.1}
+  sittingLocalPos: {x: 0, y: -1, z: 0.25}
+  sittingCameraSmoothTime: 1.5
+  sittingCameraArriveDistance: 0.01
+  laptopFocusFOV: 60
+  laptopFocusFOVSpeed: 3
   sprintJumpZThreshold: 2.1
   moveDirThreshold: 0.1
   xSensitivity: 20
@@ -1304,6 +1308,8 @@ MonoBehaviour:
   catchUpThreshold: 90
   bodyCatchUpSpeed: 250
   shoulderWhileCrouching: 1
+  lockBodyYawWhileSitting: 1
+  sittingMaxYaw: 80
   instantCatchUpOnMove: 0
   catchUpOnMoveSpeed: 250
   disableInstantCatchUpWhilePhone: 1
@@ -1464,7 +1470,7 @@ MonoBehaviour:
     Layer: 0
     OriginatingState: 1783681257
     DestinationState: 829543632
-    TransitionDuration: 0.24999905
+    TransitionDuration: 0.72999954
     TriggerNameHash: 829543632
     TransitionIndex: 6
   - IsCrossFadeExit: 0
@@ -1690,6 +1696,7 @@ MonoBehaviour:
   sitDownStateName: SitDown
   sittingStateName: Sitting
   standUpStateName: StandUp
+  networkCrossFadeTime: 0.03
 --- !u!114 &-2388601857875583894
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1708,7 +1715,7 @@ MonoBehaviour:
   laptopRoot: {fileID: 4053179886994481442}
   laptopAnimator: {fileID: 2020307085335192770}
   laptopOpenBool: Open
-  attachBlendTime: 0.1
+  attachBlendTime: 0.5
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0
@@ -2283,13 +2290,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8280544770872197559}
   serializedVersion: 2
-  m_LocalRotation: {x: 5.3277475e-14, y: 1, z: -2.344791e-13, w: -0.00000049875166}
-  m_LocalPosition: {x: -0, y: 0.053, z: 0.508}
+  m_LocalRotation: {x: 0, y: 0.9945219, z: 0.10452837, w: 0}
+  m_LocalPosition: {x: -0, y: 0.06, z: 0.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 55794280500276495}
-  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+  m_LocalEulerAnglesHint: {x: -12, y: 180, z: 0}
 --- !u!1 &8327063559802447350
 GameObject:
   m_ObjectHideFlags: 0
@@ -2469,55 +2476,55 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.59
+      value: 0.8
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.59
+      value: 0.8
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.59
+      value: 0.8
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0
+      value: -0.021560391
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: 0.011189501
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0
+      value: 0.024143232
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 1
+      value: 0.9922296
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0
+      value: -0.08932992
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: 0.008255287
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: -0.08621285
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
+      value: -10.128
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
+      value: 1.85
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
+      value: -10.096
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_ConstrainProportionsScale

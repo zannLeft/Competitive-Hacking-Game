@@ -50,7 +50,7 @@ public class PlayerLook : NetworkBehaviour
     [SerializeField]
     private Vector3 sittingLocalPos;
 
-    [Tooltip("Bigger = slower camera lowering/rising while sitting/standing.")]
+    [Tooltip("Duration of the camera lowering/rising while sitting/standing.")]
     [SerializeField]
     private float sittingCameraSmoothTime = 0.8f;
 
@@ -204,6 +204,18 @@ public class PlayerLook : NetworkBehaviour
 
     private bool _sittingCameraTransitionActive;
 
+    private enum SittingCameraBlendMode
+    {
+        None,
+        SittingDown,
+        StandingUp,
+    }
+
+    private SittingCameraBlendMode _sittingCamBlendMode = SittingCameraBlendMode.None;
+    private Vector3 _sittingCamStartLocalPos;
+    private Vector3 _sittingCamTargetLocalPos;
+    private float _sittingCamBlendTimer;
+
     public float Pitch => xRotation;
     public float YawOffset => yawOffset;
 
@@ -313,31 +325,69 @@ public class PlayerLook : NetworkBehaviour
         bool sittingCameraState = useSittingCamera || laptopFocus;
         bool previousSittingCameraState = _wasUsingSittingCamera || _wasLaptopFocus;
 
-        // Start a smooth camera transition whenever we enter OR leave sitting camera mode.
+        // Start a custom camera transition whenever we enter OR leave sitting camera mode.
         if (sittingCameraState != previousSittingCameraState)
+        {
             _sittingCameraTransitionActive = true;
+
+            _sittingCamBlendMode = sittingCameraState
+                ? SittingCameraBlendMode.SittingDown
+                : SittingCameraBlendMode.StandingUp;
+
+            _sittingCamStartLocalPos = _smoothedBaseLocalPos;
+            _sittingCamTargetLocalPos = baseTargetPos;
+            _sittingCamBlendTimer = 0f;
+            _sittingCamVel = Vector3.zero;
+        }
 
         if (sittingCameraState || _sittingCameraTransitionActive)
         {
-            _smoothedBaseLocalPos = Vector3.SmoothDamp(
-                _smoothedBaseLocalPos,
-                baseTargetPos,
-                ref _sittingCamVel,
-                Mathf.Max(0.0001f, sittingCameraSmoothTime),
-                Mathf.Infinity,
-                dt
-            );
-
-            // When leaving sitting mode, keep SmoothDamp active until we actually arrive.
-            if (!sittingCameraState)
+            if (_sittingCameraTransitionActive)
             {
-                float dist = Vector3.Distance(_smoothedBaseLocalPos, baseTargetPos);
-                if (dist <= sittingCameraArriveDistance)
+                // Keep the target fresh while standing up, in case the normal target changes.
+                _sittingCamTargetLocalPos = baseTargetPos;
+
+                float duration = Mathf.Max(0.0001f, sittingCameraSmoothTime);
+                _sittingCamBlendTimer += dt;
+
+                float t = Mathf.Clamp01(_sittingCamBlendTimer / duration);
+
+                float easedT =
+                    _sittingCamBlendMode == SittingCameraBlendMode.StandingUp
+                        ? EaseInOutCubic(t) // slow start -> speed up -> slow at top
+                        : EaseOutCubic(t); // fast start -> slow into seated position
+
+                _smoothedBaseLocalPos = Vector3.LerpUnclamped(
+                    _sittingCamStartLocalPos,
+                    _sittingCamTargetLocalPos,
+                    easedT
+                );
+
+                float dist = Vector3.Distance(
+                    _smoothedBaseLocalPos,
+                    _sittingCamTargetLocalPos
+                );
+
+                if (t >= 1f || dist <= sittingCameraArriveDistance)
                 {
-                    _smoothedBaseLocalPos = baseTargetPos;
-                    _sittingCamVel = Vector3.zero;
+                    _smoothedBaseLocalPos = _sittingCamTargetLocalPos;
                     _sittingCameraTransitionActive = false;
+                    _sittingCamBlendMode = SittingCameraBlendMode.None;
+                    _sittingCamBlendTimer = 0f;
+                    _sittingCamVel = Vector3.zero;
                 }
+            }
+            else
+            {
+                // Already sitting/focused: stay smoothly locked to the sitting camera position.
+                _smoothedBaseLocalPos = Vector3.SmoothDamp(
+                    _smoothedBaseLocalPos,
+                    baseTargetPos,
+                    ref _sittingCamVel,
+                    Mathf.Max(0.0001f, sittingCameraSmoothTime),
+                    Mathf.Infinity,
+                    dt
+                );
             }
         }
         else
@@ -383,7 +433,9 @@ public class PlayerLook : NetworkBehaviour
         bool fastState = actuallySprinting || (motor != null && motor.sliding);
 
         float targetFOV = laptopFocus ? laptopFocusFOV : (fastState ? sprintFOV : defaultFOV);
-        float fovSpeed = (laptopFocus || _wasLaptopFocus) ? laptopFocusFOVSpeed : fovTransitionSpeed;
+        float fovSpeed = (laptopFocus || _wasLaptopFocus)
+            ? laptopFocusFOVSpeed
+            : fovTransitionSpeed;
 
         if (cam != null)
             cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovSpeed);
@@ -679,6 +731,22 @@ public class PlayerLook : NetworkBehaviour
 
         if (Mathf.Abs(yawOffset) <= 0.01f)
             yawOffset = 0f;
+    }
+
+    private float EaseOutCubic(float t)
+    {
+        t = Mathf.Clamp01(t);
+        return 1f - Mathf.Pow(1f - t, 3f);
+    }
+
+    private float EaseInOutCubic(float t)
+    {
+        t = Mathf.Clamp01(t);
+
+        if (t < 0.5f)
+            return 4f * t * t * t;
+
+        return 1f - Mathf.Pow(-2f * t + 2f, 3f) * 0.5f;
     }
 
     public Quaternion MoveSpaceRotation => transform.rotation * Quaternion.Euler(0f, yawOffset, 0f);

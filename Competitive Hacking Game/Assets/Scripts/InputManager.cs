@@ -12,7 +12,9 @@ public class InputManager : NetworkBehaviour
     private PlayerMotor motor;
     private PlayerLook look;
     private PlayerPhone phone;
-    private PlayerSitAction sit; // NEW
+    private PlayerSitAction sit;
+
+    private bool _wasMovementBlocked;
 
     void Awake()
     {
@@ -23,7 +25,7 @@ public class InputManager : NetworkBehaviour
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
         phone = GetComponent<PlayerPhone>();
-        sit = GetComponent<PlayerSitAction>(); // NEW
+        sit = GetComponent<PlayerSitAction>();
     }
 
     public override void OnNetworkSpawn()
@@ -43,7 +45,6 @@ public class InputManager : NetworkBehaviour
         onFoot.Phone.started += OnPhoneHoldStarted;
         onFoot.Phone.canceled += OnPhoneHoldCanceled;
 
-        // NEW: SitDown (Q)
         onFoot.SitDown.performed += OnSitDownPerformed;
 
         onFoot.Enable();
@@ -53,22 +54,83 @@ public class InputManager : NetworkBehaviour
         ui.Enable();
     }
 
+    private bool MovementBlocked()
+    {
+        return sit != null && sit.BlocksGameplayMovement;
+    }
+
+    private void ClearMovementInputs()
+    {
+        motor?.Jump(false);
+        motor?.Sprint(false);
+        motor?.Crouch(false);
+
+        phone?.SetHolding(false);
+        look?.SetPhoneAim(false);
+        look?.SetAimHeld(false);
+    }
+
+    private void ReapplyHeldInputsAfterUnblock()
+    {
+        if (motor == null)
+            return;
+
+        // Important:
+        // Sprint.started will NOT fire if the player was already holding Shift
+        // while movement was blocked, so we manually restore it here.
+        if (onFoot.Sprint.IsPressed())
+            motor.Sprint(true);
+        else
+            motor.Sprint(false);
+
+        // Do NOT reapply crouch/jump automatically.
+        // That would make the player crouch/jump immediately after standing up,
+        // which usually feels bad.
+    }
+
     private void OnPausePerformed(InputAction.CallbackContext ctx)
     {
         PauseMenuUI.Instance?.Toggle();
     }
 
-    private void OnJumpStarted(InputAction.CallbackContext ctx) => motor.Jump(true);
+    private void OnJumpStarted(InputAction.CallbackContext ctx)
+    {
+        if (MovementBlocked())
+            return;
 
-    private void OnJumpCanceled(InputAction.CallbackContext ctx) => motor.Jump(false);
+        motor.Jump(true);
+    }
 
-    private void OnSprintStarted(InputAction.CallbackContext ctx) => motor.Sprint(true);
+    private void OnJumpCanceled(InputAction.CallbackContext ctx)
+    {
+        motor.Jump(false);
+    }
 
-    private void OnSprintCanceled(InputAction.CallbackContext ctx) => motor.Sprint(false);
+    private void OnSprintStarted(InputAction.CallbackContext ctx)
+    {
+        if (MovementBlocked())
+            return;
 
-    private void OnCrouchStarted(InputAction.CallbackContext ctx) => motor.Crouch(true);
+        motor.Sprint(true);
+    }
 
-    private void OnCrouchCanceled(InputAction.CallbackContext ctx) => motor.Crouch(false);
+    private void OnSprintCanceled(InputAction.CallbackContext ctx)
+    {
+        motor.Sprint(false);
+    }
+
+    private void OnCrouchStarted(InputAction.CallbackContext ctx)
+    {
+        if (MovementBlocked())
+            return;
+
+        motor.Crouch(true);
+    }
+
+    private void OnCrouchCanceled(InputAction.CallbackContext ctx)
+    {
+        motor.Crouch(false);
+    }
 
     private void OnSitDownPerformed(InputAction.CallbackContext ctx)
     {
@@ -80,7 +142,24 @@ public class InputManager : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
+        bool blocked = MovementBlocked();
+
+        if (blocked && !_wasMovementBlocked)
+        {
+            ClearMovementInputs();
+        }
+        else if (!blocked && _wasMovementBlocked)
+        {
+            ReapplyHeldInputsAfterUnblock();
+        }
+
+        _wasMovementBlocked = blocked;
+
+        if (!blocked)
+        {
+            motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
+        }
+
         look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
 
@@ -101,7 +180,6 @@ public class InputManager : NetworkBehaviour
         onFoot.Phone.started -= OnPhoneHoldStarted;
         onFoot.Phone.canceled -= OnPhoneHoldCanceled;
 
-        // NEW: SitDown
         onFoot.SitDown.performed -= OnSitDownPerformed;
 
         ui.Pause.performed -= OnPausePerformed;
@@ -130,6 +208,9 @@ public class InputManager : NetworkBehaviour
 
     private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
+        if (MovementBlocked())
+            return;
+
         phone?.SetHolding(true);
         look?.SetAimHeld(true);
         look?.SetPhoneAim(true);
@@ -142,7 +223,7 @@ public class InputManager : NetworkBehaviour
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
-        if (motor != null && motor.IsSprintHeld)
+        if (!MovementBlocked() && motor != null && motor.IsSprintHeld)
             motor.Sprint(true);
     }
 }

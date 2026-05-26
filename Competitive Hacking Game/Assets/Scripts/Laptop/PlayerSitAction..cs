@@ -1,4 +1,5 @@
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -10,6 +11,9 @@ public class PlayerSitAction : NetworkBehaviour
 
     [SerializeField]
     private PlayerMotor motor;
+
+    [SerializeField]
+    private NetworkAnimator networkAnimator;
 
     [Header("Animator Param")]
     [SerializeField]
@@ -33,8 +37,13 @@ public class PlayerSitAction : NetworkBehaviour
     private bool _useSittingCameraPosition;
     private bool _laptopCameraFocus;
 
+    private bool _blocksGameplayMovement;
+    private bool _waitingForStandUpToFinish;
+    private bool _hasEnteredStandUp;
+
     public bool UseSittingCameraPosition => _useSittingCameraPosition;
     public bool LaptopCameraFocus => _laptopCameraFocus;
+    public bool BlocksGameplayMovement => _blocksGameplayMovement;
 
     public bool IsSittingOrTransitioning
     {
@@ -64,6 +73,7 @@ public class PlayerSitAction : NetworkBehaviour
     {
         animator = GetComponent<Animator>();
         motor = GetComponent<PlayerMotor>();
+        networkAnimator = GetComponent<NetworkAnimator>();
     }
 
     public override void OnNetworkSpawn()
@@ -76,10 +86,34 @@ public class PlayerSitAction : NetworkBehaviour
         if (motor == null)
             motor = GetComponent<PlayerMotor>();
 
+        if (networkAnimator == null)
+            networkAnimator = GetComponent<NetworkAnimator>();
+
         _sitTrigHash = Animator.StringToHash(sitTriggerParam);
 
         _useSittingCameraPosition = false;
         _laptopCameraFocus = false;
+
+        _blocksGameplayMovement = false;
+        _waitingForStandUpToFinish = false;
+        _hasEnteredStandUp = false;
+    }
+
+    private void Update()
+    {
+        if (!_blocksGameplayMovement)
+            return;
+
+        if (!_waitingForStandUpToFinish)
+            return;
+
+        bool inStandUp = IsCurrentOrNextState(standUpStateName);
+
+        if (inStandUp)
+            _hasEnteredStandUp = true;
+
+        if (_hasEnteredStandUp && !inStandUp)
+            AE_MovementUnlock();
     }
 
     public void TriggerSitDown()
@@ -90,41 +124,61 @@ public class PlayerSitAction : NetworkBehaviour
         if (motor != null && (motor.sliding || motor.Coiling))
             return;
 
-        animator.SetTrigger(_sitTrigHash);
+        if (IsCurrentOrNextState(sitDownStateName) || IsCurrentOrNextState(standUpStateName))
+            return;
+
+        bool shouldStandUp = IsFullySitting;
+
+        _blocksGameplayMovement = true;
+        _waitingForStandUpToFinish = shouldStandUp;
+        _hasEnteredStandUp = false;
+
+        if (networkAnimator != null)
+        {
+            networkAnimator.SetTrigger(_sitTrigHash);
+        }
+        else
+        {
+            animator.SetTrigger(_sitTrigHash);
+        }
     }
 
     // ----------------------------
-    // Animation Events for camera timing
+    // Animation Events
     // ----------------------------
 
-    // Put this later in SitDown clip, when you actually want camera to start lowering.
     public void AE_CameraUseSittingPosition()
     {
         _useSittingCameraPosition = true;
     }
 
-    // Put this early in StandUp clip, when you want camera to start rising.
     public void AE_CameraUseNormalPosition()
     {
         _useSittingCameraPosition = false;
         _laptopCameraFocus = false;
     }
 
-    // Put this when laptop opens.
     public void AE_LaptopCameraFocusOn()
     {
         _laptopCameraFocus = true;
     }
 
-    // Put this when laptop closes.
     public void AE_LaptopCameraFocusOff()
     {
         _laptopCameraFocus = false;
     }
 
+    // Put this at the very end of StandUp.
+    public void AE_MovementUnlock()
+    {
+        _blocksGameplayMovement = false;
+        _waitingForStandUpToFinish = false;
+        _hasEnteredStandUp = false;
+    }
+
     private bool IsCurrentOrNextState(string stateName)
     {
-        if (string.IsNullOrEmpty(stateName))
+        if (animator == null || string.IsNullOrEmpty(stateName))
             return false;
 
         AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(baseLayerIndex);
@@ -135,6 +189,7 @@ public class PlayerSitAction : NetworkBehaviour
         if (animator.IsInTransition(baseLayerIndex))
         {
             AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(baseLayerIndex);
+
             if (next.IsName(stateName))
                 return true;
         }
