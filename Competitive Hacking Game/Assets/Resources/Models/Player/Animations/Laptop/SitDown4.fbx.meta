@@ -35,7 +35,7 @@ ModelImporter:
       takeName: Scene
       internalID: -623603649343465320
       firstFrame: 1
-      lastFrame: 300
+      lastFrame: 250
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
@@ -55,35 +55,35 @@ ModelImporter:
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
       curves: []
       events:
-      - time: 0.08613005
+      - time: 0
         functionName: AE_CameraUseSittingPosition
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.42106536
+      - time: 0.43471897
         functionName: AE_LaptopShowInHand
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.6921206
+      - time: 0.61530185
         functionName: AE_LaptopPlaceOnLap
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.79171103
+      - time: 0.78159726
         functionName: AE_LaptopOpen
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.79312223
+      - time: 0.78287053
         functionName: AE_LaptopCameraFocusOn
         data: 
         objectReferenceParameter: {instanceID: 0}
@@ -99,7 +99,7 @@ ModelImporter:
       takeName: Scene
       internalID: -1609281748187839663
       firstFrame: 1
-      lastFrame: 300
+      lastFrame: 250
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
@@ -119,43 +119,43 @@ ModelImporter:
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
       curves: []
       events:
-      - time: 0.32744998
+      - time: 0.10583942
+        functionName: AE_MovementUnlock
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
+      - time: 0.2589521
         functionName: AE_CameraUseNormalPosition
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.4264379
+      - time: 0.43862042
         functionName: AE_LaptopHide
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.6846933
+      - time: 0.6181262
         functionName: AE_LaptopBackToHand
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.8659433
+      - time: 0.89741087
         functionName: AE_LaptopClose
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.8669026
+      - time: 0.89837015
         functionName: AE_LaptopCameraFocusOff
-        data: 
-        objectReferenceParameter: {instanceID: 0}
-        floatParameter: 0
-        intParameter: 0
-        messageOptions: 0
-      - time: 0.10583942
-        functionName: AE_MovementUnlock
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
@@ -169,8 +169,8 @@ ModelImporter:
       name: Sitting
       takeName: Scene
       internalID: 723096430288179899
-      firstFrame: 300
-      lastFrame: 450
+      firstFrame: 299
+      lastFrame: 300
       wrapMode: 0
       orientationOffsetY: 0
       level: 0

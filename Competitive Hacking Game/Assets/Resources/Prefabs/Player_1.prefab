@@ -1290,9 +1290,9 @@ MonoBehaviour:
   walkSideLocalPos: {x: 0, y: -0.075, z: 0.3}
   coilLocalPos: {x: 0, y: -0.45, z: 0.05}
   sprintJumpLocalPos: {x: 0, y: -0.15, z: 0.25}
-  sittingLocalPos: {x: 0, y: -1, z: 0.25}
+  sittingLocalPos: {x: 0, y: -0.95, z: 0}
   sittingCameraSmoothTime: 1.5
-  sittingCameraArriveDistance: 0.01
+  sittingCameraArriveDistance: 0.001
   laptopFocusFOV: 60
   laptopFocusFOVSpeed: 3
   sprintJumpZThreshold: 2.1
@@ -1470,14 +1470,14 @@ MonoBehaviour:
     Layer: 0
     OriginatingState: 1783681257
     DestinationState: 829543632
-    TransitionDuration: 0.72999954
+    TransitionDuration: 0.1
     TriggerNameHash: 829543632
     TransitionIndex: 6
   - IsCrossFadeExit: 0
     Layer: 0
     OriginatingState: 655049087
     DestinationState: -1201797473
-    TransitionDuration: 0.25
+    TransitionDuration: 0.1
     TriggerNameHash: 829543632
     TransitionIndex: 0
   AnimatorParameterEntries:
@@ -1691,12 +1691,12 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   animator: {fileID: 7898741019774491149}
   motor: {fileID: 4708886749802310030}
+  networkAnimator: {fileID: 0}
   sitTriggerParam: SitDown
   baseLayerIndex: 0
   sitDownStateName: SitDown
   sittingStateName: Sitting
   standUpStateName: StandUp
-  networkCrossFadeTime: 0.03
 --- !u!114 &-2388601857875583894
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1715,7 +1715,7 @@ MonoBehaviour:
   laptopRoot: {fileID: 4053179886994481442}
   laptopAnimator: {fileID: 2020307085335192770}
   laptopOpenBool: Open
-  attachBlendTime: 0.5
+  attachBlendTime: 0.1
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0
@@ -2290,13 +2290,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8280544770872197559}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.9945219, z: 0.10452837, w: 0}
-  m_LocalPosition: {x: -0, y: 0.06, z: 0.4}
+  m_LocalRotation: {x: 0, y: 0.9935719, z: 0.11320323, w: 0}
+  m_LocalPosition: {x: 0, y: 0.1, z: 0.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 55794280500276495}
-  m_LocalEulerAnglesHint: {x: -12, y: 180, z: 0}
+  m_LocalEulerAnglesHint: {x: -13, y: 180, z: 0}
 --- !u!1 &8327063559802447350
 GameObject:
   m_ObjectHideFlags: 0
@@ -2476,15 +2476,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.8
+      value: 0.7
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.8
+      value: 0.7
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.8
+      value: 0.7
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalPosition.x
