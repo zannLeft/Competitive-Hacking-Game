@@ -90,7 +90,7 @@ ModelImporter:
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.8891051
+      - time: 0.9498172
         functionName: AE_LaptopScreenOn
         data: 
         objectReferenceParameter: {instanceID: 0}
@@ -154,6 +154,13 @@ ModelImporter:
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
+      - time: 0.75748444
+        functionName: AE_LaptopScreenOff
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
       - time: 0.89741087
         functionName: AE_LaptopClose
         data: 
@@ -163,13 +170,6 @@ ModelImporter:
         messageOptions: 0
       - time: 0.89837015
         functionName: AE_LaptopCameraFocusOff
-        data: 
-        objectReferenceParameter: {instanceID: 0}
-        floatParameter: 0
-        intParameter: 0
-        messageOptions: 0
-      - time: 0.8132296
-        functionName: AE_LaptopScreenOff
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
