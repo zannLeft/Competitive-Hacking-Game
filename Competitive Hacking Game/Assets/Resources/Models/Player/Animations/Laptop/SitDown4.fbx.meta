@@ -90,6 +90,13 @@ ModelImporter:
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
+      - time: 0.8891051
+        functionName: AE_LaptopScreenOn
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
       transformMask: []
       maskType: 3
       maskSource: {instanceID: 0}
@@ -156,6 +163,13 @@ ModelImporter:
         messageOptions: 0
       - time: 0.89837015
         functionName: AE_LaptopCameraFocusOff
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
+      - time: 0.8132296
+        functionName: AE_LaptopScreenOff
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0

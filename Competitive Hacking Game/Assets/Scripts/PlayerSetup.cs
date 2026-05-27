@@ -8,6 +8,10 @@ public class PlayerSetup : NetworkBehaviour
     public SkinnedMeshRenderer headRenderer;
     public SkinnedMeshRenderer bodyRenderer;
 
+    [Header("Layer Preservation")]
+    [SerializeField]
+    private string laptopUiLayerName = "LaptopUI";
+
     public NetworkVariable<int> ShirtIndex = new NetworkVariable<int>(
         0,
         NetworkVariableReadPermission.Everyone,
@@ -20,8 +24,12 @@ public class PlayerSetup : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    private int _laptopUiLayer = -1;
+
     private void Start()
     {
+        _laptopUiLayer = LayerMask.NameToLayer(laptopUiLayerName);
+
         if (headRenderer != null)
         {
             headRenderer.shadowCastingMode = IsOwner
@@ -105,7 +113,16 @@ public class PlayerSetup : NetworkBehaviour
 
     private void SetLayerRecursively(GameObject obj, int newLayer)
     {
+        if (obj == null)
+            return;
+
+        // Preserve laptop RenderTexture UI. Otherwise the player's MyPlayer/OtherPlayers
+        // layer assignment prevents LaptopUI_Cam from rendering the Canvas.
+        if (_laptopUiLayer >= 0 && obj.layer == _laptopUiLayer)
+            return;
+
         obj.layer = newLayer;
+
         foreach (Transform child in obj.transform)
             SetLayerRecursively(child.gameObject, newLayer);
     }

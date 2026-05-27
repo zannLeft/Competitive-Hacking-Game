@@ -1396,6 +1396,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   headRenderer: {fileID: 9103178378047289684}
   bodyRenderer: {fileID: 3643557171636159750}
+  laptopUiLayerName: LaptopUI
   ShirtIndex:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
@@ -1714,6 +1715,7 @@ MonoBehaviour:
   lapSocket: {fileID: 2389054034840453546}
   laptopRoot: {fileID: 4053179886994481442}
   laptopAnimator: {fileID: 2020307085335192770}
+  laptopScreen: {fileID: 0}
   laptopOpenBool: Open
   attachBlendTime: 0.1
 --- !u!1 &6017817500606899066
@@ -2474,17 +2476,21 @@ PrefabInstance:
       propertyPath: m_ApplyRootMotion
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3118761102280087000, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.7
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.7
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.7
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalPosition.x
