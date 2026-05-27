@@ -30,6 +30,13 @@ public class PhoneNetworksUI : MonoBehaviour
             _playerCam = look.cam;
         else
             _playerCam = Camera.main;
+
+        RouterHackState.Changed += OnRouterHackStateChanged;
+    }
+
+    private void OnDestroy()
+    {
+        RouterHackState.Changed -= OnRouterHackStateChanged;
     }
 
     private void Update()
@@ -41,9 +48,15 @@ public class PhoneNetworksUI : MonoBehaviour
         _timer -= Time.deltaTime;
         if (_timer > 0f)
             return;
-        _timer = refreshInterval;
 
+        _timer = refreshInterval;
         RefreshList();
+    }
+
+    private void OnRouterHackStateChanged()
+    {
+        // Force quick refresh when a network gets completed.
+        _timer = 0f;
     }
 
     private void RefreshList()
@@ -52,31 +65,43 @@ public class PhoneNetworksUI : MonoBehaviour
             return;
 
         var routers = RouterRegistry.Routers;
-        EnsureRowCount(routers.Count);
-
         Vector3 fromPos = _playerCam ? _playerCam.transform.position : transform.position;
 
-        // Show ALL networks (even 0 strength), like you wanted
+        int rowIndex = 0;
+
         for (int i = 0; i < routers.Count; i++)
         {
             var r = routers[i];
-            float s = (r != null) ? r.GetStrength01(fromPos) : 0f;
 
-            _rows[i].gameObject.SetActive(true);
-            _rows[i].Set(r != null ? r.NetworkName : "Missing Router", s);
+            if (r == null)
+                continue;
+
+            // Hide completed/hacked networks from the phone scanner.
+            if (RouterHackState.IsCompleted(r.NetworkName))
+                continue;
+
+            float strength = r.GetStrength01(fromPos);
+
+            NetworkRowUI row = GetRow(rowIndex);
+            row.gameObject.SetActive(true);
+            row.Set(r.NetworkName, strength);
+
+            rowIndex++;
         }
 
-        // Hide extra pooled rows
-        for (int i = routers.Count; i < _rows.Count; i++)
+        // Hide unused pooled rows
+        for (int i = rowIndex; i < _rows.Count; i++)
             _rows[i].gameObject.SetActive(false);
     }
 
-    private void EnsureRowCount(int needed)
+    private NetworkRowUI GetRow(int index)
     {
-        while (_rows.Count < needed)
+        while (_rows.Count <= index)
         {
             var row = Instantiate(rowPrefab, contentRoot);
             _rows.Add(row);
         }
+
+        return _rows[index];
     }
 }

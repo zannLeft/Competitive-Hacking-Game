@@ -1,4 +1,4 @@
-// InputManager.cs  (RMB phone only, plus SitDown action)
+// InputManager.cs  (RMB phone only, SitDown action, Laptop Hack action)
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -13,6 +13,7 @@ public class InputManager : NetworkBehaviour
     private PlayerLook look;
     private PlayerPhone phone;
     private PlayerSitAction sit;
+    private PlayerLaptopHacker laptopHacker;
 
     private bool _wasMovementBlocked;
 
@@ -26,6 +27,7 @@ public class InputManager : NetworkBehaviour
         look = GetComponent<PlayerLook>();
         phone = GetComponent<PlayerPhone>();
         sit = GetComponent<PlayerSitAction>();
+        laptopHacker = GetComponent<PlayerLaptopHacker>();
     }
 
     public override void OnNetworkSpawn()
@@ -46,6 +48,9 @@ public class InputManager : NetworkBehaviour
         onFoot.Phone.canceled += OnPhoneHoldCanceled;
 
         onFoot.SitDown.performed += OnSitDownPerformed;
+
+        onFoot.Hack.started += OnHackStarted;
+        onFoot.Hack.canceled += OnHackCanceled;
 
         onFoot.Enable();
 
@@ -68,6 +73,8 @@ public class InputManager : NetworkBehaviour
         phone?.SetHolding(false);
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
+
+        laptopHacker?.SetHackHeld(false);
     }
 
     private void ReapplyHeldInputsAfterUnblock()
@@ -75,17 +82,10 @@ public class InputManager : NetworkBehaviour
         if (motor == null)
             return;
 
-        // Important:
-        // Sprint.started will NOT fire if the player was already holding Shift
-        // while movement was blocked, so we manually restore it here.
         if (onFoot.Sprint.IsPressed())
             motor.Sprint(true);
         else
             motor.Sprint(false);
-
-        // Do NOT reapply crouch/jump automatically.
-        // That would make the player crouch/jump immediately after standing up,
-        // which usually feels bad.
     }
 
     private void OnPausePerformed(InputAction.CallbackContext ctx)
@@ -137,6 +137,16 @@ public class InputManager : NetworkBehaviour
         sit?.TriggerSitDown();
     }
 
+    private void OnHackStarted(InputAction.CallbackContext ctx)
+    {
+        laptopHacker?.SetHackHeld(true);
+    }
+
+    private void OnHackCanceled(InputAction.CallbackContext ctx)
+    {
+        laptopHacker?.SetHackHeld(false);
+    }
+
     void Update()
     {
         if (!IsOwner)
@@ -145,20 +155,14 @@ public class InputManager : NetworkBehaviour
         bool blocked = MovementBlocked();
 
         if (blocked && !_wasMovementBlocked)
-        {
             ClearMovementInputs();
-        }
         else if (!blocked && _wasMovementBlocked)
-        {
             ReapplyHeldInputsAfterUnblock();
-        }
 
         _wasMovementBlocked = blocked;
 
         if (!blocked)
-        {
             motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
-        }
 
         look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
@@ -181,6 +185,9 @@ public class InputManager : NetworkBehaviour
         onFoot.Phone.canceled -= OnPhoneHoldCanceled;
 
         onFoot.SitDown.performed -= OnSitDownPerformed;
+
+        onFoot.Hack.started -= OnHackStarted;
+        onFoot.Hack.canceled -= OnHackCanceled;
 
         ui.Pause.performed -= OnPausePerformed;
         ui.Start.performed -= OnStartPerformed;

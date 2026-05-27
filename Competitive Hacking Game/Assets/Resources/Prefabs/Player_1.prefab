@@ -1189,6 +1189,7 @@ GameObject:
   - component: {fileID: 8878162043686913073}
   - component: {fileID: 145536466847178049}
   - component: {fileID: -2388601857875583894}
+  - component: {fileID: 5844092317134281050}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1718,6 +1719,26 @@ MonoBehaviour:
   laptopScreen: {fileID: 0}
   laptopOpenBool: Open
   attachBlendTime: 0.1
+--- !u!114 &5844092317134281050
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e64c79cc18dd6a4caf79b4d20123ede, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerLaptopHacker
+  ShowTopMostFoldoutHeaderGroup: 1
+  sitAction: {fileID: 145536466847178049}
+  rangeOrigin: {fileID: 0}
+  hackSeconds: 5
+  barCount: 5
+  requiredBars: 5
+  requireLaptopFocus: 1
+  targetRefreshInterval: 0.1
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0
@@ -2468,6 +2489,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 5178618480465560667}
     m_Modifications:
+    - target: {fileID: 508488948025625369, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -80
+      objectReference: {fileID: 0}
     - target: {fileID: 914499233266613209, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_Name
       value: Laptop
@@ -2479,6 +2504,14 @@ PrefabInstance:
     - target: {fileID: 3118761102280087000, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_Layer
       value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 3648656571398203673, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -40
+      objectReference: {fileID: 0}
+    - target: {fileID: 5252819131694604518, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -120
       objectReference: {fileID: 0}
     - target: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
       propertyPath: m_LocalScale.x

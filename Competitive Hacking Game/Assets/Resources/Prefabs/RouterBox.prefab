@@ -46,7 +46,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RouterBox
   networkName: Network 1
-  maxRange: 20
+  maxRange: 30
   falloff:
     serializedVersion: 2
     m_Curve:

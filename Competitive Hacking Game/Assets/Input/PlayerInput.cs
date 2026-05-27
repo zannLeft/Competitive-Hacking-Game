@@ -163,6 +163,15 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Hack"",
+                    ""type"": ""Button"",
+                    ""id"": ""5345e06d-7027-4295-a88f-b1befcb35523"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -396,6 +405,17 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                     ""action"": ""SitDown"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""545b11ee-505e-4b4c-8f20-454467ba0f50"",
+                    ""path"": ""<Keyboard>/e"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Hack"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         },
@@ -471,6 +491,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         m_OnFoot_Phone = m_OnFoot.FindAction("Phone", throwIfNotFound: true);
         m_OnFoot_Flashlight = m_OnFoot.FindAction("Flashlight", throwIfNotFound: true);
         m_OnFoot_SitDown = m_OnFoot.FindAction("SitDown", throwIfNotFound: true);
+        m_OnFoot_Hack = m_OnFoot.FindAction("Hack", throwIfNotFound: true);
         // UI
         m_UI = asset.FindActionMap("UI", throwIfNotFound: true);
         m_UI_Pause = m_UI.FindAction("Pause", throwIfNotFound: true);
@@ -564,6 +585,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
     private readonly InputAction m_OnFoot_Phone;
     private readonly InputAction m_OnFoot_Flashlight;
     private readonly InputAction m_OnFoot_SitDown;
+    private readonly InputAction m_OnFoot_Hack;
     /// <summary>
     /// Provides access to input actions defined in input action map "OnFoot".
     /// </summary>
@@ -607,6 +629,10 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "OnFoot/SitDown".
         /// </summary>
         public InputAction @SitDown => m_Wrapper.m_OnFoot_SitDown;
+        /// <summary>
+        /// Provides access to the underlying input action "OnFoot/Hack".
+        /// </summary>
+        public InputAction @Hack => m_Wrapper.m_OnFoot_Hack;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -657,6 +683,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             @SitDown.started += instance.OnSitDown;
             @SitDown.performed += instance.OnSitDown;
             @SitDown.canceled += instance.OnSitDown;
+            @Hack.started += instance.OnHack;
+            @Hack.performed += instance.OnHack;
+            @Hack.canceled += instance.OnHack;
         }
 
         /// <summary>
@@ -692,6 +721,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             @SitDown.started -= instance.OnSitDown;
             @SitDown.performed -= instance.OnSitDown;
             @SitDown.canceled -= instance.OnSitDown;
+            @Hack.started -= instance.OnHack;
+            @Hack.performed -= instance.OnHack;
+            @Hack.canceled -= instance.OnHack;
         }
 
         /// <summary>
@@ -895,6 +927,13 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnSitDown(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "Hack" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnHack(InputAction.CallbackContext context);
     }
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "UI" which allows adding and removing callbacks.
