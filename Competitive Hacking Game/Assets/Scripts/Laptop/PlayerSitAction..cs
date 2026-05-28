@@ -1,5 +1,4 @@
 using Unity.Netcode;
-using Unity.Netcode.Components;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -12,12 +11,9 @@ public class PlayerSitAction : NetworkBehaviour
     [SerializeField]
     private PlayerMotor motor;
 
-    [SerializeField]
-    private NetworkAnimator networkAnimator;
-
     [Header("Animator Param")]
     [SerializeField]
-    private string sitTriggerParam = "SitDown";
+    private string laptopSittingBoolParam = "LaptopSitting";
 
     [Header("Animator State Names")]
     [SerializeField]
@@ -32,7 +28,7 @@ public class PlayerSitAction : NetworkBehaviour
     [SerializeField]
     private string standUpStateName = "StandUp";
 
-    private int _sitTrigHash;
+    private int _laptopSittingHash;
 
     private bool _useSittingCameraPosition;
     private bool _laptopCameraFocus;
@@ -40,6 +36,14 @@ public class PlayerSitAction : NetworkBehaviour
     private bool _blocksGameplayMovement;
     private bool _waitingForStandUpToFinish;
     private bool _hasEnteredStandUp;
+
+    private bool _localWantsSitting;
+
+    private NetworkVariable<bool> WantsSitting = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
     public bool UseSittingCameraPosition => _useSittingCameraPosition;
     public bool LaptopCameraFocus => _laptopCameraFocus;
@@ -73,7 +77,6 @@ public class PlayerSitAction : NetworkBehaviour
     {
         animator = GetComponent<Animator>();
         motor = GetComponent<PlayerMotor>();
-        networkAnimator = GetComponent<NetworkAnimator>();
     }
 
     public override void OnNetworkSpawn()
@@ -86,10 +89,7 @@ public class PlayerSitAction : NetworkBehaviour
         if (motor == null)
             motor = GetComponent<PlayerMotor>();
 
-        if (networkAnimator == null)
-            networkAnimator = GetComponent<NetworkAnimator>();
-
-        _sitTrigHash = Animator.StringToHash(sitTriggerParam);
+        _laptopSittingHash = Animator.StringToHash(laptopSittingBoolParam);
 
         _useSittingCameraPosition = false;
         _laptopCameraFocus = false;
@@ -97,6 +97,22 @@ public class PlayerSitAction : NetworkBehaviour
         _blocksGameplayMovement = false;
         _waitingForStandUpToFinish = false;
         _hasEnteredStandUp = false;
+        _localWantsSitting = WantsSitting.Value;
+
+        WantsSitting.OnValueChanged += OnWantsSittingChanged;
+
+        ApplyWantsSitting(WantsSitting.Value);
+
+        motor?.SetSittingCollider(false);
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+
+        WantsSitting.OnValueChanged -= OnWantsSittingChanged;
+
+        motor?.SetSittingCollider(false);
     }
 
     private void Update()
@@ -121,25 +137,65 @@ public class PlayerSitAction : NetworkBehaviour
         if (!IsOwner || animator == null)
             return;
 
-        if (motor != null && (motor.sliding || motor.Coiling))
+        bool currentlyTryingToSit = _localWantsSitting || IsFullySitting;
+        bool targetWantsSitting = !currentlyTryingToSit;
+
+        // Starting sit-down is not allowed while airborne/sliding/coiling.
+        // Standing up is allowed because you are already in the laptop state.
+        if (targetWantsSitting && motor != null && (!motor.IsGrounded || motor.sliding || motor.Coiling))
             return;
 
+        // Prevent spam during transition animations.
         if (IsCurrentOrNextState(sitDownStateName) || IsCurrentOrNextState(standUpStateName))
             return;
 
-        bool shouldStandUp = IsFullySitting;
+        // Local prediction so owner responds instantly.
+        ApplyWantsSitting(targetWantsSitting);
 
-        _blocksGameplayMovement = true;
-        _waitingForStandUpToFinish = shouldStandUp;
-        _hasEnteredStandUp = false;
+        RequestSetWantsSittingServerRpc(targetWantsSitting);
+    }
 
-        if (networkAnimator != null)
+    [ServerRpc]
+    private void RequestSetWantsSittingServerRpc(bool wantsSitting)
+    {
+        WantsSitting.Value = wantsSitting;
+    }
+
+    private void OnWantsSittingChanged(bool previousValue, bool newValue)
+    {
+        ApplyWantsSitting(newValue);
+    }
+
+    private void ApplyWantsSitting(bool wantsSitting)
+    {
+        _localWantsSitting = wantsSitting;
+
+        if (animator != null)
+            animator.SetBool(_laptopSittingHash, wantsSitting);
+
+        if (wantsSitting)
         {
-            networkAnimator.SetTrigger(_sitTrigHash);
+            // Going into sit-down / sitting.
+            _blocksGameplayMovement = true;
+            _waitingForStandUpToFinish = false;
+            _hasEnteredStandUp = false;
         }
         else
         {
-            animator.SetTrigger(_sitTrigHash);
+            // Going into stand-up.
+            // Keep input blocked until AE_MovementUnlock at the end of StandUp.
+            if (IsSittingOrTransitioning)
+            {
+                _blocksGameplayMovement = true;
+                _waitingForStandUpToFinish = true;
+                _hasEnteredStandUp = false;
+            }
+            else
+            {
+                _blocksGameplayMovement = false;
+                _waitingForStandUpToFinish = false;
+                _hasEnteredStandUp = false;
+            }
         }
     }
 
@@ -150,12 +206,14 @@ public class PlayerSitAction : NetworkBehaviour
     public void AE_CameraUseSittingPosition()
     {
         _useSittingCameraPosition = true;
+        motor?.SetSittingCollider(true);
     }
 
     public void AE_CameraUseNormalPosition()
     {
         _useSittingCameraPosition = false;
         _laptopCameraFocus = false;
+        motor?.SetSittingCollider(false);
     }
 
     public void AE_LaptopCameraFocusOn()
@@ -174,6 +232,14 @@ public class PlayerSitAction : NetworkBehaviour
         _blocksGameplayMovement = false;
         _waitingForStandUpToFinish = false;
         _hasEnteredStandUp = false;
+        _localWantsSitting = false;
+
+        if (animator != null)
+            animator.SetBool(_laptopSittingHash, false);
+
+        _useSittingCameraPosition = false;
+        _laptopCameraFocus = false;
+        motor?.SetSittingCollider(false);
     }
 
     private bool IsCurrentOrNextState(string stateName)
