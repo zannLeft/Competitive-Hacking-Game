@@ -1190,6 +1190,7 @@ GameObject:
   - component: {fileID: 145536466847178049}
   - component: {fileID: -2388601857875583894}
   - component: {fileID: 5844092317134281050}
+  - component: {fileID: 6402268619689270216}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1468,20 +1469,6 @@ MonoBehaviour:
     TransitionDuration: 0.1
     TriggerNameHash: 125937960
     TransitionIndex: 3
-  - IsCrossFadeExit: 0
-    Layer: 0
-    OriginatingState: 1783681257
-    DestinationState: 829543632
-    TransitionDuration: 0.1
-    TriggerNameHash: 829543632
-    TransitionIndex: 6
-  - IsCrossFadeExit: 0
-    Layer: 0
-    OriginatingState: 655049087
-    DestinationState: -1201797473
-    TransitionDuration: 0.1
-    TriggerNameHash: 829543632
-    TransitionIndex: 0
   AnimatorParameterEntries:
     ParameterEntries:
     - name: Blend
@@ -1532,10 +1519,10 @@ MonoBehaviour:
       NameHash: -1689185553
       Synchronize: 1
       ParameterType: 4
-    - name: SitDown
-      NameHash: 829543632
+    - name: LaptopSitting
+      NameHash: 265910336
       Synchronize: 1
-      ParameterType: 9
+      ParameterType: 4
   AnimatorParametersExpanded: 0
 --- !u!114 &667075037438137217
 MonoBehaviour:
@@ -1693,8 +1680,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   animator: {fileID: 7898741019774491149}
   motor: {fileID: 4708886749802310030}
-  networkAnimator: {fileID: 0}
-  sitTriggerParam: SitDown
+  laptopSittingBoolParam: LaptopSitting
   baseLayerIndex: 0
   sitDownStateName: SitDown
   sittingStateName: Sitting
@@ -1739,6 +1725,24 @@ MonoBehaviour:
   requiredBars: 5
   requireLaptopFocus: 1
   targetRefreshInterval: 0.1
+--- !u!114 &6402268619689270216
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4324a0e040a43e4d8e7d86ffa4358e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerRoundReset
+  ShowTopMostFoldoutHeaderGroup: 1
+  sitAction: {fileID: 145536466847178049}
+  laptopVisual: {fileID: -2388601857875583894}
+  laptopHacker: {fileID: 5844092317134281050}
+  phone: {fileID: 8878162043686913073}
+  look: {fileID: 6487965562487473033}
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

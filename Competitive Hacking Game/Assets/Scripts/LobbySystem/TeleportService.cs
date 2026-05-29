@@ -6,39 +6,85 @@ using UnityEngine;
 public class TeleportService : MonoBehaviour
 {
     private const string MSG_TELEPORT = "LM_Teleport";
+
     private bool _registered;
+    private NetworkManager _registeredNetworkManager;
 
     public void RegisterHandlersIfNeeded()
     {
-        if (_registered)
-            return;
-
         var nm = NetworkManager.Singleton;
         if (nm == null)
+        {
+            ResetRegistrationStateOnly();
             return;
+        }
 
         var cmm = nm.CustomMessagingManager;
         if (cmm == null)
+        {
+            ResetRegistrationStateOnly();
+            return;
+        }
+
+        // If already registered on this exact NetworkManager, do nothing.
+        if (_registered && _registeredNetworkManager == nm)
             return;
 
+        // If we think we were registered on an old/stale session, clear it first.
+        UnregisterHandlersIfNeeded();
+
         cmm.RegisterNamedMessageHandler(MSG_TELEPORT, OnTeleportMessage);
+
         _registered = true;
+        _registeredNetworkManager = nm;
+
+        Debug.Log("[TeleportService] Registered teleport message handler.");
     }
 
     public void UnregisterHandlersIfNeeded()
     {
-        if (!_registered)
-            return;
-
-        var nm = NetworkManager.Singleton;
-        if (nm != null)
+        if (_registeredNetworkManager != null)
         {
-            var cmm = nm.CustomMessagingManager;
+            var cmm = _registeredNetworkManager.CustomMessagingManager;
+
             if (cmm != null)
-                cmm.UnregisterNamedMessageHandler(MSG_TELEPORT);
+            {
+                try
+                {
+                    cmm.UnregisterNamedMessageHandler(MSG_TELEPORT);
+                }
+                catch
+                {
+                    // Safe to ignore. This can happen if NetworkManager is already shutting down.
+                }
+            }
+        }
+        else if (NetworkManager.Singleton != null)
+        {
+            var cmm = NetworkManager.Singleton.CustomMessagingManager;
+
+            if (cmm != null)
+            {
+                try
+                {
+                    cmm.UnregisterNamedMessageHandler(MSG_TELEPORT);
+                }
+                catch
+                {
+                    // Safe to ignore during shutdown/disconnect.
+                }
+            }
         }
 
+        ResetRegistrationStateOnly();
+
+        Debug.Log("[TeleportService] Unregistered teleport message handler.");
+    }
+
+    public void ResetRegistrationStateOnly()
+    {
         _registered = false;
+        _registeredNetworkManager = null;
     }
 
     public void SendTeleportToClient(ulong targetClientId, Vector3 pos, Quaternion rot)
@@ -47,7 +93,7 @@ public class TeleportService : MonoBehaviour
         if (nm == null)
             return;
 
-        // If it's us (host/local), teleport immediately
+        // If it's us, teleport immediately.
         if (nm.IsConnectedClient && nm.LocalClientId == targetClientId)
         {
             TeleportLocalPlayer(pos, rot);
@@ -73,6 +119,7 @@ public class TeleportService : MonoBehaviour
     {
         reader.ReadValueSafe(out Vector3 pos);
         reader.ReadValueSafe(out Quaternion rot);
+
         TeleportLocalPlayer(pos, rot);
     }
 

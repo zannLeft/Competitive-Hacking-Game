@@ -15,6 +15,8 @@ public class MatchFlowManager : MonoBehaviour
 
     private TeleportService _teleport;
     private NetworkSessionManager _session;
+    private RoundRoleManager _roles;
+    private RoundResetManager _roundReset;
 
     public void Configure(string interiorSceneName, string lobbySpawnTag, string interiorSpawnTag)
     {
@@ -27,19 +29,67 @@ public class MatchFlowManager : MonoBehaviour
     {
         _teleport = GetComponent<TeleportService>();
         _session = GetComponent<NetworkSessionManager>();
+
+        _roles = GetComponent<RoundRoleManager>();
+        if (_roles == null)
+            _roles = gameObject.AddComponent<RoundRoleManager>();
+
+        _roundReset = GetComponent<RoundResetManager>();
+        if (_roundReset == null)
+            _roundReset = gameObject.AddComponent<RoundResetManager>();
     }
 
     public void StartMatchAsHost()
     {
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost)
             return;
+
         if (IsInteriorLoaded())
         {
+            if (!IsMatchInProgress)
+            {
+                Debug.LogWarning(
+                    "[MatchFlow] Interior scene was already loaded before match start. Treating it as stale and reloading cleanly."
+                );
+
+                StartCoroutine(UnloadStaleInteriorThenStartMatch());
+                return;
+            }
+
             Debug.LogWarning("[MatchFlow] Interior already loaded; ignoring StartMatch.");
             return;
         }
 
+        BeginMatchStartSequence();
+    }
+
+    private IEnumerator UnloadStaleInteriorThenStartMatch()
+    {
+        var interior = SceneManager.GetSceneByName(_interiorSceneName);
+
+        if (interior.IsValid() && interior.isLoaded)
+        {
+            AsyncOperation op = SceneManager.UnloadSceneAsync(interior);
+
+            while (op != null && !op.isDone)
+                yield return null;
+        }
+
+        yield return null;
+
+        BeginMatchStartSequence();
+    }
+
+    private void BeginMatchStartSequence()
+    {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost)
+            return;
+
         IsMatchInProgress = true;
+
+        _roundReset?.ResetAllPlayersForMatchStart();
+        _roles?.ResetRoles();
+        _roles?.AssignRandomBadGuy();
 
         var nsm = NetworkManager.Singleton.SceneManager;
         nsm.OnLoadEventCompleted += OnInteriorLoadCompleted;
@@ -57,6 +107,7 @@ public class MatchFlowManager : MonoBehaviour
             return;
 
         NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= OnInteriorLoadCompleted;
+
         TeleportAllClients(_interiorSpawnTag);
     }
 
@@ -66,6 +117,9 @@ public class MatchFlowManager : MonoBehaviour
             return;
 
         IsMatchInProgress = false;
+
+        _roundReset?.ResetAllPlayersForMatchEnd();
+        _roles?.ResetRoles();
 
         if (!IsInteriorLoaded())
         {
@@ -78,7 +132,9 @@ public class MatchFlowManager : MonoBehaviour
 
         var interior = SceneManager.GetSceneByName(_interiorSceneName);
         if (interior.IsValid() && interior.isLoaded)
+        {
             nsm.UnloadScene(interior);
+        }
         else
         {
             nsm.OnUnloadEventCompleted -= OnInteriorUnloadCompleted;
@@ -98,6 +154,7 @@ public class MatchFlowManager : MonoBehaviour
             return;
 
         NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted -= OnInteriorUnloadCompleted;
+
         TeleportAllClients(_lobbySpawnTag);
     }
 
@@ -105,6 +162,9 @@ public class MatchFlowManager : MonoBehaviour
     {
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost)
             return;
+
+        _roundReset?.ResetAllPlayersForMatchEnd();
+        _roles?.ResetRoles();
 
         if (IsInteriorLoaded())
         {
@@ -134,6 +194,7 @@ public class MatchFlowManager : MonoBehaviour
             return;
 
         NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted -= OnUnloadThenShutdown;
+
         StartCoroutine(ShutdownNextFrame());
     }
 
@@ -143,34 +204,33 @@ public class MatchFlowManager : MonoBehaviour
 
         IsMatchInProgress = false;
 
-        // shutdown session
         var session = _session != null ? _session : GetComponent<NetworkSessionManager>();
         if (session != null)
             session.ShutdownSession();
 
-        // local cleanup
         UnloadInteriorLocalIfLoaded();
 
-        // UI/menu state is handled by LobbyManager.OnLocalClientDisconnected or LeaveToLobbySelect
         LobbyManager.Instance?.SceneUI?.ShowLobbyScreen();
         LobbyManager.Instance?.Services?.ClearLocalLobby();
     }
 
-    // Server: initial spawn for joining clients (lobby rooftop)
     public void ServerTeleportClientToLobbySpawnWhenReady(ulong clientId)
     {
         if (!NetworkManager.Singleton || !NetworkManager.Singleton.IsServer)
             return;
+
         StartCoroutine(TeleportClientToSpawnWhenReady(clientId, _lobbySpawnTag));
     }
 
     private IEnumerator TeleportClientToSpawnWhenReady(ulong clientId, string spawnTag)
     {
         var nm = NetworkManager.Singleton;
+
         if (nm == null)
             yield break;
 
         float timeout = 8f;
+
         while (timeout > 0f)
         {
             if (
@@ -197,6 +257,7 @@ public class MatchFlowManager : MonoBehaviour
         }
 
         var spawns = GameObject.FindGameObjectsWithTag(spawnTag);
+
         if (spawns == null || spawns.Length == 0)
         {
             Debug.LogWarning($"[MatchFlow] No objects tagged '{spawnTag}' found.");
@@ -216,6 +277,7 @@ public class MatchFlowManager : MonoBehaviour
             return;
 
         var spawns = GameObject.FindGameObjectsWithTag(spawnTag);
+
         if (spawns == null || spawns.Length == 0)
         {
             Debug.LogWarning($"[MatchFlow] No spawn objects with tag '{spawnTag}' found.");
@@ -223,10 +285,12 @@ public class MatchFlowManager : MonoBehaviour
         }
 
         var tp = _teleport != null ? _teleport : GetComponent<TeleportService>();
+
         if (tp == null)
             return;
 
         int i = 0;
+
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
             if (client.PlayerObject == null)
@@ -248,6 +312,7 @@ public class MatchFlowManager : MonoBehaviour
     public void UnloadInteriorLocalIfLoaded()
     {
         var s = SceneManager.GetSceneByName(_interiorSceneName);
+
         if (s.IsValid() && s.isLoaded)
             SceneManager.UnloadSceneAsync(s);
     }

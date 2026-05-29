@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Unity.Netcode;
 using Unity.Services.Lobbies.Models;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -12,6 +13,9 @@ public class LobbyManager : MonoBehaviour
     [Header("Config")]
     [SerializeField]
     private int maxPlayers = 5;
+
+    [SerializeField]
+    private int minPlayersToStart = 2;
 
     [Header("Scene Names")]
     [SerializeField]
@@ -27,16 +31,16 @@ public class LobbyManager : MonoBehaviour
     [SerializeField]
     private string interiorSpawnTag = "InteriorSpawn";
 
-    // Components
     public LobbyServicesFacade Services { get; private set; }
     public RelayFacade Relay { get; private set; }
     public NetworkSessionManager Session { get; private set; }
     public TeleportService Teleport { get; private set; }
     public MatchFlowManager MatchFlow { get; private set; }
+    public RoundRoleManager RoundRoles { get; private set; }
+    public RoundResetManager RoundReset { get; private set; }
     public CosmeticsManager Cosmetics { get; private set; }
     public LobbySceneUIController SceneUI { get; private set; }
 
-    // Compatibility event (LobbyUI expects this)
     public event EventHandler<OnLobbyListChangedEventArgs> OnLobbyListChanged;
 
     public class OnLobbyListChangedEventArgs : EventArgs
@@ -45,6 +49,8 @@ public class LobbyManager : MonoBehaviour
     }
 
     public bool IsMatchInProgress => MatchFlow != null && MatchFlow.IsMatchInProgress;
+    public int MinPlayersToStart => Mathf.Max(1, minPlayersToStart);
+    public int ConnectedPlayerCount => GetConnectedPlayerCount();
 
     private void Awake()
     {
@@ -53,23 +59,24 @@ public class LobbyManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // Ensure components exist
         Services = GetOrAdd<LobbyServicesFacade>();
         Relay = GetOrAdd<RelayFacade>();
         Session = GetOrAdd<NetworkSessionManager>();
         Teleport = GetOrAdd<TeleportService>();
+        RoundRoles = GetOrAdd<RoundRoleManager>();
+        RoundReset = GetOrAdd<RoundResetManager>();
         MatchFlow = GetOrAdd<MatchFlowManager>();
         Cosmetics = GetOrAdd<CosmeticsManager>();
         SceneUI = GetOrAdd<LobbySceneUIController>();
 
-        // Push shared config into components
         Services.SetLobbySceneName(lobbySceneName);
         MatchFlow.Configure(interiorSceneName, lobbySpawnTag, interiorSpawnTag);
+        SceneUI.Configure(lobbySceneName, interiorSceneName);
 
-        // Wire events
         Services.LobbyListChanged += HandleLobbyListChanged;
 
         Session.ServerClientConnected += OnServerClientConnected;
@@ -77,7 +84,6 @@ public class LobbyManager : MonoBehaviour
 
         SceneManager.sceneLoaded += OnSceneLoaded;
 
-        // Kick off Unity Services auth once
         Services.InitializeUnityAuthentication();
     }
 
@@ -88,6 +94,7 @@ public class LobbyManager : MonoBehaviour
 
         if (Services != null)
             Services.LobbyListChanged -= HandleLobbyListChanged;
+
         if (Session != null)
         {
             Session.ServerClientConnected -= OnServerClientConnected;
@@ -99,24 +106,22 @@ public class LobbyManager : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        // Rebind scene-local refs when lobby scene loads
         if (scene.name == lobbySceneName)
             SceneUI.RebindIfNeeded(lobbySceneName);
     }
 
     private void Update()
     {
-        // Heartbeat + lobby list polling only makes sense in lobby scene
         bool inLobbyScene = SceneManager.GetActiveScene().name == lobbySceneName;
         Services.Tick(Time.deltaTime, inLobbyScene);
     }
-
-    // -------------------- Compatibility API (called by your UI) --------------------
 
     public Lobby GetLobby() => Services.CurrentLobby;
 
     public async void CreateLobby(string lobbyName, bool isPrivate)
     {
+        PrepareForFreshNetworkSession();
+
         try
         {
             var lobby = await Services.CreateLobbyAsync(lobbyName, maxPlayers, isPrivate);
@@ -137,17 +142,20 @@ public class LobbyManager : MonoBehaviour
             SceneUI.HideMenuUI();
             SceneUI.ShowPregameUI();
 
-            // Host catch-up teleport
             MatchFlow.ServerTeleportClientToLobbySpawnWhenReady(Session.LocalClientId);
         }
         catch (Exception e)
         {
             Debug.LogException(e);
+            CleanupLocalSessionState(clearLobby: true, shutdownNetwork: true);
+            SceneUI.ShowLobbyScreen();
         }
     }
 
     public async void QuickJoin()
     {
+        PrepareForFreshNetworkSession();
+
         try
         {
             var lobby = await Services.QuickJoinAsync();
@@ -155,25 +163,20 @@ public class LobbyManager : MonoBehaviour
             string joinCode = Services.GetRelayJoinCodeFromLobby(lobby);
             var joinAlloc = await Relay.JoinRelayAsync(joinCode);
 
-            var rsd = Relay.BuildRelayServerData(joinAlloc, "dtls");
-            Session.ConfigureTransport(rsd);
-
-            Session.RegisterConnectionCallbacks();
-            Session.StartClient();
-
-            Teleport.RegisterHandlersIfNeeded();
-
-            SceneUI.HideMenuUI();
-            SceneUI.ShowPregameUI();
+            StartClientWithRelay(joinAlloc);
         }
         catch (Exception e)
         {
             Debug.LogException(e);
+            CleanupLocalSessionState(clearLobby: true, shutdownNetwork: true);
+            SceneUI.ShowLobbyScreen();
         }
     }
 
     public async void JoinWithId(string lobbyId)
     {
+        PrepareForFreshNetworkSession();
+
         try
         {
             var lobby = await Services.JoinWithIdAsync(lobbyId);
@@ -181,25 +184,20 @@ public class LobbyManager : MonoBehaviour
             string joinCode = Services.GetRelayJoinCodeFromLobby(lobby);
             var joinAlloc = await Relay.JoinRelayAsync(joinCode);
 
-            var rsd = Relay.BuildRelayServerData(joinAlloc, "dtls");
-            Session.ConfigureTransport(rsd);
-
-            Session.RegisterConnectionCallbacks();
-            Session.StartClient();
-
-            Teleport.RegisterHandlersIfNeeded();
-
-            SceneUI.HideMenuUI();
-            SceneUI.ShowPregameUI();
+            StartClientWithRelay(joinAlloc);
         }
         catch (Exception e)
         {
             Debug.LogException(e);
+            CleanupLocalSessionState(clearLobby: true, shutdownNetwork: true);
+            SceneUI.ShowLobbyScreen();
         }
     }
 
     public async void JoinWithCode(string lobbyCode)
     {
+        PrepareForFreshNetworkSession();
+
         try
         {
             var lobby = await Services.JoinWithCodeAsync(lobbyCode);
@@ -207,21 +205,28 @@ public class LobbyManager : MonoBehaviour
             string joinCode = Services.GetRelayJoinCodeFromLobby(lobby);
             var joinAlloc = await Relay.JoinRelayAsync(joinCode);
 
-            var rsd = Relay.BuildRelayServerData(joinAlloc, "dtls");
-            Session.ConfigureTransport(rsd);
-
-            Session.RegisterConnectionCallbacks();
-            Session.StartClient();
-
-            Teleport.RegisterHandlersIfNeeded();
-
-            SceneUI.HideMenuUI();
-            SceneUI.ShowPregameUI();
+            StartClientWithRelay(joinAlloc);
         }
         catch (Exception e)
         {
             Debug.LogException(e);
+            CleanupLocalSessionState(clearLobby: true, shutdownNetwork: true);
+            SceneUI.ShowLobbyScreen();
         }
+    }
+
+    private void StartClientWithRelay(Unity.Services.Relay.Models.JoinAllocation joinAlloc)
+    {
+        var rsd = Relay.BuildRelayServerData(joinAlloc, "dtls");
+        Session.ConfigureTransport(rsd);
+
+        Session.RegisterConnectionCallbacks();
+        Session.StartClient();
+
+        Teleport.RegisterHandlersIfNeeded();
+
+        SceneUI.HideMenuUI();
+        SceneUI.ShowPregameUI();
     }
 
     public async void LeaveToLobbySelect()
@@ -229,26 +234,23 @@ public class LobbyManager : MonoBehaviour
         try
         {
             await Services.LeaveOrDeleteLobbyAsync();
-
-            Teleport.UnregisterHandlersIfNeeded();
-            Session.ShutdownSession();
-
-            Services.ClearLocalLobby();
-            MatchFlow.IsMatchInProgress = false;
-            MatchFlow.UnloadInteriorLocalIfLoaded();
-
-            SceneUI.ShowLobbyScreen();
         }
         catch (Exception e)
         {
-            Debug.LogException(e);
+            Debug.LogWarning($"[LobbyManager] Leave/delete lobby failed: {e}");
         }
+
+        CleanupLocalSessionState(clearLobby: true, shutdownNetwork: true);
+        SceneUI.ShowLobbyScreen();
     }
 
     public async void StartGameAsHost()
     {
-        if (!Session.IsHost)
+        if (!CanStartMatch(out string reason))
+        {
+            Debug.LogWarning($"[LobbyManager] Cannot start match: {reason}");
             return;
+        }
 
         try
         {
@@ -259,6 +261,7 @@ public class LobbyManager : MonoBehaviour
             Debug.LogWarning($"[LobbyManager] Failed to lock/unlist lobby: {e}");
         }
 
+        SceneUI.ShowGameUI();
         MatchFlow.StartMatchAsHost();
     }
 
@@ -276,9 +279,9 @@ public class LobbyManager : MonoBehaviour
             Debug.LogWarning($"[LobbyManager] Failed to unlock/set state: {e}");
         }
 
+        SceneUI.ShowPregameUI();
         MatchFlow.EndMatchAsHost();
 
-        // local unpause safety (like your old code)
         var playerObj = Session.LocalPlayerObject;
         if (playerObj != null)
         {
@@ -295,12 +298,94 @@ public class LobbyManager : MonoBehaviour
     {
         if (!Session.IsHost)
             return;
+
         MatchFlow.EndGameToLobbyForEveryone();
     }
 
     public Task DeleteLobbyIfHostAsync() => Services.DeleteLobbyIfHostAsync();
 
-    // -------------------- Cosmetics compatibility helpers (optional) --------------------
+    private void PrepareForFreshNetworkSession()
+    {
+        CleanupLocalSessionState(clearLobby: true, shutdownNetwork: true);
+    }
+
+    private void CleanupLocalSessionState(bool clearLobby, bool shutdownNetwork)
+    {
+        Teleport?.UnregisterHandlersIfNeeded();
+        Session?.UnregisterConnectionCallbacks();
+
+        if (shutdownNetwork)
+            Session?.ShutdownSession();
+
+        if (MatchFlow != null)
+        {
+            MatchFlow.IsMatchInProgress = false;
+            MatchFlow.UnloadInteriorLocalIfLoaded();
+        }
+
+        if (RoundRoles != null)
+            RoundRoles.ResetRoles();
+
+        RouterHackState.Clear();
+
+        if (clearLobby)
+            Services?.ClearLocalLobby();
+    }
+
+    public bool CanStartMatch(out string reason)
+    {
+        reason = "";
+
+        if (Session == null || !Session.IsHost)
+        {
+            reason = "Only the host can start the match.";
+            return false;
+        }
+
+        if (IsMatchInProgress)
+        {
+            reason = "Match is already in progress.";
+            return false;
+        }
+
+        int connectedPlayers = GetConnectedPlayerCount();
+
+        if (connectedPlayers < MinPlayersToStart)
+        {
+            reason =
+                $"Need at least {MinPlayersToStart} players to start. Current players: {connectedPlayers}.";
+            return false;
+        }
+
+        return true;
+    }
+
+    public string GetStartRequirementText()
+    {
+        int connectedPlayers = GetConnectedPlayerCount();
+
+        if (connectedPlayers < MinPlayersToStart)
+            return $"Waiting for players: {connectedPlayers}/{MinPlayersToStart}";
+
+        if (Session != null && Session.IsHost)
+            return "Ready. Press Start to begin.";
+
+        return "Waiting for host to start.";
+    }
+
+    private int GetConnectedPlayerCount()
+    {
+        var nm = NetworkManager.Singleton;
+
+        if (nm == null)
+            return 0;
+
+        if (nm.ConnectedClientsList != null)
+            return nm.ConnectedClientsList.Count;
+
+        return nm.IsConnectedClient ? 1 : 0;
+    }
+
     public int AssignColorIndex() => Cosmetics.AssignColorIndex();
 
     public void ReleaseColorIndex(int idx) => Cosmetics.ReleaseColorIndex(idx);
@@ -308,8 +393,6 @@ public class LobbyManager : MonoBehaviour
     public Material GetShirtMaterial(int idx) => Cosmetics.GetShirtMaterial(idx);
 
     public Material BlackShirtMaterial => Cosmetics.BlackShirtMaterial;
-
-    // -------------------- Internal event handlers --------------------
 
     private void HandleLobbyListChanged(
         object sender,
@@ -324,18 +407,15 @@ public class LobbyManager : MonoBehaviour
 
     private void OnServerClientConnected(ulong clientId)
     {
-        // Server decides initial spawn for each client joining
         if (!Session.IsServer)
             return;
+
         MatchFlow.ServerTeleportClientToLobbySpawnWhenReady(clientId);
     }
 
     private void OnLocalClientDisconnected(ulong clientId)
     {
-        // Return to lobby menu state if THIS local client disconnected
-        Services.ClearLocalLobby();
-        MatchFlow.IsMatchInProgress = false;
-        MatchFlow.UnloadInteriorLocalIfLoaded();
+        CleanupLocalSessionState(clearLobby: true, shutdownNetwork: false);
         SceneUI.ShowLobbyScreen();
     }
 
@@ -343,8 +423,10 @@ public class LobbyManager : MonoBehaviour
         where T : Component
     {
         var c = GetComponent<T>();
+
         if (c == null)
             c = gameObject.AddComponent<T>();
+
         return c;
     }
 }

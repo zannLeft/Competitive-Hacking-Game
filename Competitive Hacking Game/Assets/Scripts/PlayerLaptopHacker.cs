@@ -126,6 +126,15 @@ public class PlayerLaptopHacker : NetworkBehaviour
         }
     }
 
+    public void ForceResetLocalForRound()
+    {
+        _hackHeld = false;
+        _mustReleaseHack = false;
+        _hackProgress = 0f;
+        _targetRefreshTimer = 0f;
+        _currentTarget = null;
+    }
+
     public void SetHackHeld(bool held)
     {
         _hackHeld = held;

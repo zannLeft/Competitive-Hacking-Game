@@ -2,7 +2,10 @@ using Unity.Netcode;
 using UnityEngine;
 
 [DisallowMultipleComponent]
-public class PlayerSitAction : NetworkBehaviour
+public class PlayerSitAction
+    : NetworkBehaviour,
+        IPlayerRoundResettable,
+        IPlayerRoundServerResettable
 {
     [Header("Refs")]
     [SerializeField]
@@ -28,6 +31,14 @@ public class PlayerSitAction : NetworkBehaviour
     [SerializeField]
     private string standUpStateName = "StandUp";
 
+    [Header("Instant Round Reset")]
+    [Tooltip("State to force-play when a round starts/ends so we do not play the stand-up animation.")]
+    [SerializeField]
+    private string instantResetStateName = "Base State";
+
+    [SerializeField]
+    private float instantResetNormalizedTime = 0f;
+
     private int _laptopSittingHash;
 
     private bool _useSittingCameraPosition;
@@ -48,6 +59,7 @@ public class PlayerSitAction : NetworkBehaviour
     public bool UseSittingCameraPosition => _useSittingCameraPosition;
     public bool LaptopCameraFocus => _laptopCameraFocus;
     public bool BlocksGameplayMovement => _blocksGameplayMovement;
+    public bool WantsSittingValue => _localWantsSitting;
 
     public bool IsSittingOrTransitioning
     {
@@ -97,6 +109,7 @@ public class PlayerSitAction : NetworkBehaviour
         _blocksGameplayMovement = false;
         _waitingForStandUpToFinish = false;
         _hasEnteredStandUp = false;
+
         _localWantsSitting = WantsSitting.Value;
 
         WantsSitting.OnValueChanged += OnWantsSittingChanged;
@@ -140,18 +153,17 @@ public class PlayerSitAction : NetworkBehaviour
         bool currentlyTryingToSit = _localWantsSitting || IsFullySitting;
         bool targetWantsSitting = !currentlyTryingToSit;
 
-        // Starting sit-down is not allowed while airborne/sliding/coiling.
-        // Standing up is allowed because you are already in the laptop state.
-        if (targetWantsSitting && motor != null && (!motor.IsGrounded || motor.sliding || motor.Coiling))
+        if (
+            targetWantsSitting
+            && motor != null
+            && (!motor.IsGrounded || motor.sliding || motor.Coiling)
+        )
             return;
 
-        // Prevent spam during transition animations.
         if (IsCurrentOrNextState(sitDownStateName) || IsCurrentOrNextState(standUpStateName))
             return;
 
-        // Local prediction so owner responds instantly.
         ApplyWantsSitting(targetWantsSitting);
-
         RequestSetWantsSittingServerRpc(targetWantsSitting);
     }
 
@@ -159,6 +171,19 @@ public class PlayerSitAction : NetworkBehaviour
     private void RequestSetWantsSittingServerRpc(bool wantsSitting)
     {
         WantsSitting.Value = wantsSitting;
+    }
+
+    public void ServerResetForRound()
+    {
+        if (!IsServer)
+            return;
+
+        WantsSitting.Value = false;
+    }
+
+    public void ServerForceResetSitNetworkState()
+    {
+        ServerResetForRound();
     }
 
     private void OnWantsSittingChanged(bool previousValue, bool newValue)
@@ -175,15 +200,12 @@ public class PlayerSitAction : NetworkBehaviour
 
         if (wantsSitting)
         {
-            // Going into sit-down / sitting.
             _blocksGameplayMovement = true;
             _waitingForStandUpToFinish = false;
             _hasEnteredStandUp = false;
         }
         else
         {
-            // Going into stand-up.
-            // Keep input blocked until AE_MovementUnlock at the end of StandUp.
             if (IsSittingOrTransitioning)
             {
                 _blocksGameplayMovement = true;
@@ -199,9 +221,45 @@ public class PlayerSitAction : NetworkBehaviour
         }
     }
 
-    // ----------------------------
-    // Animation Events
-    // ----------------------------
+    public void ResetForRound()
+    {
+        ForceResetLocalForRound();
+    }
+
+    public void ForceResetLocalForRound()
+    {
+        ApplyInstantStandingReset();
+    }
+
+    private void ApplyInstantStandingReset()
+    {
+        _localWantsSitting = false;
+
+        _blocksGameplayMovement = false;
+        _waitingForStandUpToFinish = false;
+        _hasEnteredStandUp = false;
+
+        _useSittingCameraPosition = false;
+        _laptopCameraFocus = false;
+
+        motor?.SetSittingCollider(false);
+
+        if (animator != null)
+        {
+            animator.SetBool(_laptopSittingHash, false);
+
+            if (!string.IsNullOrWhiteSpace(instantResetStateName))
+            {
+                animator.Play(
+                    instantResetStateName,
+                    baseLayerIndex,
+                    Mathf.Clamp01(instantResetNormalizedTime)
+                );
+
+                animator.Update(0f);
+            }
+        }
+    }
 
     public void AE_CameraUseSittingPosition()
     {
@@ -226,7 +284,6 @@ public class PlayerSitAction : NetworkBehaviour
         _laptopCameraFocus = false;
     }
 
-    // Put this at the very end of StandUp.
     public void AE_MovementUnlock()
     {
         _blocksGameplayMovement = false;

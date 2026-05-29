@@ -22,6 +22,9 @@ public class PlayerLaptopVisual : NetworkBehaviour
     [SerializeField]
     private LaptopScreenController laptopScreen;
 
+    [SerializeField]
+    private PlayerSitAction sitAction;
+
     [Header("Laptop Animator Params")]
     [SerializeField]
     private string laptopOpenBool = "Open";
@@ -29,6 +32,11 @@ public class PlayerLaptopVisual : NetworkBehaviour
     [Header("Attach Smoothing")]
     [SerializeField]
     private float attachBlendTime = 0.10f;
+
+    [Header("Network Visual Repair")]
+    [Tooltip("If a client joins late and sees a player already sitting, force the laptop visible/open on the lap.")]
+    [SerializeField]
+    private bool repairLaptopWhenAlreadySitting = true;
 
     private int _openHash;
     private Coroutine _attachRoutine;
@@ -39,6 +47,9 @@ public class PlayerLaptopVisual : NetworkBehaviour
         base.OnNetworkSpawn();
 
         _openHash = Animator.StringToHash(laptopOpenBool);
+
+        if (sitAction == null)
+            sitAction = GetComponent<PlayerSitAction>();
 
         if (laptopRoot != null)
         {
@@ -52,6 +63,44 @@ public class PlayerLaptopVisual : NetworkBehaviour
         }
 
         ForceHiddenInHand();
+    }
+
+    private void Update()
+    {
+        if (!repairLaptopWhenAlreadySitting)
+            return;
+
+        if (sitAction == null || laptopRoot == null)
+            return;
+
+        // Late join / missed event repair:
+        // If this player is already fully sitting, the laptop should be open on the lap.
+        // A newly joined client never saw the earlier animation events, so we restore the final visual state.
+        if (!sitAction.WantsSittingValue)
+            return;
+
+        if (!sitAction.IsFullySitting)
+            return;
+
+        if (NeedsFullySittingVisualRepair())
+            ForceShowOpenOnLap();
+    }
+
+    private bool NeedsFullySittingVisualRepair()
+    {
+        if (laptopRoot == null)
+            return false;
+
+        if (!laptopRoot.activeSelf)
+            return true;
+
+        if (lapSocket != null && laptopRoot.transform.parent != lapSocket)
+            return true;
+
+        if (laptopAnimator != null && !laptopAnimator.GetBool(_openHash))
+            return true;
+
+        return false;
     }
 
     // ----------------------------
@@ -85,7 +134,6 @@ public class PlayerLaptopVisual : NetworkBehaviour
 
     // SitDown clip:
     // Call when the lid should start/open.
-    // This does NOT turn on the screen anymore.
     public void AE_LaptopOpen()
     {
         if (laptopAnimator != null)
@@ -101,7 +149,6 @@ public class PlayerLaptopVisual : NetworkBehaviour
 
     // StandUp clip:
     // Call when the lid should start/close.
-    // This does NOT turn off the screen anymore.
     public void AE_LaptopClose()
     {
         if (laptopAnimator != null)
@@ -122,9 +169,7 @@ public class PlayerLaptopVisual : NetworkBehaviour
         if (laptopRoot == null)
             return;
 
-        // Safety: make sure screen is off before carrying it away.
         laptopScreen?.SetScreenOn(false);
-
         AttachSmooth(handSocketL, attachBlendTime);
     }
 
@@ -142,8 +187,28 @@ public class PlayerLaptopVisual : NetworkBehaviour
     }
 
     // ----------------------------
-    // Helpers
+    // Round reset / late join helpers
     // ----------------------------
+
+    public void ForceResetLocalForRound()
+    {
+        ForceHiddenInHand();
+    }
+
+    private void ForceShowOpenOnLap()
+    {
+        if (laptopRoot == null)
+            return;
+
+        AttachInstant(lapSocket);
+
+        laptopRoot.SetActive(true);
+
+        if (laptopAnimator != null)
+            laptopAnimator.SetBool(_openHash, true);
+
+        laptopScreen?.SetScreenOn(true);
+    }
 
     private void ForceHiddenInHand()
     {

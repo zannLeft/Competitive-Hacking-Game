@@ -388,4 +388,41 @@ public class PlayerPhone : NetworkBehaviour
 
         return idleIKMax;
     }
+
+    public void ForceResetPhoneLocal()
+    {
+        _rmbHeld = false;
+
+        _targetBlend = 0f;
+
+        _maskWeight = 0f;
+        _ikWeight = 0f;
+
+        _maskVel = 0f;
+        _ikVel = 0f;
+
+        if (animator != null)
+        {
+            animator.SetFloat(_maskHash, 0f);
+            animator.SetFloat(_ikHash, 0f);
+
+            if (phoneLayerIndex >= 0 && phoneLayerIndex < animator.layerCount)
+                animator.SetLayerWeight(phoneLayerIndex, 0f);
+        }
+
+        _lastLayerWeight = 0f;
+
+        if (IsOwner && targetHandler != null)
+        {
+            targetHandler.SetPhoneActive(false);
+            _targetActive = false;
+        }
+
+        if (_screenController == null && _spawnedPhone != null)
+            _screenController = _spawnedPhone.GetComponent<PhoneScreenController>();
+
+        _screenController?.SetScreenOn(false);
+
+        HidePhone();
+    }
 }
