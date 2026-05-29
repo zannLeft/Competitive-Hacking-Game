@@ -5,15 +5,13 @@ public class PlayerLook : NetworkBehaviour
 {
     private PlayerMotor motor;
     private Animator animator;
+    private PlayerDeathState deathState;
 
     [Header("References")]
     public Camera cam;
 
     [Tooltip("Parent pivot of the main camera (your empty 'Camera' object in the middle of the player).")]
     public Transform cameraRoot;
-
-    [SerializeField]
-    private PlayerSitAction sitAction;
 
     [Header("Camera Positions (Inspector)")]
     [SerializeField]
@@ -46,24 +44,34 @@ public class PlayerLook : NetworkBehaviour
     [SerializeField]
     private Vector3 sprintJumpLocalPos;
 
-    [Header("Laptop / Sitting Camera")]
+    [Header("Dead Camera")]
+    [Tooltip("Optional fallback dead camera position if no Dead Camera Socket is assigned.")]
     [SerializeField]
-    private Vector3 sittingLocalPos;
+    private Vector3 deadLocalPos;
 
-    [Tooltip("Duration of the camera lowering/rising while sitting/standing.")]
+    [Tooltip("Assign a child object on/near the head bone. Used for dead camera POSITION only.")]
     [SerializeField]
-    private float sittingCameraSmoothTime = 0.8f;
+    private Transform deadCameraSocket;
 
-    [Tooltip("How close the camera must be before the sitting/standing transition is considered finished.")]
+    [Tooltip("Small local offset from CameraRoot while using the dead socket. Usually leave at zero.")]
     [SerializeField]
-    private float sittingCameraArriveDistance = 0.01f;
+    private Vector3 deadSocketCameraLocalOffset = Vector3.zero;
 
-    [Tooltip("FOV while laptop is open/focused.")]
+    [Tooltip("How fast the camera moves to/from the dead floor/head position.")]
     [SerializeField]
-    private float laptopFocusFOV = 40f;
+    private float deadCameraLerpSpeed = 8f;
 
+    [Tooltip("How far left/right the dead player can look.")]
     [SerializeField]
-    private float laptopFocusFOVSpeed = 1f;
+    private float deadMaxYaw = 90f;
+
+    [Tooltip("How far up the dead player can look.")]
+    [SerializeField]
+    private float deadMaxPitchUp = 75f;
+
+    [Tooltip("How far down the dead player can look. 0 means horizon only, no looking down into chest.")]
+    [SerializeField]
+    private float deadMaxPitchDown = 0f;
 
     [Header("Sprint-Jump Detection")]
     [SerializeField]
@@ -103,13 +111,6 @@ public class PlayerLook : NetworkBehaviour
     public float bodyCatchUpSpeed = 720f;
     public bool shoulderWhileCrouching = true;
 
-    [Header("Sitting Look Limit")]
-    [SerializeField]
-    private bool lockBodyYawWhileSitting = true;
-
-    [SerializeField]
-    private float sittingMaxYaw = 80f;
-
     [Header("Catch-up on Move")]
     public bool instantCatchUpOnMove = true;
     public float catchUpOnMoveSpeed = 1080f;
@@ -125,15 +126,12 @@ public class PlayerLook : NetworkBehaviour
     [SerializeField]
     private bool lockPitchWhilePhoneUp = true;
 
-    [Tooltip("Optional tiny offset if your camera prefab isn't perfectly level. Try -2..+2.")]
     [SerializeField]
     private float phoneHorizonOffsetDegrees = 0f;
 
-    [Tooltip("If ON: you can still move pitch a bit, but it's constantly pulled toward horizon.")]
     [SerializeField]
     private bool phoneSoftPitchCentering = true;
 
-    [Tooltip("How much mouse pitch input is allowed while phone is up.")]
     [SerializeField, Range(0f, 1f)]
     private float phonePitchInputScale = 0.35f;
 
@@ -147,7 +145,6 @@ public class PlayerLook : NetworkBehaviour
     private float phonePitchSnapEps = 0.10f;
 
     private float _phonePitchVel;
-
     private float _slidePitchVel;
     private float _coilPitchVel;
 
@@ -196,28 +193,15 @@ public class PlayerLook : NetworkBehaviour
     private bool wasMoving = false;
 
     private Vector3 _smoothedBaseLocalPos;
-    private Vector3 _sittingCamVel;
-
     private bool _wasCrouching;
-    private bool _wasUsingSittingCamera;
-    private bool _wasLaptopFocus;
 
-    private bool _sittingCameraTransitionActive;
-
-    private enum SittingCameraBlendMode
-    {
-        None,
-        SittingDown,
-        StandingUp,
-    }
-
-    private SittingCameraBlendMode _sittingCamBlendMode = SittingCameraBlendMode.None;
-    private Vector3 _sittingCamStartLocalPos;
-    private Vector3 _sittingCamTargetLocalPos;
-    private float _sittingCamBlendTimer;
+    private bool _deadLookMode;
+    private bool _usingDeadSocketLastFrame;
+    private Vector3 _baseCameraRootLocalPos;
 
     public float Pitch => xRotation;
     public float YawOffset => yawOffset;
+    public bool DeadLookMode => _deadLookMode;
 
     private bool phoneAimActive = false;
     private bool rmbHeld = false;
@@ -235,25 +219,26 @@ public class PlayerLook : NetworkBehaviour
 
         motor = GetComponent<PlayerMotor>();
         animator = GetComponent<Animator>() ?? GetComponentInParent<Animator>();
+        deathState = GetComponent<PlayerDeathState>();
 
-        if (sitAction == null)
-            sitAction = GetComponent<PlayerSitAction>();
+        if (cameraRoot == null && cam != null)
+            cameraRoot = cam.transform.parent;
+
+        if (cameraRoot != null)
+            _baseCameraRootLocalPos = cameraRoot.localPosition;
 
         if (!useInspectorPositions)
             AutoFillFromCurrentCamera();
+
+        if (deadLocalPos == Vector3.zero)
+            deadLocalPos = standingLocalPos + new Vector3(0f, -1.35f, 0.08f);
 
         _smoothedBaseLocalPos = standingLocalPos;
 
         if (cam != null)
             cam.fieldOfView = defaultFOV;
 
-        if (cameraRoot == null && cam != null)
-            cameraRoot = cam.transform.parent;
-
         _wasCrouching = motor != null && motor.crouching;
-        _wasUsingSittingCamera = sitAction != null && sitAction.UseSittingCameraPosition;
-        _wasLaptopFocus = sitAction != null && sitAction.LaptopCameraFocus;
-        _sittingCameraTransitionActive = false;
     }
 
     void Update()
@@ -263,21 +248,24 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
-        bool actuallySprinting = motor != null && motor.IsActuallySprinting;
-        bool useSittingCamera = sitAction != null && sitAction.UseSittingCameraPosition;
-        bool laptopFocus = sitAction != null && sitAction.LaptopCameraFocus;
+        if (deathState != null)
+            _deadLookMode = deathState.IsDead;
+
+        bool usingDeadSocket = _deadLookMode && deadCameraSocket != null && cameraRoot != null;
+
+        bool actuallySprinting = !_deadLookMode && motor != null && motor.IsActuallySprinting;
 
         Vector3 baseTargetPos;
 
-        if (useSittingCamera || laptopFocus)
+        if (_deadLookMode && !usingDeadSocket)
         {
-            baseTargetPos = sittingLocalPos;
+            baseTargetPos = deadLocalPos;
         }
-        else if (motor != null && motor.sliding)
+        else if (!_deadLookMode && motor != null && motor.sliding)
         {
             baseTargetPos = slidingLocalPos;
         }
-        else if (motor != null && motor.Coiling)
+        else if (!_deadLookMode && motor != null && motor.Coiling)
         {
             baseTargetPos = coilLocalPos;
         }
@@ -286,18 +274,12 @@ public class PlayerLook : NetworkBehaviour
             bool isAirborne = animator != null && !animator.GetBool("IsGrounded");
             float zVel = animator != null ? animator.GetFloat("Z_Velocity") : 0f;
 
-            if (isAirborne && zVel > sprintJumpZThreshold)
-            {
+            if (!_deadLookMode && isAirborne && zVel > sprintJumpZThreshold)
                 baseTargetPos = sprintJumpLocalPos;
-            }
-            else if (actuallySprinting)
-            {
+            else if (!_deadLookMode && actuallySprinting)
                 baseTargetPos = sprintingLocalPos;
-            }
-            else if (motor != null && motor.crouching)
-            {
+            else if (!_deadLookMode && motor != null && motor.crouching)
                 baseTargetPos = crouchingLocalPos;
-            }
             else
             {
                 Vector2 move = motor != null ? motor.inputDirection : Vector2.zero;
@@ -306,7 +288,7 @@ public class PlayerLook : NetworkBehaviour
                 float thr = moveDirThreshold;
                 bool moving = (ax > thr) || (ay > thr);
 
-                if (moving)
+                if (!_deadLookMode && moving)
                 {
                     if (ax > ay)
                         baseTargetPos = walkSideLocalPos;
@@ -322,130 +304,113 @@ public class PlayerLook : NetworkBehaviour
             }
         }
 
-        bool sittingCameraState = useSittingCamera || laptopFocus;
-        bool previousSittingCameraState = _wasUsingSittingCamera || _wasLaptopFocus;
-
-        // Start a custom camera transition whenever we enter OR leave sitting camera mode.
-        if (sittingCameraState != previousSittingCameraState)
+        if (usingDeadSocket)
         {
-            _sittingCameraTransitionActive = true;
-
-            _sittingCamBlendMode = sittingCameraState
-                ? SittingCameraBlendMode.SittingDown
-                : SittingCameraBlendMode.StandingUp;
-
-            _sittingCamStartLocalPos = _smoothedBaseLocalPos;
-            _sittingCamTargetLocalPos = baseTargetPos;
-            _sittingCamBlendTimer = 0f;
-            _sittingCamVel = Vector3.zero;
-        }
-
-        if (sittingCameraState || _sittingCameraTransitionActive)
-        {
-            if (_sittingCameraTransitionActive)
-            {
-                // Keep the target fresh while standing up, in case the normal target changes.
-                _sittingCamTargetLocalPos = baseTargetPos;
-
-                float duration = Mathf.Max(0.0001f, sittingCameraSmoothTime);
-                _sittingCamBlendTimer += dt;
-
-                float t = Mathf.Clamp01(_sittingCamBlendTimer / duration);
-
-                float easedT =
-                    _sittingCamBlendMode == SittingCameraBlendMode.StandingUp
-                        ? EaseInOutCubic(t) // slow start -> speed up -> slow at top
-                        : EaseOutCubic(t); // fast start -> slow into seated position
-
-                _smoothedBaseLocalPos = Vector3.LerpUnclamped(
-                    _sittingCamStartLocalPos,
-                    _sittingCamTargetLocalPos,
-                    easedT
-                );
-
-                float dist = Vector3.Distance(
-                    _smoothedBaseLocalPos,
-                    _sittingCamTargetLocalPos
-                );
-
-                if (t >= 1f || dist <= sittingCameraArriveDistance)
-                {
-                    _smoothedBaseLocalPos = _sittingCamTargetLocalPos;
-                    _sittingCameraTransitionActive = false;
-                    _sittingCamBlendMode = SittingCameraBlendMode.None;
-                    _sittingCamBlendTimer = 0f;
-                    _sittingCamVel = Vector3.zero;
-                }
-            }
-            else
-            {
-                // Already sitting/focused: stay smoothly locked to the sitting camera position.
-                _smoothedBaseLocalPos = Vector3.SmoothDamp(
-                    _smoothedBaseLocalPos,
-                    baseTargetPos,
-                    ref _sittingCamVel,
-                    Mathf.Max(0.0001f, sittingCameraSmoothTime),
-                    Mathf.Infinity,
-                    dt
-                );
-            }
+            ApplyDeadSocketCamera(dt);
         }
         else
         {
-            _sittingCamVel = Vector3.zero;
+            RestoreCameraRootIfNeeded();
 
-            bool useLinear = (motor != null && motor.crouching) || _wasCrouching;
-
-            if (useLinear)
-            {
-                _smoothedBaseLocalPos = Vector3.MoveTowards(
-                    _smoothedBaseLocalPos,
-                    baseTargetPos,
-                    crouchPositionSpeed * dt
-                );
-            }
-            else
+            if (_deadLookMode)
             {
                 _smoothedBaseLocalPos = Vector3.Lerp(
                     _smoothedBaseLocalPos,
                     baseTargetPos,
-                    dt * positionLerpSpeed
+                    dt * deadCameraLerpSpeed
                 );
             }
+            else
+            {
+                bool useLinear = motor != null && (motor.crouching || _wasCrouching);
+
+                if (useLinear)
+                {
+                    _smoothedBaseLocalPos = Vector3.MoveTowards(
+                        _smoothedBaseLocalPos,
+                        baseTargetPos,
+                        crouchPositionSpeed * dt
+                    );
+                }
+                else
+                {
+                    _smoothedBaseLocalPos = Vector3.Lerp(
+                        _smoothedBaseLocalPos,
+                        baseTargetPos,
+                        dt * positionLerpSpeed
+                    );
+                }
+            }
+
+            Vector3 pitchOffset = Vector3.zero;
+
+            if (!_deadLookMode)
+            {
+                float up01 = Mathf.Clamp01(-xRotation / 90f);
+                float down01 = Mathf.Clamp01(xRotation / 90f);
+
+                bool isCrouched = motor != null && motor.crouching;
+                float fwdMax = isCrouched ? crouchPitchForwardMax : pitchForwardMax;
+                float backMax = isCrouched ? crouchPitchBackwardMax : pitchBackwardMax;
+                float downMaxY = isCrouched ? crouchPitchDownY : pitchDownY;
+                float upMaxY = isCrouched ? crouchPitchUpY : pitchUpY;
+
+                float yPitch = (-down01 * downMaxY) + (up01 * upMaxY);
+                float zPitch = (down01 * fwdMax) - (up01 * backMax);
+
+                pitchOffset = new Vector3(0f, yPitch, zPitch);
+            }
+
+            if (cam != null)
+                cam.transform.localPosition = _smoothedBaseLocalPos + pitchOffset;
         }
 
-        float up01 = Mathf.Clamp01(-xRotation / 90f);
-        float down01 = Mathf.Clamp01(xRotation / 90f);
-
-        bool isCrouched = motor != null && motor.crouching;
-        float fwdMax = isCrouched ? crouchPitchForwardMax : pitchForwardMax;
-        float backMax = isCrouched ? crouchPitchBackwardMax : pitchBackwardMax;
-        float downMaxY = isCrouched ? crouchPitchDownY : pitchDownY;
-        float upMaxY = isCrouched ? crouchPitchUpY : pitchUpY;
-
-        float yPitch = (-down01 * downMaxY) + (up01 * upMaxY);
-        float zPitch = (down01 * fwdMax) - (up01 * backMax);
+        bool fastState = !_deadLookMode && (actuallySprinting || (motor != null && motor.sliding));
+        float targetFOV = fastState ? sprintFOV : defaultFOV;
 
         if (cam != null)
-            cam.transform.localPosition =
-                _smoothedBaseLocalPos + new Vector3(0f, yPitch, zPitch);
-
-        bool fastState = actuallySprinting || (motor != null && motor.sliding);
-
-        float targetFOV = laptopFocus ? laptopFocusFOV : (fastState ? sprintFOV : defaultFOV);
-        float fovSpeed = (laptopFocus || _wasLaptopFocus)
-            ? laptopFocusFOVSpeed
-            : fovTransitionSpeed;
-
-        if (cam != null)
-            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovSpeed);
+            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, dt * fovTransitionSpeed);
 
         if (cameraRoot != null)
             cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
 
         _wasCrouching = motor != null && motor.crouching;
-        _wasUsingSittingCamera = useSittingCamera;
-        _wasLaptopFocus = laptopFocus;
+    }
+
+    private void ApplyDeadSocketCamera(float dt)
+    {
+        _usingDeadSocketLastFrame = true;
+
+        if (cameraRoot == null || deadCameraSocket == null)
+            return;
+
+        cameraRoot.position = Vector3.Lerp(
+            cameraRoot.position,
+            deadCameraSocket.position,
+            dt * deadCameraLerpSpeed
+        );
+
+        if (cam != null)
+        {
+            cam.transform.localPosition = Vector3.Lerp(
+                cam.transform.localPosition,
+                deadSocketCameraLocalOffset,
+                dt * deadCameraLerpSpeed
+            );
+        }
+    }
+
+    private void RestoreCameraRootIfNeeded()
+    {
+        if (!_usingDeadSocketLastFrame)
+            return;
+
+        _usingDeadSocketLastFrame = false;
+
+        if (cameraRoot != null)
+            cameraRoot.localPosition = _baseCameraRootLocalPos;
+
+        _smoothedBaseLocalPos = standingLocalPos;
     }
 
     public void ProcessLook(Vector2 input)
@@ -455,7 +420,11 @@ public class PlayerLook : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
+        if (deathState != null)
+            _deadLookMode = deathState.IsDead;
+
         Vector2 raw = input;
+
         if (smoothMouse && mouseSmoothingTime > 0f)
         {
             float alpha = 1f - Mathf.Exp(-dt / mouseSmoothingTime);
@@ -469,14 +438,33 @@ public class PlayerLook : NetworkBehaviour
         float mouseX = _smoothedDelta.x;
         float mouseY = _smoothedDelta.y;
 
+        float rawPitchDelta = -mouseY * dt * ySensitivity;
+
+        if (_deadLookMode)
+        {
+            xRotation += rawPitchDelta;
+            xRotation = Mathf.Clamp(xRotation, -deadMaxPitchUp, deadMaxPitchDown);
+
+            if (cam != null)
+                cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+
+            float yawDelta = mouseX * dt * xSensitivity;
+            yawOffset = Mathf.Clamp(yawOffset + yawDelta, -deadMaxYaw, deadMaxYaw);
+
+            catchingUpStationary = false;
+            wasMoving = false;
+
+            if (cameraRoot != null)
+                cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
+
+            return;
+        }
+
         bool isSliding = motor != null && motor.sliding;
         bool isCoiling = motor != null && motor.Coiling;
 
         bool phoneAllowedNow = phoneAimActive && motor != null && !isSliding && !isCoiling;
 
-        float rawPitchDelta = -mouseY * dt * ySensitivity;
-
-        // ---------------- PITCH ----------------
         if (lockPitchWhilePhoneUp && phoneAllowedNow)
         {
             float target = Mathf.Clamp(0f + phoneHorizonOffsetDegrees, -PitchClamp, PitchClamp);
@@ -592,34 +580,8 @@ public class PlayerLook : NetworkBehaviour
         if (cam != null)
             cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        // ---------------- YAW ----------------
-        float yawDelta = mouseX * dt * xSensitivity;
+        float normalYawDelta = mouseX * dt * xSensitivity;
         bool hasMoveInput = motor != null && motor.inputDirection.sqrMagnitude > 0.0001f;
-
-        // ---------------- SITTING YAW LOCK ----------------
-        // While sitting / sitting down / standing up, allow camera shoulder-look,
-        // but do NOT rotate the whole player body. Just clamp at the sitting limit.
-        bool sittingYawLocked =
-            lockBodyYawWhileSitting
-            && sitAction != null
-            && sitAction.IsSittingOrTransitioning;
-
-        if (sittingYawLocked)
-        {
-            yawOffset = Mathf.Clamp(
-                yawOffset + yawDelta,
-                -Mathf.Abs(sittingMaxYaw),
-                Mathf.Abs(sittingMaxYaw)
-            );
-
-            catchingUpStationary = false;
-
-            if (cameraRoot != null)
-                cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
-
-            wasMoving = hasMoveInput;
-            return;
-        }
 
         if (phoneAllowedNow && motor != null && motor.crouching)
         {
@@ -628,7 +590,7 @@ public class PlayerLook : NetworkBehaviour
 
             if (Mathf.Abs(yawOffset) > crouchPhoneAlignEps)
             {
-                float newOffset = yawOffset + yawDelta;
+                float newOffset = yawOffset + normalYawDelta;
                 float clampedYaw = Mathf.Clamp(newOffset, -maxShoulderYaw, maxShoulderYaw);
                 float overflow = newOffset - clampedYaw;
 
@@ -647,7 +609,7 @@ public class PlayerLook : NetworkBehaviour
             else
             {
                 yawOffset = 0f;
-                transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
+                transform.rotation *= Quaternion.Euler(0f, normalYawDelta, 0f);
                 catchingUpStationary = false;
             }
 
@@ -672,7 +634,7 @@ public class PlayerLook : NetworkBehaviour
 
         if (shoulderMode)
         {
-            float newOffset = yawOffset + yawDelta;
+            float newOffset = yawOffset + normalYawDelta;
             float clampedYaw = Mathf.Clamp(newOffset, -maxShoulderYaw, maxShoulderYaw);
             float overflow = newOffset - clampedYaw;
 
@@ -687,6 +649,7 @@ public class PlayerLook : NetworkBehaviour
             if (catchingUpStationary)
             {
                 CatchUp(bodyCatchUpSpeed * dt * speedMulNormal);
+
                 if (Mathf.Abs(yawOffset) <= 0.01f)
                     catchingUpStationary = false;
             }
@@ -706,7 +669,7 @@ public class PlayerLook : NetworkBehaviour
                 }
             }
 
-            transform.rotation *= Quaternion.Euler(0f, yawDelta, 0f);
+            transform.rotation *= Quaternion.Euler(0f, normalYawDelta, 0f);
 
             if (!allowInstantCatchUp && hasMoveInput && Mathf.Abs(yawOffset) > 0.01f)
                 CatchUp(catchUpOnMoveSpeed * dt * speedMulNormal);
@@ -718,6 +681,35 @@ public class PlayerLook : NetworkBehaviour
             cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
 
         wasMoving = hasMoveInput;
+    }
+
+    public void SetDeadLookMode(bool dead)
+    {
+        _deadLookMode = dead;
+
+        catchingUpStationary = false;
+        wasMoving = false;
+
+        if (dead)
+        {
+            yawOffset = Mathf.Clamp(yawOffset, -deadMaxYaw, deadMaxYaw);
+            xRotation = Mathf.Clamp(xRotation, -deadMaxPitchUp, deadMaxPitchDown);
+        }
+        else
+        {
+            RestoreCameraRootIfNeeded();
+
+            if (Mathf.Abs(yawOffset) > maxShoulderYaw)
+                yawOffset = Mathf.Clamp(yawOffset, -maxShoulderYaw, maxShoulderYaw);
+
+            xRotation = Mathf.Clamp(xRotation, -PitchClamp, PitchClamp);
+        }
+
+        if (cam != null)
+            cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+
+        if (cameraRoot != null)
+            cameraRoot.localRotation = Quaternion.Euler(0f, yawOffset, 0f);
     }
 
     private void CatchUp(float stepDegrees)
@@ -733,22 +725,6 @@ public class PlayerLook : NetworkBehaviour
             yawOffset = 0f;
     }
 
-    private float EaseOutCubic(float t)
-    {
-        t = Mathf.Clamp01(t);
-        return 1f - Mathf.Pow(1f - t, 3f);
-    }
-
-    private float EaseInOutCubic(float t)
-    {
-        t = Mathf.Clamp01(t);
-
-        if (t < 0.5f)
-            return 4f * t * t * t;
-
-        return 1f - Mathf.Pow(-2f * t + 2f, 3f) * 0.5f;
-    }
-
     public Quaternion MoveSpaceRotation => transform.rotation * Quaternion.Euler(0f, yawOffset, 0f);
 
     public void SetPhoneAim(bool aiming) => phoneAimActive = aiming;
@@ -760,6 +736,7 @@ public class PlayerLook : NetworkBehaviour
     {
         if (cam == null)
             cam = GetComponentInChildren<Camera>();
+
         if (cam == null)
             return;
 
@@ -772,25 +749,31 @@ public class PlayerLook : NetworkBehaviour
 
         if (walkForwardLocalPos == Vector3.zero)
             walkForwardLocalPos = basePos + new Vector3(0f, -0.02f, +0.05f);
+
         if (walkBackwardLocalPos == Vector3.zero)
             walkBackwardLocalPos = basePos + new Vector3(0f, 0f, -0.05f);
+
         if (walkSideLocalPos == Vector3.zero)
             walkSideLocalPos = basePos + new Vector3(0f, -0.02f, +0.04f);
 
         if (coilLocalPos == Vector3.zero)
             coilLocalPos = basePos + new Vector3(0f, -0.15f, -0.05f);
+
         if (sprintJumpLocalPos == Vector3.zero)
             sprintJumpLocalPos = basePos + new Vector3(0f, -0.08f, +0.06f);
 
-        if (sittingLocalPos == Vector3.zero)
-            sittingLocalPos = basePos + new Vector3(0f, -1f, 0.1f);
+        if (deadLocalPos == Vector3.zero)
+            deadLocalPos = basePos + new Vector3(0f, -1.35f, 0.08f);
 
         if (Mathf.Approximately(crouchPitchForwardMax, 0f))
             crouchPitchForwardMax = pitchForwardMax;
+
         if (Mathf.Approximately(crouchPitchBackwardMax, 0f))
             crouchPitchBackwardMax = pitchBackwardMax;
+
         if (Mathf.Approximately(crouchPitchDownY, 0f))
             crouchPitchDownY = pitchDownY;
+
         if (Mathf.Approximately(crouchPitchUpY, 0f))
             crouchPitchUpY = pitchUpY;
     }
