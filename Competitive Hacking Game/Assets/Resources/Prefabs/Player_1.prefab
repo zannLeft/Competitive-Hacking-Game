@@ -125,7 +125,6 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 3996400432291522268}
-  - {fileID: 6816502296775448084}
   m_Father: {fileID: 4091974346876725918}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &355427320301010484
@@ -1070,37 +1069,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6659258263771895813}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &5398704709229786078
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 6816502296775448084}
-  m_Layer: 0
-  m_Name: DeadCameraSocket
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &6816502296775448084
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5398704709229786078}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0, y: 0.157, z: 0.1509}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 5934368576876410432}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &5753013431639081900
 GameObject:
   m_ObjectHideFlags: 0
@@ -1223,8 +1191,6 @@ GameObject:
   - component: {fileID: -2388601857875583894}
   - component: {fileID: 5844092317134281050}
   - component: {fileID: 6402268619689270216}
-  - component: {fileID: 424216701188164093}
-  - component: {fileID: 6660516643663551831}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1315,6 +1281,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   cam: {fileID: 2272284346070443280}
   cameraRoot: {fileID: 2698562056828817307}
+  sitAction: {fileID: 0}
   useInspectorPositions: 1
   standingLocalPos: {x: 0, y: 0, z: 0.2}
   crouchingLocalPos: {x: 0, y: -1.1, z: 0.2}
@@ -1325,13 +1292,11 @@ MonoBehaviour:
   walkSideLocalPos: {x: 0, y: -0.075, z: 0.3}
   coilLocalPos: {x: 0, y: -0.45, z: 0.05}
   sprintJumpLocalPos: {x: 0, y: -0.15, z: 0.25}
-  deadLocalPos: {x: 0, y: 0, z: 0}
-  deadCameraSocket: {fileID: 6816502296775448084}
-  deadSocketCameraLocalOffset: {x: 0, y: 0, z: 0}
-  deadCameraLerpSpeed: 5
-  deadMaxYaw: 90
-  deadMaxPitchUp: 75
-  deadMaxPitchDown: 0
+  sittingLocalPos: {x: 0, y: -0.95, z: 0}
+  sittingCameraSmoothTime: 1.5
+  sittingCameraArriveDistance: 0.001
+  laptopFocusFOV: 60
+  laptopFocusFOVSpeed: 3
   sprintJumpZThreshold: 2.1
   moveDirThreshold: 0.1
   xSensitivity: 20
@@ -1345,6 +1310,8 @@ MonoBehaviour:
   catchUpThreshold: 90
   bodyCatchUpSpeed: 250
   shoulderWhileCrouching: 1
+  lockBodyYawWhileSitting: 1
+  sittingMaxYaw: 80
   instantCatchUpOnMove: 0
   catchUpOnMoveSpeed: 250
   disableInstantCatchUpWhilePhone: 1
@@ -1556,10 +1523,6 @@ MonoBehaviour:
       NameHash: 265910336
       Synchronize: 1
       ParameterType: 4
-    - name: Dead
-      NameHash: 1293411866
-      Synchronize: 1
-      ParameterType: 4
   AnimatorParametersExpanded: 0
 --- !u!114 &667075037438137217
 MonoBehaviour:
@@ -1620,9 +1583,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HeadLookIK
   ShowTopMostFoldoutHeaderGroup: 1
-  deadMaxHeadYaw: 90
-  deadMaxPitchUp: 75
-  deadMaxPitchDown: 0
   phoneMaskParam: PhoneMask
   phoneBodyWeight: 1
   phonePitchScale: 0.3
@@ -1725,8 +1685,6 @@ MonoBehaviour:
   sitDownStateName: SitDown
   sittingStateName: Sitting
   standUpStateName: StandUp
-  instantResetStateName: Base State
-  instantResetNormalizedTime: 0
 --- !u!114 &-2388601857875583894
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1745,10 +1703,8 @@ MonoBehaviour:
   laptopRoot: {fileID: 4053179886994481442}
   laptopAnimator: {fileID: 2020307085335192770}
   laptopScreen: {fileID: 0}
-  sitAction: {fileID: 0}
   laptopOpenBool: Open
   attachBlendTime: 0.1
-  repairLaptopWhenAlreadySitting: 1
 --- !u!114 &5844092317134281050
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1787,52 +1743,6 @@ MonoBehaviour:
   laptopHacker: {fileID: 5844092317134281050}
   phone: {fileID: 8878162043686913073}
   look: {fileID: 6487965562487473033}
---- !u!114 &424216701188164093
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5911205127122785075}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 832aeadce99a52e448d6eaf897a9ff8d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerDeathState
-  ShowTopMostFoldoutHeaderGroup: 1
-  animator: {fileID: 7898741019774491149}
-  sitAction: {fileID: 145536466847178049}
-  laptopVisual: {fileID: -2388601857875583894}
-  laptopHacker: {fileID: 5844092317134281050}
-  phone: {fileID: 8878162043686913073}
-  look: {fileID: 6487965562487473033}
-  deadBoolParam: Dead
-  instantAliveStateName: Base State
-  baseLayerIndex: 0
-  instantAliveNormalizedTime: 0
---- !u!114 &6660516643663551831
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5911205127122785075}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 48f84f474d0d86e47b177cecb72d606a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BadGuyAttack
-  ShowTopMostFoldoutHeaderGroup: 1
-  playerCamera: {fileID: 2272284346070443280}
-  playerSetup: {fileID: 7528082831520240939}
-  deathState: {fileID: 424216701188164093}
-  attackRange: 2.2
-  serverRangeTolerance: 0.45
-  attackCooldown: 0.65
-  attackMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  triggerInteraction: 1
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

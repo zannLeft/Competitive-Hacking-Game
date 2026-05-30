@@ -9,76 +9,77 @@ public class HeadLookIK : NetworkBehaviour
     const float EYES_WEIGHT = 0.30f;
     const float CLAMP_WEIGHT = 0.60f;
 
-    const float MAX_HEAD_YAW = 80f;
-    const float MAX_PITCH_UP = 60f;
-    const float MAX_PITCH_DOWN = 45f;
+    const float MAX_HEAD_YAW = 80f; // left/right
+    const float MAX_PITCH_UP = 60f; // look up (deg; negative)
+    const float MAX_PITCH_DOWN = 45f; // look down
 
-    const float BODY_W_DEFAULT = 0.15f;
+    const float BODY_W_DEFAULT = 0.15f; // spine/chest influence normally
     const float SEND_RATE_HZ = 15f;
     const float REMOTE_SMOOTH = 12f;
 
-    [Header("Dead Look")]
-    [SerializeField]
-    private float deadMaxHeadYaw = 90f;
-
-    [SerializeField]
-    private float deadMaxPitchUp = 75f;
-
-    [Tooltip("0 = dead player cannot look below horizon/down into chest.")]
-    [SerializeField]
-    private float deadMaxPitchDown = 0f;
-
     [Header("Phone-up influence (yaw boost, pitch stays subtle)")]
     [SerializeField]
-    private string phoneMaskParam = "PhoneMask";
+    private string phoneMaskParam = "PhoneMask"; // replicated float 0..1 from PlayerPhone
 
+    [Tooltip("How much spine/chest influence we want when phone is up (helps yaw).")]
     [Range(0f, 1f)]
     [SerializeField]
     private float phoneBodyWeight = 1.0f;
 
+    [Tooltip("Scale applied to pitch when phone is up (0.15 keeps vertical like default).")]
     [Range(0f, 1f)]
     [SerializeField]
     private float phonePitchScale = 0.15f;
 
+    [Tooltip("Blend threshold to consider phone 'up'. Still uses smooth lerp from PhoneMask.")]
     [SerializeField]
     private float phoneBlendThreshold = 0.02f;
 
     [Header("Smoothing (prevents crouch->stand pop)")]
+    [Tooltip(
+        "How quickly body weight blends when states change (e.g. crouch->stand while phone up)."
+    )]
     [SerializeField]
     private float bodyWeightSmoothTime = 0.10f;
 
+    [Tooltip("How quickly pitch scaling blends when states change.")]
     [SerializeField]
     private float pitchScaleSmoothTime = 0.10f;
 
     [Header("Crouch -> Stand Pop Fix")]
+    [Tooltip(
+        "When Crouching turns false, keep 'crouch rules' for this long, so LookAt doesn't hit the spine during the first frames of the stand-up transition."
+    )]
     [SerializeField]
     private float crouchExitHoldTime = 0.08f;
 
     Animator animator;
-    PlayerLook look;
-    PlayerSitAction sitAction;
-    PlayerDeathState deathState;
+    PlayerLook look; // owner only
+    PlayerSitAction sitAction; // NEW: laptop/sitting state
     Transform headBone;
 
+    // (pitch, yawOffset) in degrees: x = pitch, y = yaw
     NetworkVariable<Vector2> netLook = new NetworkVariable<Vector2>(
         Vector2.zero,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Owner
     );
 
-    float lerpedPitch;
-    float lerpedYaw;
-    float sendTimer;
+    float lerpedPitch,
+        lerpedYaw,
+        sendTimer;
 
     int _phoneMaskHash;
-    float _phoneBlend;
+    float _phoneBlend; // 0..1
 
+    // Smoothed outputs (avoid 0->1 jumps)
     float _smBodyW = BODY_W_DEFAULT;
     float _smBodyWVel;
 
     float _smPitchScale = 1f;
     float _smPitchScaleVel;
 
+    // crouch-exit hold
     bool _wasCrouching;
     float _crouchExitHoldTimer;
 
@@ -87,7 +88,6 @@ public class HeadLookIK : NetworkBehaviour
         animator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>();
         look = GetComponent<PlayerLook>() ?? GetComponentInParent<PlayerLook>();
         sitAction = GetComponent<PlayerSitAction>() ?? GetComponentInParent<PlayerSitAction>();
-        deathState = GetComponent<PlayerDeathState>() ?? GetComponentInParent<PlayerDeathState>();
 
         if (animator)
         {
@@ -105,6 +105,7 @@ public class HeadLookIK : NetworkBehaviour
         _smPitchScale = 1f;
         _smBodyWVel = 0f;
         _smPitchScaleVel = 0f;
+
         _crouchExitHoldTimer = 0f;
     }
 
@@ -114,34 +115,28 @@ public class HeadLookIK : NetworkBehaviour
             return;
 
         float dt = Time.deltaTime;
-        bool isDead = deathState != null && deathState.IsDead;
 
+        // Read phone blend (replicated) if param exists; otherwise stays 0.
         _phoneBlend = 0f;
-
-        if (!isDead && !string.IsNullOrEmpty(phoneMaskParam))
+        if (!string.IsNullOrEmpty(phoneMaskParam))
         {
             _phoneBlend = Mathf.Clamp01(animator.GetFloat(_phoneMaskHash));
-
             if (_phoneBlend < phoneBlendThreshold)
                 _phoneBlend = 0f;
         }
 
-        float yawLimit = isDead ? deadMaxHeadYaw : MAX_HEAD_YAW;
-        float pitchUpLimit = isDead ? deadMaxPitchUp : MAX_PITCH_UP;
-        float pitchDownLimit = isDead ? deadMaxPitchDown : MAX_PITCH_DOWN;
-
         if (IsOwner && look != null)
         {
-            float yaw = Mathf.Clamp(look.YawOffset, -yawLimit, yawLimit);
-            float pitch = Mathf.Clamp(look.Pitch, -pitchUpLimit, pitchDownLimit);
+            float yaw = Mathf.Clamp(look.YawOffset, -MAX_HEAD_YAW, MAX_HEAD_YAW);
+            float pitch = Mathf.Clamp(look.Pitch, -MAX_PITCH_UP, MAX_PITCH_DOWN);
 
             sendTimer += dt;
-
             if (sendTimer >= 1f / SEND_RATE_HZ)
             {
                 sendTimer = 0f;
                 Vector2 v = new Vector2(pitch, yaw);
 
+                // ~0.5 degrees threshold
                 if ((netLook.Value - v).sqrMagnitude > 0.25f)
                     netLook.Value = v;
             }
@@ -156,8 +151,8 @@ public class HeadLookIK : NetworkBehaviour
             lerpedYaw = Mathf.Lerp(lerpedYaw, t.y, dt * REMOTE_SMOOTH);
         }
 
-        lerpedPitch = Mathf.Clamp(lerpedPitch, -pitchUpLimit, pitchDownLimit);
-        lerpedYaw = Mathf.Clamp(lerpedYaw, -yawLimit, yawLimit);
+        lerpedPitch = Mathf.Clamp(lerpedPitch, -MAX_PITCH_UP, MAX_PITCH_DOWN);
+        lerpedYaw = Mathf.Clamp(lerpedYaw, -MAX_HEAD_YAW, MAX_HEAD_YAW);
     }
 
     void OnAnimatorIK(int layerIndex)
@@ -167,13 +162,15 @@ public class HeadLookIK : NetworkBehaviour
 
         float dt = Time.deltaTime;
 
-        bool isDead = deathState != null && deathState.IsDead;
-
+        // Read animator states
         bool isCrouching = animator.GetBool("Crouching");
         bool isCoiling = animator.GetBool("Coiling");
 
-        bool isLaptopSitting = sitAction != null && sitAction.IsSittingOrTransitioning;
+        // NEW: while sitting / sitting down / standing up, do not use torso LookAt.
+        bool isLaptopSitting =
+            sitAction != null && sitAction.IsSittingOrTransitioning;
 
+        // Start the exit-hold when crouch turns off
         if (_wasCrouching && !isCrouching)
             _crouchExitHoldTimer = Mathf.Max(0f, crouchExitHoldTime);
 
@@ -184,11 +181,11 @@ public class HeadLookIK : NetworkBehaviour
 
         bool treatAsCrouching = isCrouching || (_crouchExitHoldTimer > 0f);
 
+        // Keep head pitch while crouching/sitting; suppress pitch only when coiling
         bool ignorePitch = isCoiling;
 
-        // Important:
-        // Dead = head only. No torso/spine rotation, otherwise the body clips into the floor.
-        bool spineLocked = treatAsCrouching || isCoiling || isLaptopSitting || isDead;
+        // Sitting locks spine/torso LookAt, same idea as crouch/coil.
+        bool spineLocked = treatAsCrouching || isCoiling || isLaptopSitting;
 
         float targetBodyW = spineLocked ? 0f : BODY_W_DEFAULT;
         float targetPitchScale = 1f;
@@ -199,6 +196,7 @@ public class HeadLookIK : NetworkBehaviour
             targetPitchScale = Mathf.Lerp(1f, phonePitchScale, _phoneBlend);
         }
 
+        // Smooth body weight and pitch scale so state changes don't pop.
         float bwSmooth = Mathf.Max(0.0001f, bodyWeightSmoothTime);
         float psSmooth = Mathf.Max(0.0001f, pitchScaleSmoothTime);
 
@@ -223,6 +221,7 @@ public class HeadLookIK : NetworkBehaviour
         _smBodyW = Mathf.Clamp01(_smBodyW);
         _smPitchScale = Mathf.Clamp01(_smPitchScale);
 
+        // Build look target
         Quaternion yawOnly = transform.rotation * Quaternion.Euler(0f, lerpedYaw, 0f);
 
         float appliedPitch = ignorePitch ? 0f : (lerpedPitch * _smPitchScale);

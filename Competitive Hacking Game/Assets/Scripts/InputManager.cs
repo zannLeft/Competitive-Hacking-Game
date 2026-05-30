@@ -1,5 +1,4 @@
-// InputManager.cs
-// RMB phone, SitDown action, Laptop Hack action, bad-guy restrictions, death restrictions, bad-guy attack.
+// InputManager.cs  (RMB phone only, SitDown action, Laptop Hack action)
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -15,13 +14,8 @@ public class InputManager : NetworkBehaviour
     private PlayerPhone phone;
     private PlayerSitAction sit;
     private PlayerLaptopHacker laptopHacker;
-    private PlayerSetup playerSetup;
-    private PlayerDeathState deathState;
-    private BadGuyAttack badGuyAttack;
 
     private bool _wasMovementBlocked;
-    private bool _wasBadGuy;
-    private bool _wasDead;
 
     void Awake()
     {
@@ -34,24 +28,12 @@ public class InputManager : NetworkBehaviour
         phone = GetComponent<PlayerPhone>();
         sit = GetComponent<PlayerSitAction>();
         laptopHacker = GetComponent<PlayerLaptopHacker>();
-        playerSetup = GetComponent<PlayerSetup>();
-        deathState = GetComponent<PlayerDeathState>();
-        badGuyAttack = GetComponent<BadGuyAttack>();
     }
 
     public override void OnNetworkSpawn()
     {
         if (!IsOwner)
             return;
-
-        if (playerSetup == null)
-            playerSetup = GetComponent<PlayerSetup>();
-
-        if (deathState == null)
-            deathState = GetComponent<PlayerDeathState>();
-
-        if (badGuyAttack == null)
-            badGuyAttack = GetComponent<BadGuyAttack>();
 
         onFoot.Jump.started += OnJumpStarted;
         onFoot.Jump.canceled += OnJumpCanceled;
@@ -70,61 +52,16 @@ public class InputManager : NetworkBehaviour
         onFoot.Hack.started += OnHackStarted;
         onFoot.Hack.canceled += OnHackCanceled;
 
-        onFoot.Attack.started += OnAttackStarted;
-
         onFoot.Enable();
 
         ui.Start.performed += OnStartPerformed;
         ui.Pause.performed += OnPausePerformed;
         ui.Enable();
-
-        _wasBadGuy = IsBadGuy();
-        _wasDead = IsDead();
-    }
-
-    private bool IsBadGuy()
-    {
-        return playerSetup != null && playerSetup.IsBadGuy.Value;
-    }
-
-    private bool IsDead()
-    {
-        return deathState != null && deathState.IsDead;
     }
 
     private bool MovementBlocked()
     {
         return sit != null && sit.BlocksGameplayMovement;
-    }
-
-    private bool CanMove()
-    {
-        return !IsDead() && !MovementBlocked();
-    }
-
-    private bool CanUseSurvivorTools()
-    {
-        return !IsDead() && !IsBadGuy();
-    }
-
-    private bool CanUsePhone()
-    {
-        return CanUseSurvivorTools() && !MovementBlocked();
-    }
-
-    private bool CanUseLaptop()
-    {
-        return CanUseSurvivorTools();
-    }
-
-    private bool CanHack()
-    {
-        return CanUseSurvivorTools();
-    }
-
-    private bool CanBadGuyAttack()
-    {
-        return !IsDead() && IsBadGuy() && !MovementBlocked();
     }
 
     private void ClearMovementInputs()
@@ -133,35 +70,17 @@ public class InputManager : NetworkBehaviour
         motor?.Sprint(false);
         motor?.Crouch(false);
 
-        ClearSurvivorToolInputs();
-    }
-
-    private void ClearSurvivorToolInputs()
-    {
         phone?.SetHolding(false);
-
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
         laptopHacker?.SetHackHeld(false);
     }
 
-    private void ClearAllActionInputs()
-    {
-        ClearMovementInputs();
-        ClearSurvivorToolInputs();
-    }
-
     private void ReapplyHeldInputsAfterUnblock()
     {
         if (motor == null)
             return;
-
-        if (IsDead())
-        {
-            motor.Sprint(false);
-            return;
-        }
 
         if (onFoot.Sprint.IsPressed())
             motor.Sprint(true);
@@ -176,56 +95,50 @@ public class InputManager : NetworkBehaviour
 
     private void OnJumpStarted(InputAction.CallbackContext ctx)
     {
-        if (!CanMove())
+        if (MovementBlocked())
             return;
 
-        motor?.Jump(true);
+        motor.Jump(true);
     }
 
     private void OnJumpCanceled(InputAction.CallbackContext ctx)
     {
-        motor?.Jump(false);
+        motor.Jump(false);
     }
 
     private void OnSprintStarted(InputAction.CallbackContext ctx)
     {
-        if (!CanMove())
+        if (MovementBlocked())
             return;
 
-        motor?.Sprint(true);
+        motor.Sprint(true);
     }
 
     private void OnSprintCanceled(InputAction.CallbackContext ctx)
     {
-        motor?.Sprint(false);
+        motor.Sprint(false);
     }
 
     private void OnCrouchStarted(InputAction.CallbackContext ctx)
     {
-        if (!CanMove())
+        if (MovementBlocked())
             return;
 
-        motor?.Crouch(true);
+        motor.Crouch(true);
     }
 
     private void OnCrouchCanceled(InputAction.CallbackContext ctx)
     {
-        motor?.Crouch(false);
+        motor.Crouch(false);
     }
 
     private void OnSitDownPerformed(InputAction.CallbackContext ctx)
     {
-        if (!CanUseLaptop())
-            return;
-
         sit?.TriggerSitDown();
     }
 
     private void OnHackStarted(InputAction.CallbackContext ctx)
     {
-        if (!CanHack())
-            return;
-
         laptopHacker?.SetHackHeld(true);
     }
 
@@ -234,49 +147,24 @@ public class InputManager : NetworkBehaviour
         laptopHacker?.SetHackHeld(false);
     }
 
-    private void OnAttackStarted(InputAction.CallbackContext ctx)
-    {
-        if (!CanBadGuyAttack())
-            return;
-
-        badGuyAttack?.TryAttack();
-    }
-
     void Update()
     {
         if (!IsOwner)
             return;
 
-        bool isBadGuyNow = IsBadGuy();
-        bool isDeadNow = IsDead();
-
-        if (isBadGuyNow && !_wasBadGuy)
-            ClearSurvivorToolInputs();
-
-        if (isDeadNow && !_wasDead)
-            ClearAllActionInputs();
-
-        _wasBadGuy = isBadGuyNow;
-        _wasDead = isDeadNow;
-
         bool blocked = MovementBlocked();
 
         if (blocked && !_wasMovementBlocked)
-        {
             ClearMovementInputs();
-        }
         else if (!blocked && _wasMovementBlocked)
-        {
             ReapplyHeldInputsAfterUnblock();
-        }
 
         _wasMovementBlocked = blocked;
 
-        if (CanMove())
-            motor?.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
+        if (!blocked)
+            motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
 
-        // Let dead players still look around for now.
-        look?.ProcessLook(onFoot.Look.ReadValue<Vector2>());
+        look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
 
     private void OnDisable()
@@ -300,8 +188,6 @@ public class InputManager : NetworkBehaviour
 
         onFoot.Hack.started -= OnHackStarted;
         onFoot.Hack.canceled -= OnHackCanceled;
-
-        onFoot.Attack.started -= OnAttackStarted;
 
         ui.Pause.performed -= OnPausePerformed;
         ui.Start.performed -= OnStartPerformed;
@@ -329,7 +215,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
-        if (!CanUsePhone())
+        if (MovementBlocked())
             return;
 
         phone?.SetHolding(true);
@@ -344,7 +230,7 @@ public class InputManager : NetworkBehaviour
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
-        if (CanMove() && motor != null && motor.IsSprintHeld)
+        if (!MovementBlocked() && motor != null && motor.IsSprintHeld)
             motor.Sprint(true);
     }
 }
