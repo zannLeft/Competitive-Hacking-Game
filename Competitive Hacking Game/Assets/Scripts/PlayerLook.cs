@@ -218,6 +218,9 @@ public class PlayerLook : NetworkBehaviour
 
     public float Pitch => xRotation;
     public float YawOffset => yawOffset;
+    public bool SmoothMouse => smoothMouse;
+    public float MouseSmoothingTime => mouseSmoothingTime;
+    public float DefaultFOV => defaultFOV;
 
     private bool phoneAimActive = false;
     private bool rmbHeld = false;

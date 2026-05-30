@@ -32,6 +32,23 @@ public class PlayerMotor : NetworkBehaviour
     // NEW: sitting uses crouch-sized collider without setting animator crouch bool.
     private bool sittingCollider = false;
 
+    [Header("Networked Collider")]
+    [Tooltip("Minimum height/center-Y change before the owner sends a collider update.")]
+    [SerializeField]
+    private float colliderSyncThreshold = 0.002f;
+
+    private NetworkVariable<float> networkedColliderHeight = new NetworkVariable<float>(
+        1.685f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner
+    );
+
+    private NetworkVariable<float> networkedColliderCenterY = new NetworkVariable<float>(
+        0.92f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner
+    );
+
     public bool IsGrounded => isGrounded;
     public bool UsingSittingCollider => sittingCollider;
 
@@ -121,11 +138,14 @@ public class PlayerMotor : NetworkBehaviour
     public bool IsActuallySprinting =>
         sprinting && isGrounded && !sliding && inputDirection.y > 0.01f && currentSpeed > 0.1f;
 
+    private void Awake()
+    {
+        CacheComponents();
+    }
+
     void Start()
     {
-        controller = GetComponent<CharacterController>();
-        animator = GetComponent<Animator>();
-        look = GetComponent<PlayerLook>();
+        CacheComponents();
 
         crouchCenterY = standCenterY - (standHeight - crouchHeight) / 2f;
 
@@ -136,16 +156,107 @@ public class PlayerMotor : NetworkBehaviour
         yVelHash = Animator.StringToHash("Y_Velocity");
     }
 
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+
+        CacheComponents();
+
+        networkedColliderHeight.OnValueChanged += OnNetworkedColliderDimensionsChanged;
+        networkedColliderCenterY.OnValueChanged += OnNetworkedColliderDimensionsChanged;
+
+        if (IsOwner)
+            SyncOwnedColliderDimensions(force: true);
+        else
+            ApplyNetworkedColliderDimensions();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+
+        networkedColliderHeight.OnValueChanged -= OnNetworkedColliderDimensionsChanged;
+        networkedColliderCenterY.OnValueChanged -= OnNetworkedColliderDimensionsChanged;
+    }
+
+    private void CacheComponents()
+    {
+        if (controller == null)
+            controller = GetComponent<CharacterController>();
+
+        if (animator == null)
+            animator = GetComponent<Animator>();
+
+        if (look == null)
+            look = GetComponent<PlayerLook>();
+    }
+
+    private void OnNetworkedColliderDimensionsChanged(float previousValue, float newValue)
+    {
+        if (IsOwner)
+            return;
+
+        ApplyNetworkedColliderDimensions();
+    }
+
+    private void ApplyNetworkedColliderDimensions()
+    {
+        CacheComponents();
+
+        if (controller == null)
+            return;
+
+        float safeHeight = Mathf.Max(networkedColliderHeight.Value, controller.radius * 2f);
+        Vector3 center = controller.center;
+        center.y = networkedColliderCenterY.Value;
+
+        controller.height = safeHeight;
+        controller.center = center;
+    }
+
+    private void SyncOwnedColliderDimensions(bool force = false)
+    {
+        if (!IsSpawned || !IsOwner || controller == null)
+            return;
+
+        if (
+            force
+            || Mathf.Abs(networkedColliderHeight.Value - controller.height) > colliderSyncThreshold
+        )
+            networkedColliderHeight.Value = controller.height;
+
+        if (
+            force
+            || Mathf.Abs(networkedColliderCenterY.Value - controller.center.y) > colliderSyncThreshold
+        )
+            networkedColliderCenterY.Value = controller.center.y;
+    }
+
+    public Vector3 GetColliderTopWorldPosition()
+    {
+        CacheComponents();
+
+        if (controller == null)
+            return transform.position + Vector3.up * standHeight;
+
+        Vector3 localTop = controller.center + Vector3.up * (controller.height * 0.5f);
+        return transform.TransformPoint(localTop);
+    }
+
     void Update()
     {
         if (!IsOwner)
+        {
+            ApplyNetworkedColliderDimensions();
             return;
+        }
 
         UpdateGroundStatus();
         HandleSliding();
         HandleJumping();
         UpdateStandStatus();
         UpdateCharacterDimensions();
+        SyncOwnedColliderDimensions();
     }
 
     public void SetSittingCollider(bool sitting)
@@ -176,11 +287,16 @@ public class PlayerMotor : NetworkBehaviour
 
     private void ResetCrouchAndSlide()
     {
+        if (controller == null)
+            return;
+
         currentHeight = standHeight;
         controller.height = currentHeight;
         controller.center = new Vector3(controller.center.x, standCenterY, controller.center.z);
         slideTimer = slideTimerMax;
         slideElapsed = 0f;
+
+        SyncOwnedColliderDimensions(force: true);
     }
 
     private void HandleSliding()

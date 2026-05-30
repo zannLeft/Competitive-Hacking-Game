@@ -1191,6 +1191,7 @@ GameObject:
   - component: {fileID: -2388601857875583894}
   - component: {fileID: 5844092317134281050}
   - component: {fileID: 6402268619689270216}
+  - component: {fileID: 3563277494627804126}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1351,6 +1352,7 @@ MonoBehaviour:
   sprinting: 0
   crouching: 0
   sliding: 0
+  colliderSyncThreshold: 0.002
   speed: 3
   sprintSpeed: 6
   jumpHeight: 2
@@ -1685,6 +1687,8 @@ MonoBehaviour:
   sitDownStateName: SitDown
   sittingStateName: Sitting
   standUpStateName: StandUp
+  instantResetStateName: Base State
+  instantResetNormalizedTime: 0
 --- !u!114 &-2388601857875583894
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1703,8 +1707,10 @@ MonoBehaviour:
   laptopRoot: {fileID: 4053179886994481442}
   laptopAnimator: {fileID: 2020307085335192770}
   laptopScreen: {fileID: 0}
+  sitAction: {fileID: 0}
   laptopOpenBool: Open
   attachBlendTime: 0.1
+  repairLaptopWhenAlreadySitting: 1
 --- !u!114 &5844092317134281050
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1743,6 +1749,34 @@ MonoBehaviour:
   laptopHacker: {fileID: 5844092317134281050}
   phone: {fileID: 8878162043686913073}
   look: {fileID: 6487965562487473033}
+--- !u!114 &3563277494627804126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1abd6b11c1af6d74a9fe1b65c6148617, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerSpectatorController
+  ShowTopMostFoldoutHeaderGroup: 1
+  playerLook: {fileID: 6487965562487473033}
+  inputManager: {fileID: 5479793853021550010}
+  spectatorCamera: {fileID: 2272284346070443280}
+  enableTestToggle: 1
+  testToggleKey: 99
+  includeSelfForTesting: 1
+  includeBadGuysForTesting: 1
+  orbitDistance: 1.5
+  minPitch: -85
+  maxPitch: 85
+  anchorVerticalSmoothTime: 0.12
+  fallbackXSensitivity: 30
+  fallbackYSensitivity: 30
+  fallbackSmoothMouse: 1
+  fallbackMouseSmoothingTime: 0.05
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

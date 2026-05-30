@@ -16,6 +16,9 @@ public class InputManager : NetworkBehaviour
     private PlayerLaptopHacker laptopHacker;
 
     private bool _wasMovementBlocked;
+    private bool _gameplaySuppressed;
+
+    public bool GameplaySuppressed => _gameplaySuppressed;
 
     void Awake()
     {
@@ -64,6 +67,50 @@ public class InputManager : NetworkBehaviour
         return sit != null && sit.BlocksGameplayMovement;
     }
 
+    private bool GameplayInputBlocked()
+    {
+        return _gameplaySuppressed || MovementBlocked();
+    }
+
+    public void SetGameplaySuppressed(bool suppressed)
+    {
+        if (!IsOwner)
+            return;
+
+        if (_gameplaySuppressed == suppressed)
+            return;
+
+        _gameplaySuppressed = suppressed;
+
+        if (_gameplaySuppressed)
+        {
+            ClearMovementInputs();
+            onFoot.Disable();
+        }
+        else
+        {
+            onFoot.Enable();
+            ReapplyHeldInputsAfterUnblock();
+        }
+    }
+
+    public void ForceClearGameplaySuppression()
+    {
+        if (!IsOwner)
+            return;
+
+        bool wasSuppressed = _gameplaySuppressed;
+        _gameplaySuppressed = false;
+
+        if (!isActiveAndEnabled)
+            return;
+
+        onFoot.Enable();
+
+        if (wasSuppressed)
+            ReapplyHeldInputsAfterUnblock();
+    }
+
     private void ClearMovementInputs()
     {
         motor?.Jump(false);
@@ -95,7 +142,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnJumpStarted(InputAction.CallbackContext ctx)
     {
-        if (MovementBlocked())
+        if (GameplayInputBlocked())
             return;
 
         motor.Jump(true);
@@ -108,7 +155,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnSprintStarted(InputAction.CallbackContext ctx)
     {
-        if (MovementBlocked())
+        if (GameplayInputBlocked())
             return;
 
         motor.Sprint(true);
@@ -121,7 +168,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnCrouchStarted(InputAction.CallbackContext ctx)
     {
-        if (MovementBlocked())
+        if (GameplayInputBlocked())
             return;
 
         motor.Crouch(true);
@@ -134,11 +181,17 @@ public class InputManager : NetworkBehaviour
 
     private void OnSitDownPerformed(InputAction.CallbackContext ctx)
     {
+        if (_gameplaySuppressed)
+            return;
+
         sit?.TriggerSitDown();
     }
 
     private void OnHackStarted(InputAction.CallbackContext ctx)
     {
+        if (GameplayInputBlocked())
+            return;
+
         laptopHacker?.SetHackHeld(true);
     }
 
@@ -150,6 +203,9 @@ public class InputManager : NetworkBehaviour
     void Update()
     {
         if (!IsOwner)
+            return;
+
+        if (_gameplaySuppressed)
             return;
 
         bool blocked = MovementBlocked();
@@ -201,6 +257,12 @@ public class InputManager : NetworkBehaviour
         if (!IsOwner)
             return;
 
+        if (_gameplaySuppressed)
+        {
+            onFoot.Disable();
+            return;
+        }
+
         if (enabled)
             onFoot.Enable();
         else
@@ -215,7 +277,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
-        if (MovementBlocked())
+        if (GameplayInputBlocked())
             return;
 
         phone?.SetHolding(true);
@@ -230,7 +292,7 @@ public class InputManager : NetworkBehaviour
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
-        if (!MovementBlocked() && motor != null && motor.IsSprintHeld)
+        if (!_gameplaySuppressed && !MovementBlocked() && motor != null && motor.IsSprintHeld)
             motor.Sprint(true);
     }
 }
