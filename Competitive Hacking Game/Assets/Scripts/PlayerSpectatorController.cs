@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using TMPro;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 [DisallowMultipleComponent]
 public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettable
@@ -15,6 +17,40 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
     [SerializeField]
     private Camera spectatorCamera;
+
+    [Header("UI")]
+    [Tooltip("Normal in-game HUD root. If left empty, this script searches for a scene object named GameUI.")]
+    [SerializeField]
+    private GameObject gameUIRoot;
+
+    [Tooltip("Spectator-only UI root. If left empty, this script searches for a scene object named SpectatorUI.")]
+    [SerializeField]
+    private GameObject spectatorUIRoot;
+
+    [SerializeField]
+    private string gameUIRootName = "GameUI";
+
+    [SerializeField]
+    private string spectatorUIRootName = "SpectatorUI";
+
+    [Header("Spectator UI Text")]
+    [SerializeField]
+    private TMP_Text spectatorTitleText;
+
+    [SerializeField]
+    private TMP_Text spectatorTargetText;
+
+    [SerializeField]
+    private TMP_Text spectatorControlsText;
+
+    [SerializeField]
+    private string spectatorTitleTextName = "SpectatorTitleText";
+
+    [SerializeField]
+    private string spectatorTargetTextName = "SpectatorTargetText";
+
+    [SerializeField]
+    private string spectatorControlsTextName = "SpectatorControlsText";
 
     [Header("Testing")]
     [Tooltip("Temporary local test toggle. Later the knockdown system should call EnterSpectatorModeForKnockdown().")]
@@ -99,6 +135,10 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     private Vector3 _smoothedAnchor;
     private float _anchorYVelocity;
 
+    private bool _hasCachedUiState;
+    private bool _gameUIWasActive;
+    private bool _spectatorUIWasActive;
+
     public bool IsSpectating => _isSpectating;
     public PlayerSetup CurrentTarget => _currentTarget;
 
@@ -142,8 +182,6 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
     public void EnterSpectatorModeForKnockdown()
     {
-        // Future real knockdown entry point:
-        // show the knocked player first, include self, and exclude the bad guy.
         EnterSpectatorMode(OwnerClientId, includeSelf: true, includeBadGuys: false);
     }
 
@@ -169,6 +207,14 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
             return;
         }
 
+        if (_isSpectating)
+        {
+            SelectPreferredTargetOrFallback(preferredTargetClientId);
+            SetSpectatorUiVisible(true);
+            UpdateSpectatorCamera(snapAnchor: true);
+            return;
+        }
+
         SaveCameraStateIfNeeded();
         InitializeOrbitFromCurrentCamera();
 
@@ -189,6 +235,9 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         Cursor.visible = false;
 
         _isSpectating = true;
+
+        SetSpectatorUiVisible(true);
+
         SelectPreferredTargetOrFallback(preferredTargetClientId);
         UpdateSpectatorCamera(snapAnchor: true);
     }
@@ -235,6 +284,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         _smoothedLookDelta = Vector2.zero;
         _anchorYVelocity = 0f;
 
+        RestoreSpectatorUiState();
         RestoreCameraState();
 
         if (playerLook != null)
@@ -275,6 +325,144 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
         if (spectatorCamera == null)
             spectatorCamera = GetComponentInChildren<Camera>(true);
+
+        CacheUiReferences();
+    }
+
+    private void CacheUiReferences()
+    {
+        if (gameUIRoot == null && !string.IsNullOrEmpty(gameUIRootName))
+            gameUIRoot = FindSceneObjectByName(gameUIRootName);
+
+        if (spectatorUIRoot == null && !string.IsNullOrEmpty(spectatorUIRootName))
+            spectatorUIRoot = FindSceneObjectByName(spectatorUIRootName);
+
+        CacheSpectatorTextReferences();
+    }
+
+    private void CacheSpectatorTextReferences()
+    {
+        if (spectatorUIRoot == null)
+            return;
+
+        if (spectatorTitleText == null)
+            spectatorTitleText = FindTmpTextInChildren(spectatorUIRoot.transform, spectatorTitleTextName);
+
+        if (spectatorTargetText == null)
+            spectatorTargetText = FindTmpTextInChildren(spectatorUIRoot.transform, spectatorTargetTextName);
+
+        if (spectatorControlsText == null)
+            spectatorControlsText = FindTmpTextInChildren(spectatorUIRoot.transform, spectatorControlsTextName);
+    }
+
+    private static TMP_Text FindTmpTextInChildren(Transform root, string objectName)
+    {
+        if (root == null || string.IsNullOrEmpty(objectName))
+            return null;
+
+        TMP_Text[] texts = root.GetComponentsInChildren<TMP_Text>(true);
+
+        foreach (TMP_Text text in texts)
+        {
+            if (text != null && text.name == objectName)
+                return text;
+        }
+
+        return null;
+    }
+
+    private void SetSpectatorUiVisible(bool visible)
+    {
+        CacheUiReferences();
+
+        if (!_hasCachedUiState)
+        {
+            _gameUIWasActive = gameUIRoot != null && gameUIRoot.activeSelf;
+            _spectatorUIWasActive = spectatorUIRoot != null && spectatorUIRoot.activeSelf;
+            _hasCachedUiState = true;
+        }
+
+        if (gameUIRoot != null)
+            gameUIRoot.SetActive(!visible);
+
+        if (spectatorUIRoot != null)
+            spectatorUIRoot.SetActive(visible);
+
+        if (visible)
+            UpdateSpectatorUiText();
+    }
+
+    private void RestoreSpectatorUiState()
+    {
+        CacheUiReferences();
+
+        if (!_hasCachedUiState)
+        {
+            if (spectatorUIRoot != null)
+                spectatorUIRoot.SetActive(false);
+
+            return;
+        }
+
+        if (gameUIRoot != null)
+            gameUIRoot.SetActive(_gameUIWasActive);
+
+        if (spectatorUIRoot != null)
+            spectatorUIRoot.SetActive(_spectatorUIWasActive);
+
+        _hasCachedUiState = false;
+    }
+
+    private void UpdateSpectatorUiText()
+    {
+        CacheSpectatorTextReferences();
+
+        if (spectatorTitleText != null)
+            spectatorTitleText.text = "SPECTATOR MODE";
+
+        if (spectatorTargetText != null)
+        {
+            spectatorTargetText.text = _currentTarget != null
+                ? $"Spectating: {GetSpectatorTargetDisplayName(_currentTarget)}"
+                : "Spectating: None";
+        }
+
+        if (spectatorControlsText != null)
+            spectatorControlsText.text = "Mouse: Orbit  |  LMB/RMB: Switch Target";
+    }
+
+    private string GetSpectatorTargetDisplayName(PlayerSetup target)
+    {
+        if (target == null)
+            return "None";
+
+        if (target.OwnerClientId == OwnerClientId)
+            return "You";
+
+        return $"Player {target.OwnerClientId}";
+    }
+
+    private static GameObject FindSceneObjectByName(string objectName)
+    {
+        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+
+        foreach (GameObject obj in allObjects)
+        {
+            if (obj == null)
+                continue;
+
+            if (obj.name != objectName)
+                continue;
+
+            Scene scene = obj.scene;
+
+            if (!scene.IsValid() || !scene.isLoaded)
+                continue;
+
+            return obj;
+        }
+
+        return null;
     }
 
     private void SaveCameraStateIfNeeded()
@@ -308,7 +496,6 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         if (Mouse.current == null)
             return;
 
-        // LMB = previous, RMB = next. Swap the signs here if you prefer the opposite feel.
         if (Mouse.current.leftButton.wasPressedThisFrame)
             SwitchTarget(-1);
 
@@ -455,14 +642,12 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
         Transform hitTransform = hit.collider.transform;
 
-        // Ignore our own player/camera colliders and the currently spectated player's collider.
         if (hitTransform.IsChildOf(transform))
             return true;
 
         if (_currentTarget != null && hitTransform.IsChildOf(_currentTarget.transform))
             return true;
 
-        // Also ignore other player colliders so switching targets does not make the camera pop inward.
         if (hit.collider.GetComponentInParent<PlayerSetup>() != null)
             return true;
 
@@ -527,6 +712,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         if (_currentTarget != null)
         {
             ulong currentOwner = _currentTarget.OwnerClientId;
+
             for (int i = 0; i < _targets.Count; i++)
             {
                 if (_targets[i].OwnerClientId == currentOwner)
@@ -553,6 +739,9 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
             _smoothedAnchor = GetTargetAnchor(_currentTarget);
             _anchorYVelocity = 0f;
         }
+
+        if (_isSpectating)
+            UpdateSpectatorUiText();
     }
 
     private Vector3 GetTargetAnchor(PlayerSetup target)
@@ -561,10 +750,12 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
             return transform.position + Vector3.up;
 
         PlayerMotor motor = target.GetComponent<PlayerMotor>();
+
         if (motor != null)
             return motor.GetColliderTopWorldPosition();
 
         CharacterController controller = target.GetComponent<CharacterController>();
+
         if (controller != null)
         {
             Vector3 localTop = controller.center + Vector3.up * (controller.height * 0.5f);

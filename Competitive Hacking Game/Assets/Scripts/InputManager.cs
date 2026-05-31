@@ -189,7 +189,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnHackStarted(InputAction.CallbackContext ctx)
     {
-        if (GameplayInputBlocked())
+        if (_gameplaySuppressed)
             return;
 
         laptopHacker?.SetHackHeld(true);
@@ -257,16 +257,22 @@ public class InputManager : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        if (_gameplaySuppressed)
+        if (!enabled)
         {
+            ClearMovementInputs();
             onFoot.Disable();
             return;
         }
 
-        if (enabled)
-            onFoot.Enable();
-        else
+        if (_gameplaySuppressed)
+        {
+            ClearMovementInputs();
             onFoot.Disable();
+            return;
+        }
+
+        onFoot.Enable();
+        ReapplyHeldInputsAfterUnblock();
     }
 
     private void OnStartPerformed(InputAction.CallbackContext ctx)
