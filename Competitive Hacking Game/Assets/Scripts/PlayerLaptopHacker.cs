@@ -9,6 +9,9 @@ public class PlayerLaptopHacker : NetworkBehaviour
     [SerializeField]
     private PlayerSitAction sitAction;
 
+    [SerializeField]
+    private PlayerSetup playerSetup;
+
     [Tooltip("Usually the player camera or player root. Used for router distance checks.")]
     [SerializeField]
     private Transform rangeOrigin;
@@ -59,6 +62,9 @@ public class PlayerLaptopHacker : NetworkBehaviour
     {
         get
         {
+            if (IsBadGuy())
+                return false;
+
             if (sitAction == null)
                 return false;
 
@@ -72,6 +78,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
     void Reset()
     {
         sitAction = GetComponent<PlayerSitAction>();
+        playerSetup = GetComponent<PlayerSetup>();
     }
 
     public override void OnNetworkSpawn()
@@ -80,6 +87,9 @@ public class PlayerLaptopHacker : NetworkBehaviour
 
         if (sitAction == null)
             sitAction = GetComponent<PlayerSitAction>();
+
+        if (playerSetup == null)
+            playerSetup = GetComponent<PlayerSetup>();
 
         if (rangeOrigin == null)
         {
@@ -98,6 +108,12 @@ public class PlayerLaptopHacker : NetworkBehaviour
     {
         if (!IsOwner)
             return;
+
+        if (IsBadGuy())
+        {
+            ForceResetLocalForRound();
+            return;
+        }
 
         RefreshTargetTick();
 
@@ -137,9 +153,9 @@ public class PlayerLaptopHacker : NetworkBehaviour
 
     public void SetHackHeld(bool held)
     {
-        _hackHeld = held;
+        _hackHeld = held && !IsBadGuy();
 
-        if (!held)
+        if (!_hackHeld)
         {
             _mustReleaseHack = false;
             _hackProgress = 0f;
@@ -159,7 +175,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
 
     private RouterBox FindBestHackableRouter()
     {
-        if (!IsLaptopUsable)
+        if (IsBadGuy() || !IsLaptopUsable)
             return null;
 
         RouterBox best = null;
@@ -212,6 +228,9 @@ public class PlayerLaptopHacker : NetworkBehaviour
     {
         string name = networkName.ToString();
 
+        if (IsBadGuy())
+            return;
+
         if (RouterHackState.IsCompleted(name))
             return;
 
@@ -240,6 +259,11 @@ public class PlayerLaptopHacker : NetworkBehaviour
     private void MarkNetworkCompletedClientRpc(FixedString128Bytes networkName)
     {
         RouterHackState.MarkCompleted(networkName.ToString());
+    }
+
+    private bool IsBadGuy()
+    {
+        return playerSetup != null && playerSetup.IsBadGuy.Value;
     }
 
     private RouterBox FindRouterByName(string networkName)

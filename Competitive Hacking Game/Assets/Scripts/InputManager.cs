@@ -14,6 +14,7 @@ public class InputManager : NetworkBehaviour
     private PlayerPhone phone;
     private PlayerSitAction sit;
     private PlayerLaptopHacker laptopHacker;
+    private PlayerSetup playerSetup;
 
     private bool _wasMovementBlocked;
     private bool _gameplaySuppressed;
@@ -31,6 +32,7 @@ public class InputManager : NetworkBehaviour
         phone = GetComponent<PlayerPhone>();
         sit = GetComponent<PlayerSitAction>();
         laptopHacker = GetComponent<PlayerLaptopHacker>();
+        playerSetup = GetComponent<PlayerSetup>();
     }
 
     public override void OnNetworkSpawn()
@@ -65,6 +67,16 @@ public class InputManager : NetworkBehaviour
     private bool MovementBlocked()
     {
         return sit != null && sit.BlocksGameplayMovement;
+    }
+
+    private bool IsBadGuy()
+    {
+        return playerSetup != null && playerSetup.IsBadGuy.Value;
+    }
+
+    private bool SurvivorToolInputBlocked()
+    {
+        return _gameplaySuppressed || IsBadGuy();
     }
 
     private bool GameplayInputBlocked()
@@ -181,7 +193,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnSitDownPerformed(InputAction.CallbackContext ctx)
     {
-        if (_gameplaySuppressed)
+        if (SurvivorToolInputBlocked())
             return;
 
         sit?.TriggerSitDown();
@@ -189,7 +201,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnHackStarted(InputAction.CallbackContext ctx)
     {
-        if (_gameplaySuppressed)
+        if (SurvivorToolInputBlocked())
             return;
 
         laptopHacker?.SetHackHeld(true);
@@ -207,6 +219,14 @@ public class InputManager : NetworkBehaviour
 
         if (_gameplaySuppressed)
             return;
+
+        if (IsBadGuy())
+        {
+            phone?.SetHolding(false);
+            look?.SetPhoneAim(false);
+            look?.SetAimHeld(false);
+            laptopHacker?.SetHackHeld(false);
+        }
 
         bool blocked = MovementBlocked();
 
@@ -283,7 +303,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
-        if (GameplayInputBlocked())
+        if (GameplayInputBlocked() || IsBadGuy())
             return;
 
         phone?.SetHolding(true);
@@ -298,7 +318,7 @@ public class InputManager : NetworkBehaviour
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
-        if (!_gameplaySuppressed && !MovementBlocked() && motor != null && motor.IsSprintHeld)
+        if (!_gameplaySuppressed && !MovementBlocked() && !IsBadGuy() && motor != null && motor.IsSprintHeld)
             motor.Sprint(true);
     }
 }

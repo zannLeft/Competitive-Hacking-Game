@@ -14,6 +14,9 @@ public class PlayerSitAction
     [SerializeField]
     private PlayerMotor motor;
 
+    [SerializeField]
+    private PlayerSetup playerSetup;
+
     [Header("Animator Param")]
     [SerializeField]
     private string laptopSittingBoolParam = "LaptopSitting";
@@ -89,6 +92,7 @@ public class PlayerSitAction
     {
         animator = GetComponent<Animator>();
         motor = GetComponent<PlayerMotor>();
+        playerSetup = GetComponent<PlayerSetup>();
     }
 
     public override void OnNetworkSpawn()
@@ -100,6 +104,9 @@ public class PlayerSitAction
 
         if (motor == null)
             motor = GetComponent<PlayerMotor>();
+
+        if (playerSetup == null)
+            playerSetup = GetComponent<PlayerSetup>();
 
         _laptopSittingHash = Animator.StringToHash(laptopSittingBoolParam);
 
@@ -130,6 +137,9 @@ public class PlayerSitAction
 
     private void Update()
     {
+        if (IsServer && IsBadGuy() && WantsSitting.Value)
+            WantsSitting.Value = false;
+
         if (!_blocksGameplayMovement)
             return;
 
@@ -153,6 +163,9 @@ public class PlayerSitAction
         bool currentlyTryingToSit = _localWantsSitting || IsFullySitting;
         bool targetWantsSitting = !currentlyTryingToSit;
 
+        if (targetWantsSitting && IsBadGuy())
+            return;
+
         if (
             targetWantsSitting
             && motor != null
@@ -170,6 +183,9 @@ public class PlayerSitAction
     [ServerRpc]
     private void RequestSetWantsSittingServerRpc(bool wantsSitting)
     {
+        if (wantsSitting && IsBadGuy())
+            return;
+
         WantsSitting.Value = wantsSitting;
     }
 
@@ -297,6 +313,11 @@ public class PlayerSitAction
         _useSittingCameraPosition = false;
         _laptopCameraFocus = false;
         motor?.SetSittingCollider(false);
+    }
+
+    private bool IsBadGuy()
+    {
+        return playerSetup != null && playerSetup.IsBadGuy.Value;
     }
 
     private bool IsCurrentOrNextState(string stateName)
