@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 1920
     height: 1037
   m_ShowMode: 4
-  m_Title: Project
+  m_Title: Console
   m_RootView: {fileID: 10}
   m_MinSize: {x: 875, y: 300}
   m_MaxSize: {x: 10000, y: 10000}
@@ -126,7 +126,7 @@ MonoBehaviour:
   m_MinSize: {x: 200, y: 56}
   m_MaxSize: {x: 16192, y: 8096}
   vertical: 0
-  controlID: 116
+  controlID: 91
   draggingID: 0
 --- !u!114 &6
 MonoBehaviour:
@@ -152,7 +152,7 @@ MonoBehaviour:
   m_MinSize: {x: 300, y: 168}
   m_MaxSize: {x: 24288, y: 24288}
   vertical: 0
-  controlID: 80
+  controlID: 89
   draggingID: 0
 --- !u!114 &7
 MonoBehaviour:
@@ -327,7 +327,7 @@ MonoBehaviour:
   m_MinSize: {x: 200, y: 168}
   m_MaxSize: {x: 16192, y: 24288}
   vertical: 1
-  controlID: 81
+  controlID: 90
   draggingID: 0
 --- !u!114 &14
 MonoBehaviour:
@@ -495,7 +495,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 0
+    y: 43
     width: 1920
     height: 36
   m_SerializedDataModeController:
@@ -774,8 +774,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Project\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 527
-    y: 24
+    x: 526
+    y: 749
     width: 1043
     height: 285
   m_SerializedDataModeController:
@@ -822,9 +822,9 @@ MonoBehaviour:
   m_FolderTreeState:
     scrollPos: {x: 0, y: 31}
     m_SelectedIDs:
-    - m_Data: 72404
+    - m_Data: 72668
     m_LastClickedID:
-      m_Data: 72404
+      m_Data: 72668
     m_ExpandedIDs:
     - m_Data: 0
     - m_Data: 72524
@@ -854,7 +854,7 @@ MonoBehaviour:
       m_OriginalEventType: 11
       m_IsRenamingFilename: 1
       m_TrimLeadingAndTrailingWhitespace: 0
-      m_ClientGUIView: {fileID: 0}
+      m_ClientGUIView: {fileID: 9}
     m_SearchString: 
     m_CreateAssetUtility:
       m_EndAction: {fileID: 0}
@@ -940,7 +940,7 @@ MonoBehaviour:
       m_Icon: {fileID: 0}
       m_ResourceFile: 
     m_NewAssetIndexInList: -1
-    m_ScrollPosition: {x: 0, y: 0}
+    m_ScrollPosition: {x: 0, y: 62}
     m_GridSize: 64
   m_SkipHiddenPackages: 0
   m_DirectoriesAreaWidth: 207
@@ -965,8 +965,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Inspector\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1572
-    y: 24
+    x: 1571
+    y: 79
     width: 348
     height: 955
   m_SerializedDataModeController:
@@ -1018,7 +1018,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 24
+    y: 79
     width: 379
     height: 421
   m_SerializedDataModeController:
@@ -1041,12 +1041,22 @@ MonoBehaviour:
       m_LastClickedID:
         m_Data: 0
       m_ExpandedIDs:
-      - m_Data: -5440
-      - m_Data: -5030
-      - m_Data: -4976
-      - m_Data: -4960
-      - m_Data: -4876
-      - m_Data: -1386
+      - m_Data: -44488
+      - m_Data: -44078
+      - m_Data: -44024
+      - m_Data: -44008
+      - m_Data: -43926
+      - m_Data: -11248
+      - m_Data: -10838
+      - m_Data: -10792
+      - m_Data: -10784
+      - m_Data: -10710
+      - m_Data: -3968
+      - m_Data: -3558
+      - m_Data: -3512
+      - m_Data: -3504
+      - m_Data: -3428
+      - m_Data: -1562
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -1094,8 +1104,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Scene\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 381
-    y: 24
+    x: 380
+    y: 79
     width: 1189
     height: 644
   m_SerializedDataModeController:
@@ -1640,9 +1650,9 @@ MonoBehaviour:
   m_AudioPlay: 0
   m_DebugDrawModesUseInteractiveLightBakingData: 0
   m_Position:
-    m_Target: {x: 234.5, y: 254.1354, z: 0}
+    m_Target: {x: -10.431217, y: 1.1892653, z: -2.8697424}
     speed: 2
-    m_Value: {x: 234.5, y: 254.1354, z: 0}
+    m_Value: {x: -10.431217, y: 1.1892653, z: -2.8697424}
   m_RenderMode: 0
   m_CameraMode:
     drawMode: 0
@@ -1691,11 +1701,11 @@ MonoBehaviour:
   m_Rotation:
     m_Target: {x: 0.114695564, y: -0.3523989, z: 0.043564342, w: 0.92777556}
     speed: 2
-    m_Value: {x: -0.11469556, y: 0.3523989, z: -0.043564342, w: -0.92777556}
+    m_Value: {x: 0.114695266, y: -0.35239798, z: 0.043564226, w: 0.9277731}
   m_Size:
-    m_Target: 10
+    m_Target: 0.8660254
     speed: 2
-    m_Value: 10
+    m_Value: 0.8660254
   m_Ortho:
     m_Target: 0
     speed: 2
@@ -1751,7 +1761,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 24
+    y: 749
     width: 525
     height: 285
   m_SerializedDataModeController:
@@ -1854,7 +1864,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 471
+    y: 526
     width: 379
     height: 197
   m_SerializedDataModeController:

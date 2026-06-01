@@ -57,9 +57,6 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     [SerializeField]
     private bool enableTestToggle = true;
 
-    [SerializeField]
-    private Key testToggleKey = Key.F6;
-
     [Tooltip("Temporary: lets one-player testing spectate yourself. Keep true until the real knockdown flow exists.")]
     [SerializeField]
     private bool includeSelfForTesting = true;
@@ -138,6 +135,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     private bool _hasCachedUiState;
     private bool _gameUIWasActive;
     private bool _spectatorUIWasActive;
+    private bool _subscribedToInputManager;
 
     public bool IsSpectating => _isSpectating;
     public PlayerSetup CurrentTarget => _currentTarget;
@@ -157,6 +155,9 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     {
         base.OnNetworkSpawn();
         CacheReferences();
+
+        if (IsOwner)
+            SubscribeToInputManager();
     }
 
     private void Update()
@@ -164,7 +165,9 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         if (!IsOwner)
             return;
 
-        if (enableTestToggle && Keyboard.current != null && Keyboard.current[testToggleKey].wasPressedThisFrame)
+        Keyboard keyboard = Keyboard.current;
+
+        if (enableTestToggle && keyboard != null && keyboard.f6Key.wasPressedThisFrame)
         {
             if (_isSpectating)
                 ExitSpectatorMode();
@@ -175,7 +178,6 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         if (!_isSpectating)
             return;
 
-        HandleTargetSwitchInput();
         HandleOrbitLookInput();
         UpdateSpectatorCamera(snapAnchor: false);
     }
@@ -219,6 +221,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         InitializeOrbitFromCurrentCamera();
 
         inputManager?.SetGameplaySuppressed(true);
+        inputManager?.SetSpectatorInputEnabled(true);
 
         if (playerLook != null)
         {
@@ -258,6 +261,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
     public override void OnNetworkDespawn()
     {
+        UnsubscribeFromInputManager();
         ForceExitSpectatorMode();
         base.OnNetworkDespawn();
     }
@@ -294,10 +298,56 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
             playerLook.enabled = true;
         }
 
+        inputManager?.SetSpectatorInputEnabled(false);
         inputManager?.ForceClearGameplaySuppression();
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+    }
+
+    private void SubscribeToInputManager()
+    {
+        if (_subscribedToInputManager)
+            return;
+
+        CacheReferences();
+
+        if (inputManager == null)
+            return;
+
+        inputManager.SpectatorPreviousTargetPressed += HandleSpectatorPreviousTargetPressed;
+        inputManager.SpectatorNextTargetPressed += HandleSpectatorNextTargetPressed;
+        _subscribedToInputManager = true;
+    }
+
+    private void UnsubscribeFromInputManager()
+    {
+        if (!_subscribedToInputManager)
+            return;
+
+        if (inputManager != null)
+        {
+            inputManager.SpectatorPreviousTargetPressed -= HandleSpectatorPreviousTargetPressed;
+            inputManager.SpectatorNextTargetPressed -= HandleSpectatorNextTargetPressed;
+        }
+
+        _subscribedToInputManager = false;
+    }
+
+    private void HandleSpectatorPreviousTargetPressed()
+    {
+        if (!_isSpectating)
+            return;
+
+        SwitchTarget(-1);
+    }
+
+    private void HandleSpectatorNextTargetPressed()
+    {
+        if (!_isSpectating)
+            return;
+
+        SwitchTarget(1);
     }
 
     private void RestoreCameraState()
@@ -428,7 +478,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         }
 
         if (spectatorControlsText != null)
-            spectatorControlsText.text = "Mouse: Orbit  |  LMB/RMB: Switch Target";
+            spectatorControlsText.text = "Mouse: Orbit  |  LMB/Q: Previous  |  RMB/E: Next";
     }
 
     private string GetSpectatorTargetDisplayName(PlayerSetup target)
@@ -491,25 +541,15 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         _smoothedLookDelta = Vector2.zero;
     }
 
-    private void HandleTargetSwitchInput()
-    {
-        if (Mouse.current == null)
-            return;
-
-        if (Mouse.current.leftButton.wasPressedThisFrame)
-            SwitchTarget(-1);
-
-        if (Mouse.current.rightButton.wasPressedThisFrame)
-            SwitchTarget(1);
-    }
-
     private void HandleOrbitLookInput()
     {
-        if (Mouse.current == null)
-            return;
-
         float dt = Time.deltaTime;
-        Vector2 rawDelta = Mouse.current.delta.ReadValue();
+        Vector2 rawDelta = inputManager != null
+            ? inputManager.ReadSpectatorLookInput()
+            : Vector2.zero;
+
+        if (rawDelta == Vector2.zero && inputManager == null && Mouse.current != null)
+            rawDelta = Mouse.current.delta.ReadValue();
 
         bool useSmooth = playerLook != null ? playerLook.SmoothMouse : fallbackSmoothMouse;
         float smoothingTime = playerLook != null ? playerLook.MouseSmoothingTime : fallbackMouseSmoothingTime;

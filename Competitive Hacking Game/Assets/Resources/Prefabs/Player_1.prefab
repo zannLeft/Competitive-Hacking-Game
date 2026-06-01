@@ -1192,6 +1192,7 @@ GameObject:
   - component: {fileID: 5844092317134281050}
   - component: {fileID: 6402268619689270216}
   - component: {fileID: 3563277494627804126}
+  - component: {fileID: 4764926159289589612}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1648,6 +1649,8 @@ MonoBehaviour:
   phoneAttachR: {fileID: 5162219321685998565}
   phonePrefab: {fileID: 6671164735964093091, guid: a18efead22d4aeb489486b7dcfd70f20, type: 3}
   motor: {fileID: 0}
+  playerSetup: {fileID: 0}
+  lifeState: {fileID: 0}
   phoneMaskParam: PhoneMask
   phoneIKParam: PhoneIK
   phoneLayerIndex: 1
@@ -1682,6 +1685,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   animator: {fileID: 7898741019774491149}
   motor: {fileID: 4708886749802310030}
+  playerSetup: {fileID: 0}
+  lifeState: {fileID: 0}
   laptopSittingBoolParam: LaptopSitting
   baseLayerIndex: 0
   sitDownStateName: SitDown
@@ -1725,6 +1730,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerLaptopHacker
   ShowTopMostFoldoutHeaderGroup: 1
   sitAction: {fileID: 145536466847178049}
+  playerSetup: {fileID: 0}
+  lifeState: {fileID: 0}
   rangeOrigin: {fileID: 0}
   hackSeconds: 5
   barCount: 5
@@ -1765,6 +1772,16 @@ MonoBehaviour:
   playerLook: {fileID: 6487965562487473033}
   inputManager: {fileID: 5479793853021550010}
   spectatorCamera: {fileID: 2272284346070443280}
+  gameUIRoot: {fileID: 0}
+  spectatorUIRoot: {fileID: 0}
+  gameUIRootName: GameUI
+  spectatorUIRootName: SpectatorUI
+  spectatorTitleText: {fileID: 0}
+  spectatorTargetText: {fileID: 0}
+  spectatorControlsText: {fileID: 0}
+  spectatorTitleTextName: SpectatorTitleText
+  spectatorTargetTextName: SpectatorTargetText
+  spectatorControlsTextName: SpectatorControlsText
   enableTestToggle: 1
   testToggleKey: 99
   includeSelfForTesting: 1
@@ -1773,10 +1790,60 @@ MonoBehaviour:
   minPitch: -85
   maxPitch: 85
   anchorVerticalSmoothTime: 0.12
+  preventCameraClipping: 1
+  cameraCollisionMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  cameraCollisionRadius: 0.2
+  cameraCollisionPadding: 0.08
+  minCameraDistanceFromAnchor: 0.45
   fallbackXSensitivity: 30
   fallbackYSensitivity: 30
   fallbackSmoothMouse: 1
   fallbackMouseSmoothingTime: 0.05
+--- !u!114 &4764926159289589612
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e6f16a0942918b4d89381614ff32ff3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerLifeState
+  ShowTopMostFoldoutHeaderGroup: 1
+  playerSetup: {fileID: 7528082831520240939}
+  inputManager: {fileID: 5479793853021550010}
+  phone: {fileID: 8878162043686913073}
+  laptopHacker: {fileID: 5844092317134281050}
+  sitAction: {fileID: 145536466847178049}
+  playerLook: {fileID: 6487965562487473033}
+  enableDebugHotkeys: 1
+  debugDownedKey: 288
+  debugDeadKey: 289
+  debugAliveKey: 290
+  State:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
+  DownedPosition:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: {x: 0, y: 0, z: 0}
+  LastAttackerClientId:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 18446744073709551615
+  DownedStartedServerTime:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

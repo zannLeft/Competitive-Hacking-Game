@@ -1,4 +1,5 @@
 // InputManager.cs  (RMB phone only, SitDown action, Laptop Hack action)
+using System;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -8,6 +9,7 @@ public class InputManager : NetworkBehaviour
     private PlayerInput playerInput;
     private PlayerInput.OnFootActions onFoot;
     private PlayerInput.UIActions ui;
+    private PlayerInput.SpectatorActions spectator;
 
     private PlayerMotor motor;
     private PlayerLook look;
@@ -15,28 +17,32 @@ public class InputManager : NetworkBehaviour
     private PlayerSitAction sit;
     private PlayerLaptopHacker laptopHacker;
     private PlayerSetup playerSetup;
+    private PlayerLifeState lifeState;
 
     private bool _wasMovementBlocked;
     private bool _gameplaySuppressed;
+    private bool _spectatorInputEnabled;
 
     public bool GameplaySuppressed => _gameplaySuppressed;
+    public bool SpectatorInputEnabled => _spectatorInputEnabled;
+
+    public event Action SpectatorPreviousTargetPressed;
+    public event Action SpectatorNextTargetPressed;
 
     void Awake()
     {
         playerInput = new PlayerInput();
         onFoot = playerInput.OnFoot;
         ui = playerInput.UI;
+        spectator = playerInput.Spectator;
 
-        motor = GetComponent<PlayerMotor>();
-        look = GetComponent<PlayerLook>();
-        phone = GetComponent<PlayerPhone>();
-        sit = GetComponent<PlayerSitAction>();
-        laptopHacker = GetComponent<PlayerLaptopHacker>();
-        playerSetup = GetComponent<PlayerSetup>();
+        CacheReferences();
     }
 
     public override void OnNetworkSpawn()
     {
+        CacheReferences();
+
         if (!IsOwner)
             return;
 
@@ -61,7 +67,38 @@ public class InputManager : NetworkBehaviour
 
         ui.Start.performed += OnStartPerformed;
         ui.Pause.performed += OnPausePerformed;
+
+        spectator.PreviousTarget.performed += OnSpectatorPreviousTargetPerformed;
+        spectator.NextTarget.performed += OnSpectatorNextTargetPerformed;
+
         ui.Enable();
+
+        if (lifeState != null && lifeState.ShouldSuppressGameplayInput)
+            SetGameplaySuppressed(true);
+    }
+
+    private void CacheReferences()
+    {
+        if (motor == null)
+            motor = GetComponent<PlayerMotor>();
+
+        if (look == null)
+            look = GetComponent<PlayerLook>();
+
+        if (phone == null)
+            phone = GetComponent<PlayerPhone>();
+
+        if (sit == null)
+            sit = GetComponent<PlayerSitAction>();
+
+        if (laptopHacker == null)
+            laptopHacker = GetComponent<PlayerLaptopHacker>();
+
+        if (playerSetup == null)
+            playerSetup = GetComponent<PlayerSetup>();
+
+        if (lifeState == null)
+            lifeState = GetComponent<PlayerLifeState>();
     }
 
     private bool MovementBlocked()
@@ -74,14 +111,66 @@ public class InputManager : NetworkBehaviour
         return playerSetup != null && playerSetup.IsBadGuy.Value;
     }
 
+    private bool CanMove()
+    {
+        return lifeState == null || lifeState.CanMove;
+    }
+
+    private bool CanUseSurvivorTools()
+    {
+        if (lifeState != null)
+            return lifeState.CanUseSurvivorTools;
+
+        return !IsBadGuy();
+    }
+
     private bool SurvivorToolInputBlocked()
     {
-        return _gameplaySuppressed || IsBadGuy();
+        return _gameplaySuppressed || !CanUseSurvivorTools();
     }
 
     private bool GameplayInputBlocked()
     {
-        return _gameplaySuppressed || MovementBlocked();
+        return _gameplaySuppressed || !CanMove() || MovementBlocked();
+    }
+
+    public Vector2 ReadSpectatorLookInput()
+    {
+        if (!IsOwner)
+            return Vector2.zero;
+
+        if (!_spectatorInputEnabled)
+            return Vector2.zero;
+
+        return spectator.Look.ReadValue<Vector2>();
+    }
+
+    public void SetSpectatorInputEnabled(bool enabled)
+    {
+        if (!IsOwner)
+            return;
+
+        if (_spectatorInputEnabled == enabled)
+            return;
+
+        _spectatorInputEnabled = enabled;
+
+        if (_spectatorInputEnabled)
+        {
+            ClearMovementInputs();
+            onFoot.Disable();
+            spectator.Enable();
+        }
+        else
+        {
+            spectator.Disable();
+
+            if (!_gameplaySuppressed && CanMove() && isActiveAndEnabled)
+            {
+                onFoot.Enable();
+                ReapplyHeldInputsAfterUnblock();
+            }
+        }
     }
 
     public void SetGameplaySuppressed(bool suppressed)
@@ -101,8 +190,11 @@ public class InputManager : NetworkBehaviour
         }
         else
         {
-            onFoot.Enable();
-            ReapplyHeldInputsAfterUnblock();
+            if (!_spectatorInputEnabled)
+            {
+                onFoot.Enable();
+                ReapplyHeldInputsAfterUnblock();
+            }
         }
     }
 
@@ -117,10 +209,13 @@ public class InputManager : NetworkBehaviour
         if (!isActiveAndEnabled)
             return;
 
-        onFoot.Enable();
+        if (!_spectatorInputEnabled)
+        {
+            onFoot.Enable();
 
-        if (wasSuppressed)
-            ReapplyHeldInputsAfterUnblock();
+            if (wasSuppressed)
+                ReapplyHeldInputsAfterUnblock();
+        }
     }
 
     private void ClearMovementInputs()
@@ -140,6 +235,12 @@ public class InputManager : NetworkBehaviour
     {
         if (motor == null)
             return;
+
+        if (!CanMove())
+        {
+            ClearMovementInputs();
+            return;
+        }
 
         if (onFoot.Sprint.IsPressed())
             motor.Sprint(true);
@@ -217,10 +318,13 @@ public class InputManager : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        if (_gameplaySuppressed)
+        if (_gameplaySuppressed || !CanMove())
+        {
+            ClearMovementInputs();
             return;
+        }
 
-        if (IsBadGuy())
+        if (!CanUseSurvivorTools())
         {
             phone?.SetHolding(false);
             look?.SetPhoneAim(false);
@@ -268,7 +372,11 @@ public class InputManager : NetworkBehaviour
         ui.Pause.performed -= OnPausePerformed;
         ui.Start.performed -= OnStartPerformed;
 
+        spectator.PreviousTarget.performed -= OnSpectatorPreviousTargetPerformed;
+        spectator.NextTarget.performed -= OnSpectatorNextTargetPerformed;
+
         onFoot.Disable();
+        spectator.Disable();
         ui.Disable();
     }
 
@@ -284,7 +392,7 @@ public class InputManager : NetworkBehaviour
             return;
         }
 
-        if (_gameplaySuppressed)
+        if (_gameplaySuppressed || !CanMove() || _spectatorInputEnabled)
         {
             ClearMovementInputs();
             onFoot.Disable();
@@ -295,6 +403,22 @@ public class InputManager : NetworkBehaviour
         ReapplyHeldInputsAfterUnblock();
     }
 
+    private void OnSpectatorPreviousTargetPerformed(InputAction.CallbackContext ctx)
+    {
+        if (!_spectatorInputEnabled)
+            return;
+
+        SpectatorPreviousTargetPressed?.Invoke();
+    }
+
+    private void OnSpectatorNextTargetPerformed(InputAction.CallbackContext ctx)
+    {
+        if (!_spectatorInputEnabled)
+            return;
+
+        SpectatorNextTargetPressed?.Invoke();
+    }
+
     private void OnStartPerformed(InputAction.CallbackContext ctx)
     {
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
@@ -303,7 +427,7 @@ public class InputManager : NetworkBehaviour
 
     private void OnPhoneHoldStarted(InputAction.CallbackContext ctx)
     {
-        if (GameplayInputBlocked() || IsBadGuy())
+        if (GameplayInputBlocked() || !CanUseSurvivorTools())
             return;
 
         phone?.SetHolding(true);
@@ -318,7 +442,7 @@ public class InputManager : NetworkBehaviour
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
-        if (!_gameplaySuppressed && !MovementBlocked() && !IsBadGuy() && motor != null && motor.IsSprintHeld)
+        if (!_gameplaySuppressed && CanMove() && !MovementBlocked() && CanUseSurvivorTools() && motor != null && motor.IsSprintHeld)
             motor.Sprint(true);
     }
 }

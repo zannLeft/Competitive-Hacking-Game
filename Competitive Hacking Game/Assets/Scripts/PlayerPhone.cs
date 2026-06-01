@@ -27,6 +27,9 @@ public class PlayerPhone : NetworkBehaviour
     [SerializeField]
     private PlayerSetup playerSetup;
 
+    [SerializeField]
+    private PlayerLifeState lifeState;
+
     [Header("Animator Params & Layer")]
     [SerializeField]
     private string phoneMaskParam = "PhoneMask";
@@ -124,6 +127,7 @@ public class PlayerPhone : NetworkBehaviour
         targetHandler = GetComponent<PhoneTargetHandler>();
         motor = GetComponent<PlayerMotor>();
         playerSetup = GetComponent<PlayerSetup>();
+        lifeState = GetComponent<PlayerLifeState>();
     }
 
     public override void OnNetworkSpawn()
@@ -137,6 +141,9 @@ public class PlayerPhone : NetworkBehaviour
 
         if (playerSetup == null)
             playerSetup = GetComponent<PlayerSetup>();
+
+        if (lifeState == null)
+            lifeState = GetComponent<PlayerLifeState>();
 
         if (animator != null && animator.isHuman && animator.avatar)
             _headBone = animator.GetBoneTransform(HumanBodyBones.Head);
@@ -175,7 +182,7 @@ public class PlayerPhone : NetworkBehaviour
         // Phone is survivor-only, and is also disabled while sliding or coiling.
         bool phoneAllowed =
             _rmbHeld
-            && !IsBadGuy()
+            && CanUsePhone()
             && !(motor != null && (motor.sliding || motor.Coiling));
 
         if (IsOwner)
@@ -321,7 +328,15 @@ public class PlayerPhone : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        _rmbHeld = holding && !IsBadGuy();
+        _rmbHeld = holding && CanUsePhone();
+    }
+
+    private bool CanUsePhone()
+    {
+        if (lifeState != null)
+            return lifeState.CanUseSurvivorTools;
+
+        return !IsBadGuy();
     }
 
     private bool IsBadGuy()

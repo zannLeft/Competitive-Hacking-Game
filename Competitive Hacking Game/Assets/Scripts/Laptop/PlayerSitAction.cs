@@ -17,6 +17,9 @@ public class PlayerSitAction
     [SerializeField]
     private PlayerSetup playerSetup;
 
+    [SerializeField]
+    private PlayerLifeState lifeState;
+
     [Header("Animator Param")]
     [SerializeField]
     private string laptopSittingBoolParam = "LaptopSitting";
@@ -93,6 +96,7 @@ public class PlayerSitAction
         animator = GetComponent<Animator>();
         motor = GetComponent<PlayerMotor>();
         playerSetup = GetComponent<PlayerSetup>();
+        lifeState = GetComponent<PlayerLifeState>();
     }
 
     public override void OnNetworkSpawn()
@@ -107,6 +111,9 @@ public class PlayerSitAction
 
         if (playerSetup == null)
             playerSetup = GetComponent<PlayerSetup>();
+
+        if (lifeState == null)
+            lifeState = GetComponent<PlayerLifeState>();
 
         _laptopSittingHash = Animator.StringToHash(laptopSittingBoolParam);
 
@@ -137,7 +144,7 @@ public class PlayerSitAction
 
     private void Update()
     {
-        if (IsServer && IsBadGuy() && WantsSitting.Value)
+        if (IsServer && !CanUseSurvivorTools() && WantsSitting.Value)
             WantsSitting.Value = false;
 
         if (!_blocksGameplayMovement)
@@ -163,7 +170,7 @@ public class PlayerSitAction
         bool currentlyTryingToSit = _localWantsSitting || IsFullySitting;
         bool targetWantsSitting = !currentlyTryingToSit;
 
-        if (targetWantsSitting && IsBadGuy())
+        if (targetWantsSitting && !CanUseSurvivorTools())
             return;
 
         if (
@@ -183,7 +190,7 @@ public class PlayerSitAction
     [ServerRpc]
     private void RequestSetWantsSittingServerRpc(bool wantsSitting)
     {
-        if (wantsSitting && IsBadGuy())
+        if (wantsSitting && !CanUseSurvivorTools())
             return;
 
         WantsSitting.Value = wantsSitting;
@@ -313,6 +320,14 @@ public class PlayerSitAction
         _useSittingCameraPosition = false;
         _laptopCameraFocus = false;
         motor?.SetSittingCollider(false);
+    }
+
+    private bool CanUseSurvivorTools()
+    {
+        if (lifeState != null)
+            return lifeState.CanUseSurvivorTools;
+
+        return !IsBadGuy();
     }
 
     private bool IsBadGuy()

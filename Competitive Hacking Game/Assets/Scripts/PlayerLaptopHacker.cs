@@ -12,6 +12,9 @@ public class PlayerLaptopHacker : NetworkBehaviour
     [SerializeField]
     private PlayerSetup playerSetup;
 
+    [SerializeField]
+    private PlayerLifeState lifeState;
+
     [Tooltip("Usually the player camera or player root. Used for router distance checks.")]
     [SerializeField]
     private Transform rangeOrigin;
@@ -62,7 +65,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
     {
         get
         {
-            if (IsBadGuy())
+            if (!CanUseSurvivorTools())
                 return false;
 
             if (sitAction == null)
@@ -79,6 +82,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
     {
         sitAction = GetComponent<PlayerSitAction>();
         playerSetup = GetComponent<PlayerSetup>();
+        lifeState = GetComponent<PlayerLifeState>();
     }
 
     public override void OnNetworkSpawn()
@@ -90,6 +94,9 @@ public class PlayerLaptopHacker : NetworkBehaviour
 
         if (playerSetup == null)
             playerSetup = GetComponent<PlayerSetup>();
+
+        if (lifeState == null)
+            lifeState = GetComponent<PlayerLifeState>();
 
         if (rangeOrigin == null)
         {
@@ -109,7 +116,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        if (IsBadGuy())
+        if (!CanUseSurvivorTools())
         {
             ForceResetLocalForRound();
             return;
@@ -153,7 +160,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
 
     public void SetHackHeld(bool held)
     {
-        _hackHeld = held && !IsBadGuy();
+        _hackHeld = held && CanUseSurvivorTools();
 
         if (!_hackHeld)
         {
@@ -175,7 +182,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
 
     private RouterBox FindBestHackableRouter()
     {
-        if (IsBadGuy() || !IsLaptopUsable)
+        if (!CanUseSurvivorTools() || !IsLaptopUsable)
             return null;
 
         RouterBox best = null;
@@ -228,7 +235,7 @@ public class PlayerLaptopHacker : NetworkBehaviour
     {
         string name = networkName.ToString();
 
-        if (IsBadGuy())
+        if (!CanUseSurvivorTools())
             return;
 
         if (RouterHackState.IsCompleted(name))
@@ -259,6 +266,14 @@ public class PlayerLaptopHacker : NetworkBehaviour
     private void MarkNetworkCompletedClientRpc(FixedString128Bytes networkName)
     {
         RouterHackState.MarkCompleted(networkName.ToString());
+    }
+
+    private bool CanUseSurvivorTools()
+    {
+        if (lifeState != null)
+            return lifeState.CanUseSurvivorTools;
+
+        return !IsBadGuy();
     }
 
     private bool IsBadGuy()
