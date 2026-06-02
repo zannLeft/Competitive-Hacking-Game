@@ -18,6 +18,7 @@ public class InputManager : NetworkBehaviour
     private PlayerLaptopHacker laptopHacker;
     private PlayerSetup playerSetup;
     private PlayerLifeState lifeState;
+    private PlayerBadGuyAttack badGuyAttack;
 
     private bool _wasMovementBlocked;
     private bool _gameplaySuppressed;
@@ -63,6 +64,8 @@ public class InputManager : NetworkBehaviour
         onFoot.Hack.started += OnHackStarted;
         onFoot.Hack.canceled += OnHackCanceled;
 
+        onFoot.Attack.performed += OnAttackPerformed;
+
         onFoot.Enable();
 
         ui.Start.performed += OnStartPerformed;
@@ -99,6 +102,9 @@ public class InputManager : NetworkBehaviour
 
         if (lifeState == null)
             lifeState = GetComponent<PlayerLifeState>();
+
+        if (badGuyAttack == null)
+            badGuyAttack = GetComponent<PlayerBadGuyAttack>();
     }
 
     private bool MovementBlocked()
@@ -122,6 +128,14 @@ public class InputManager : NetworkBehaviour
             return lifeState.CanUseSurvivorTools;
 
         return !IsBadGuy();
+    }
+
+    private bool CanUseBadGuyAttack()
+    {
+        if (lifeState != null)
+            return lifeState.CanAttackSurvivors;
+
+        return IsBadGuy();
     }
 
     private bool SurvivorToolInputBlocked()
@@ -369,6 +383,8 @@ public class InputManager : NetworkBehaviour
         onFoot.Hack.started -= OnHackStarted;
         onFoot.Hack.canceled -= OnHackCanceled;
 
+        onFoot.Attack.performed -= OnAttackPerformed;
+
         ui.Pause.performed -= OnPausePerformed;
         ui.Start.performed -= OnStartPerformed;
 
@@ -417,6 +433,21 @@ public class InputManager : NetworkBehaviour
             return;
 
         SpectatorNextTargetPressed?.Invoke();
+    }
+
+
+    private void OnAttackPerformed(InputAction.CallbackContext ctx)
+    {
+        if (_gameplaySuppressed)
+            return;
+
+        if (_spectatorInputEnabled)
+            return;
+
+        if (!CanUseBadGuyAttack())
+            return;
+
+        badGuyAttack?.TryAttack();
     }
 
     private void OnStartPerformed(InputAction.CallbackContext ctx)

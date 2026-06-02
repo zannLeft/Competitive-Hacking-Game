@@ -1193,6 +1193,7 @@ GameObject:
   - component: {fileID: 6402268619689270216}
   - component: {fileID: 3563277494627804126}
   - component: {fileID: 4764926159289589612}
+  - component: {fileID: 6469612311198178981}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1783,7 +1784,6 @@ MonoBehaviour:
   spectatorTargetTextName: SpectatorTargetText
   spectatorControlsTextName: SpectatorControlsText
   enableTestToggle: 1
-  testToggleKey: 99
   includeSelfForTesting: 1
   includeBadGuysForTesting: 1
   orbitDistance: 1.5
@@ -1819,11 +1819,9 @@ MonoBehaviour:
   phone: {fileID: 8878162043686913073}
   laptopHacker: {fileID: 5844092317134281050}
   sitAction: {fileID: 145536466847178049}
+  laptopVisual: {fileID: -2388601857875583894}
   playerLook: {fileID: 6487965562487473033}
   enableDebugHotkeys: 1
-  debugDownedKey: 288
-  debugDeadKey: 289
-  debugAliveKey: 290
   State:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
@@ -1844,6 +1842,31 @@ MonoBehaviour:
       MinSecondsBetweenUpdates: 0
       MaxSecondsBetweenUpdates: 0
     m_InternalValue: 0
+--- !u!114 &6469612311198178981
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f685b34352caf5941a36056621e4eb27, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerBadGuyAttack
+  ShowTopMostFoldoutHeaderGroup: 1
+  playerSetup: {fileID: 7528082831520240939}
+  lifeState: {fileID: 4764926159289589612}
+  attackOriginOverride: {fileID: 0}
+  attackRange: 7
+  attackRadius: 0.65
+  attackCooldownSeconds: 1
+  attackHitMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  serverAttackOriginHeight: 1.25
+  maxClientOriginDistanceFromServer: 2.5
+  logSuccessfulAttacks: 1
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0
