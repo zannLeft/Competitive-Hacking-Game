@@ -17,6 +17,7 @@ public class PlayerLifeState
         IPlayerRoundServerResettable
 {
     public const ulong NoAttackerClientId = ulong.MaxValue;
+    public const ulong NoBodyNetworkObjectId = ulong.MaxValue;
 
     [Header("References")]
     [SerializeField]
@@ -39,6 +40,15 @@ public class PlayerLifeState
 
     [SerializeField]
     private PlayerLook playerLook;
+
+    [Header("Downed Body")]
+    [Tooltip("Network prefab spawned when this player becomes Downed. Add DownedBodyObject + NetworkObject to the prefab and register it in NetworkManager Network Prefabs.")]
+    [SerializeField]
+    private DownedBodyObject downedBodyPrefab;
+
+    [Tooltip("Small upward offset for spawning the placeholder body so it does not start slightly under the floor.")]
+    [SerializeField]
+    private float downedBodySpawnUpOffset = 0.05f;
 
     [Header("Debug Testing")]
     [Tooltip("Optional temporary test keys. Leave OFF unless you want to test life states manually.")]
@@ -69,7 +79,15 @@ public class PlayerLifeState
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<ulong> CurrentBodyNetworkObjectId = new NetworkVariable<ulong>(
+        NoBodyNetworkObjectId,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public event Action<PlayerLifeStateType, PlayerLifeStateType> OnLifeStateChanged;
+
+    private DownedBodyObject currentDownedBody;
 
     public PlayerLifeStateType CurrentState => State.Value;
 
@@ -92,6 +110,8 @@ public class PlayerLifeState
     public bool ShouldBeInSpectatorMode => IsDead;
 
     public bool ShouldSuppressGameplayInput => IsDowned || IsDead;
+
+    public bool HasBody => CurrentBodyNetworkObjectId.Value != NoBodyNetworkObjectId;
 
     public double SecondsSinceDowned
     {
@@ -129,6 +149,9 @@ public class PlayerLifeState
     public override void OnNetworkDespawn()
     {
         State.OnValueChanged -= HandleLifeStateChanged;
+
+        if (IsServer)
+            ServerDespawnDownedBody();
 
         base.OnNetworkDespawn();
     }
@@ -208,8 +231,8 @@ public class PlayerLifeState
         if (newState == PlayerLifeStateType.Alive)
             return;
 
-        // This runs on every client because laptop/sitting visuals are local scene objects,
-        // not separate network objects. Without this, remotes can keep seeing a stuck laptop.
+        // This runs on every client because phone/laptop/sitting visuals are local scene objects,
+        // not separate network objects. Without this, remotes can keep seeing stuck visuals.
         phone?.ForceResetPhoneLocal();
         laptopHacker?.ForceResetLocalForRound();
         sitAction?.ForceResetLocalForRound();
@@ -241,9 +264,7 @@ public class PlayerLifeState
         phone?.ForceResetPhoneLocal();
 
         laptopHacker?.SetHackHeld(false);
-
-        if (laptopHacker != null)
-            laptopHacker.ForceResetLocalForRound();
+        laptopHacker?.ForceResetLocalForRound();
 
         sitAction?.ForceResetLocalForRound();
         laptopVisual?.ForceResetLocalForRound();
@@ -259,6 +280,8 @@ public class PlayerLifeState
     {
         if (!IsServer)
             return;
+
+        ServerDespawnDownedBody();
 
         SetStateServer(
             PlayerLifeStateType.Alive,
@@ -281,12 +304,16 @@ public class PlayerLifeState
 
         sitAction?.ServerForceResetSitNetworkState();
 
+        Vector3 safeDownedPosition = downedPosition;
+
         SetStateServer(
             PlayerLifeStateType.Downed,
-            downedPosition,
+            safeDownedPosition,
             attackerClientId,
             resetDownedTimer: true
         );
+
+        ServerSpawnOrRefreshDownedBody(safeDownedPosition, PlayerLifeStateType.Downed);
     }
 
     public void ServerSetDead(ulong attackerClientId = NoAttackerClientId)
@@ -301,6 +328,9 @@ public class PlayerLifeState
 
         Vector3 relevantPosition =
             State.Value == PlayerLifeStateType.Downed ? DownedPosition.Value : transform.position;
+
+        if (HasSpawnedDownedBody())
+            currentDownedBody.ServerSetBodyState(PlayerLifeStateType.Dead);
 
         SetStateServer(
             PlayerLifeStateType.Dead,
@@ -318,6 +348,8 @@ public class PlayerLifeState
         if (State.Value != PlayerLifeStateType.Downed)
             return;
 
+        ServerDespawnDownedBody();
+
         SetStateServer(
             PlayerLifeStateType.Alive,
             revivePosition,
@@ -332,6 +364,7 @@ public class PlayerLifeState
             return;
 
         sitAction?.ServerForceResetSitNetworkState();
+        ServerDespawnDownedBody();
 
         SetStateServer(
             PlayerLifeStateType.Alive,
@@ -378,6 +411,81 @@ public class PlayerLifeState
             DownedStartedServerTime.Value = 0d;
 
         State.Value = newState;
+    }
+
+    private void ServerSpawnOrRefreshDownedBody(
+        Vector3 bodyPosition,
+        PlayerLifeStateType bodyState
+    )
+    {
+        if (!IsServer)
+            return;
+
+        if (HasSpawnedDownedBody())
+        {
+            currentDownedBody.ServerSetBodyState(bodyState);
+            CurrentBodyNetworkObjectId.Value = currentDownedBody.NetworkObjectId;
+            return;
+        }
+
+        if (downedBodyPrefab == null)
+        {
+            Debug.LogWarning(
+                $"[PlayerLifeState] {name} became {bodyState}, but no Downed Body Prefab is assigned."
+            );
+            CurrentBodyNetworkObjectId.Value = NoBodyNetworkObjectId;
+            return;
+        }
+
+        Vector3 spawnPosition = bodyPosition + Vector3.up * downedBodySpawnUpOffset;
+        Quaternion spawnRotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
+
+        DownedBodyObject spawnedBody = Instantiate(
+            downedBodyPrefab,
+            spawnPosition,
+            spawnRotation
+        );
+
+        NetworkObject bodyNetworkObject = spawnedBody.GetComponent<NetworkObject>();
+        if (bodyNetworkObject == null)
+        {
+            Debug.LogError(
+                "[PlayerLifeState] Downed Body Prefab must have a NetworkObject component."
+            );
+            Destroy(spawnedBody.gameObject);
+            CurrentBodyNetworkObjectId.Value = NoBodyNetworkObjectId;
+            return;
+        }
+
+        bodyNetworkObject.Spawn(true);
+
+        spawnedBody.InitializeServer(
+            OwnerClientId,
+            NetworkObjectId,
+            bodyState
+        );
+
+        currentDownedBody = spawnedBody;
+        CurrentBodyNetworkObjectId.Value = bodyNetworkObject.NetworkObjectId;
+    }
+
+    private bool HasSpawnedDownedBody()
+    {
+        return currentDownedBody != null
+            && currentDownedBody.NetworkObject != null
+            && currentDownedBody.NetworkObject.IsSpawned;
+    }
+
+    private void ServerDespawnDownedBody()
+    {
+        if (!IsServer)
+            return;
+
+        if (HasSpawnedDownedBody())
+            currentDownedBody.NetworkObject.Despawn(true);
+
+        currentDownedBody = null;
+        CurrentBodyNetworkObjectId.Value = NoBodyNetworkObjectId;
     }
 
     [ServerRpc]

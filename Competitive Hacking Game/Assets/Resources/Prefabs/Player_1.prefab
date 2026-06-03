@@ -1821,6 +1821,8 @@ MonoBehaviour:
   sitAction: {fileID: 145536466847178049}
   laptopVisual: {fileID: -2388601857875583894}
   playerLook: {fileID: 6487965562487473033}
+  downedBodyPrefab: {fileID: -5494535455352275110, guid: e346f06c68ad5d649b8bd8887160d9f7, type: 3}
+  downedBodySpawnUpOffset: 0.05
   enableDebugHotkeys: 1
   State:
     UpdateTraits:
@@ -1842,6 +1844,11 @@ MonoBehaviour:
       MinSecondsBetweenUpdates: 0
       MaxSecondsBetweenUpdates: 0
     m_InternalValue: 0
+  CurrentBodyNetworkObjectId:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 18446744073709551615
 --- !u!114 &6469612311198178981
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1858,15 +1865,14 @@ MonoBehaviour:
   playerSetup: {fileID: 7528082831520240939}
   lifeState: {fileID: 4764926159289589612}
   attackOriginOverride: {fileID: 0}
-  attackRange: 7
   attackRadius: 0.65
+  attackHeight: 2
+  attackCenterHeight: 1
   attackCooldownSeconds: 1
   attackHitMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  serverAttackOriginHeight: 1.25
   maxClientOriginDistanceFromServer: 2.5
-  logSuccessfulAttacks: 1
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

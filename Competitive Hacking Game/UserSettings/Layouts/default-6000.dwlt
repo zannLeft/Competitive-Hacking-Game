@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 1920
     height: 1037
   m_ShowMode: 4
-  m_Title: Project
+  m_Title: Inspector
   m_RootView: {fileID: 10}
   m_MinSize: {x: 875, y: 300}
   m_MaxSize: {x: 10000, y: 10000}
@@ -152,7 +152,7 @@ MonoBehaviour:
   m_MinSize: {x: 300, y: 168}
   m_MaxSize: {x: 24288, y: 24288}
   vertical: 0
-  controlID: 167
+  controlID: 18
   draggingID: 0
 --- !u!114 &7
 MonoBehaviour:
@@ -327,7 +327,7 @@ MonoBehaviour:
   m_MinSize: {x: 200, y: 168}
   m_MaxSize: {x: 16192, y: 24288}
   vertical: 1
-  controlID: 81
+  controlID: 19
   draggingID: 0
 --- !u!114 &14
 MonoBehaviour:
@@ -353,7 +353,7 @@ MonoBehaviour:
   m_MinSize: {x: 200, y: 112}
   m_MaxSize: {x: 16192, y: 16192}
   vertical: 0
-  controlID: 82
+  controlID: 20
   draggingID: 0
 --- !u!114 &15
 MonoBehaviour:
@@ -802,7 +802,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/Scripts
+    - Assets/Resources/Prefabs
     m_Globs: []
     m_ProductIds: 
     m_AnyWithAssetOrigin: 0
@@ -812,7 +812,7 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 64
   m_LastFolders:
-  - Assets/Scripts
+  - Assets/Resources/Prefabs
   m_LastFoldersGridSize: -1
   m_LastProjectPath: C:\Users\Zanql\Desktop\Projects\Repository\Competitive-Hacking-Game\Competitive
     Hacking Game
@@ -822,21 +822,21 @@ MonoBehaviour:
   m_FolderTreeState:
     scrollPos: {x: 0, y: 31}
     m_SelectedIDs:
-    - m_Data: 72416
+    - m_Data: 72420
     m_LastClickedID:
-      m_Data: 72416
+      m_Data: 72420
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 72280
-    - m_Data: 72282
-    - m_Data: 72284
-    - m_Data: 72286
-    - m_Data: 72288
-    - m_Data: 72290
-    - m_Data: 72292
-    - m_Data: 72294
-    - m_Data: 72296
-    - m_Data: 72298
+    - m_Data: 72470
+    - m_Data: 72472
+    - m_Data: 72474
+    - m_Data: 72476
+    - m_Data: 72478
+    - m_Data: 72480
+    - m_Data: 72482
+    - m_Data: 72484
+    - m_Data: 72486
+    - m_Data: 72488
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -870,16 +870,16 @@ MonoBehaviour:
       m_Data: 0
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 72280
-    - m_Data: 72282
-    - m_Data: 72284
-    - m_Data: 72286
-    - m_Data: 72288
-    - m_Data: 72290
-    - m_Data: 72292
-    - m_Data: 72294
-    - m_Data: 72296
-    - m_Data: 72298
+    - m_Data: 72470
+    - m_Data: 72472
+    - m_Data: 72474
+    - m_Data: 72476
+    - m_Data: 72478
+    - m_Data: 72480
+    - m_Data: 72482
+    - m_Data: 72484
+    - m_Data: 72486
+    - m_Data: 72488
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1041,16 +1041,33 @@ MonoBehaviour:
       m_LastClickedID:
         m_Data: 0
       m_ExpandedIDs:
-      - m_Data: -22932
-      - m_Data: -22522
-      - m_Data: -22468
-      - m_Data: -22452
-      - m_Data: -22370
-      - m_Data: -14164
-      - m_Data: -13754
-      - m_Data: -13656
-      - m_Data: -13596
-      - m_Data: -13468
+      - m_Data: -45874
+      - m_Data: -45464
+      - m_Data: -45366
+      - m_Data: -45306
+      - m_Data: -45180
+      - m_Data: -37070
+      - m_Data: -33098
+      - m_Data: -30364
+      - m_Data: -29954
+      - m_Data: -29908
+      - m_Data: -29900
+      - m_Data: -29826
+      - m_Data: -25608
+      - m_Data: -25198
+      - m_Data: -25100
+      - m_Data: -25040
+      - m_Data: -24914
+      - m_Data: -15568
+      - m_Data: -15158
+      - m_Data: -15060
+      - m_Data: -15000
+      - m_Data: -14874
+      - m_Data: -5674
+      - m_Data: -5264
+      - m_Data: -5218
+      - m_Data: -5210
+      - m_Data: -5134
       - m_Data: -1386
       m_RenameOverlay:
         m_UserAcceptedRename: 0
@@ -1645,9 +1662,9 @@ MonoBehaviour:
   m_AudioPlay: 0
   m_DebugDrawModesUseInteractiveLightBakingData: 0
   m_Position:
-    m_Target: {x: -10.431217, y: 1.1892653, z: -2.8697424}
+    m_Target: {x: -0.4936315, y: 1.3002344, z: 0.81346923}
     speed: 2
-    m_Value: {x: -10.431217, y: 1.1892653, z: -2.8697424}
+    m_Value: {x: -0.4936315, y: 1.3002344, z: 0.81346923}
   m_RenderMode: 0
   m_CameraMode:
     drawMode: 0
@@ -1694,9 +1711,9 @@ MonoBehaviour:
     m_gridOpacity: 0.5
     m_NearestPlaneToHandleMode: 0
   m_Rotation:
-    m_Target: {x: 0.114695564, y: -0.3523989, z: 0.043564342, w: 0.92777556}
+    m_Target: {x: 0.010555394, y: 0.9888415, z: -0.08624711, w: 0.121036254}
     speed: 2
-    m_Value: {x: -0.11469556, y: 0.3523989, z: -0.043564342, w: -0.92777556}
+    m_Value: {x: 0.010555394, y: 0.9888415, z: -0.0862471, w: 0.121036254}
   m_Size:
     m_Target: 0.8660254
     speed: 2
