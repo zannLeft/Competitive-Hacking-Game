@@ -1194,6 +1194,7 @@ GameObject:
   - component: {fileID: 3563277494627804126}
   - component: {fileID: 4764926159289589612}
   - component: {fileID: 6469612311198178981}
+  - component: {fileID: 3923237512283826011}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1821,6 +1822,7 @@ MonoBehaviour:
   sitAction: {fileID: 145536466847178049}
   laptopVisual: {fileID: -2388601857875583894}
   playerLook: {fileID: 6487965562487473033}
+  bodyVisibility: {fileID: 3923237512283826011}
   downedBodyPrefab: {fileID: -5494535455352275110, guid: e346f06c68ad5d649b8bd8887160d9f7, type: 3}
   downedBodySpawnUpOffset: 0.05
   enableDebugHotkeys: 1
@@ -1873,6 +1875,24 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   maxClientOriginDistanceFromServer: 2.5
+--- !u!114 &3923237512283826011
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79acb48495e0d424abf452380b50505b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerBodyVisibility
+  objectsToToggle:
+  - {fileID: 4497644615690059943}
+  - {fileID: 6356628832821917570}
+  renderersToToggle: []
+  autoFindRenderersIfNothingAssigned: 0
+  includeInactiveAutoRenderers: 1
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

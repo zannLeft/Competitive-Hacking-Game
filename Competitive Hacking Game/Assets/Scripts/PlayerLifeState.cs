@@ -41,6 +41,9 @@ public class PlayerLifeState
     [SerializeField]
     private PlayerLook playerLook;
 
+    [SerializeField]
+    private PlayerBodyVisibility bodyVisibility;
+
     [Header("Downed Body")]
     [Tooltip("Network prefab spawned when this player becomes Downed. Add DownedBodyObject + NetworkObject to the prefab and register it in NetworkManager Network Prefabs.")]
     [SerializeField]
@@ -200,6 +203,9 @@ public class PlayerLifeState
 
         if (playerLook == null)
             playerLook = GetComponent<PlayerLook>();
+
+        if (bodyVisibility == null)
+            bodyVisibility = GetComponent<PlayerBodyVisibility>();
     }
 
     private void HandleLifeStateChanged(
@@ -228,7 +234,11 @@ public class PlayerLifeState
 
     private void ApplySharedStateCleanup(PlayerLifeStateType newState)
     {
-        if (newState == PlayerLifeStateType.Alive)
+        bool isAlive = newState == PlayerLifeStateType.Alive;
+
+        bodyVisibility?.SetBodyVisible(isAlive);
+
+        if (isAlive)
             return;
 
         // This runs on every client because phone/laptop/sitting visuals are local scene objects,
@@ -382,6 +392,7 @@ public class PlayerLifeState
         laptopHacker?.ForceResetLocalForRound();
         sitAction?.ForceResetLocalForRound();
         laptopVisual?.ForceResetLocalForRound();
+        bodyVisibility?.ForceShowBody();
 
         if (!IsOwner)
             return;
