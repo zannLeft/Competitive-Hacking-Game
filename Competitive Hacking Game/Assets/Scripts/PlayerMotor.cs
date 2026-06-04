@@ -9,6 +9,8 @@ public class PlayerMotor : NetworkBehaviour
     private Animator animator;
     private PlayerLook look;
 
+    private bool controllerCollisionEnabled = true;
+
     private Vector3 playerVelocity;
     private Vector3 moveDirection = Vector3.zero;
 
@@ -191,6 +193,77 @@ public class PlayerMotor : NetworkBehaviour
             look = GetComponent<PlayerLook>();
     }
 
+    public void SetControllerCollisionEnabled(bool enabled)
+    {
+        CacheComponents();
+
+        if (controller == null)
+            return;
+
+        controllerCollisionEnabled = enabled;
+
+        if (enabled)
+        {
+            if (!controller.enabled)
+                controller.enabled = true;
+
+            ClearMovementState();
+            ResetCrouchAndSlide();
+            SyncOwnedColliderDimensions(force: true);
+            return;
+        }
+
+        ClearMovementState();
+
+        if (controller.enabled)
+            controller.enabled = false;
+    }
+
+    private void ClearMovementState()
+    {
+        playerVelocity = Vector3.zero;
+        moveDirection = Vector3.zero;
+        inputDirection = Vector2.zero;
+
+        currentSpeed = 0f;
+        currentSpeedVertical = 0f;
+        targetSpeed = 0f;
+        lastAirbornePlanarSpeed = 0f;
+
+        sprinting = false;
+        crouching = false;
+        sliding = false;
+        coiling = false;
+        sittingCollider = false;
+
+        sprintButtonHeld = false;
+        crouchButtonHeld = false;
+        jumpButtonHeld = false;
+        jumpedFromSlide = false;
+        reCrouchAfterJump = false;
+        startedCrouchingInAir = false;
+
+        slideTimer = slideTimerMax;
+        slideElapsed = 0f;
+        slideSpeed = 8f;
+
+        if (animator == null)
+            return;
+
+        animator.SetBool("Crouching", false);
+        animator.SetBool("Sliding", false);
+        animator.SetBool("Coiling", false);
+
+        if (xVelHash != 0)
+            animator.SetFloat(xVelHash, 0f);
+
+        if (zVelHash != 0)
+            animator.SetFloat(zVelHash, 0f);
+
+        if (yVelHash != 0)
+            animator.SetFloat(yVelHash, 0f);
+    }
+
     private void OnNetworkedColliderDimensionsChanged(float previousValue, float newValue)
     {
         if (IsOwner)
@@ -245,6 +318,11 @@ public class PlayerMotor : NetworkBehaviour
 
     void Update()
     {
+        CacheComponents();
+
+        if (controller == null || !controller.enabled || !controllerCollisionEnabled)
+            return;
+
         if (!IsOwner)
         {
             ApplyNetworkedColliderDimensions();
@@ -493,6 +571,12 @@ public class PlayerMotor : NetworkBehaviour
     public void ProcessMove(Vector2 input)
     {
         inputDirection = input;
+
+        if (controller == null || !controller.enabled || !controllerCollisionEnabled)
+        {
+            inputDirection = Vector2.zero;
+            return;
+        }
 
         Vector3 planarVel = new Vector3(controller.velocity.x, 0, controller.velocity.z);
         currentSpeed = planarVel.magnitude;

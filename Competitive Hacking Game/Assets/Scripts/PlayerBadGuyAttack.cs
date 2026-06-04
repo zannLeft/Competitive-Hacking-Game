@@ -1,12 +1,9 @@
-using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
 [DisallowMultipleComponent]
 public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
 {
-    private const float AttackRange = 7f;
-
     [Header("References")]
     [SerializeField]
     private PlayerSetup playerSetup;
@@ -14,40 +11,35 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
     [SerializeField]
     private PlayerLifeState lifeState;
 
-    [Tooltip("Optional. If empty, the owner camera is used for attack direction.")]
+    [Tooltip("Required. Assign the real PlayerCamera transform here.")]
     [SerializeField]
     private Transform attackOriginOverride;
 
     [Header("Attack")]
-    [Tooltip("Half-width of the melee attack area. Bigger = easier to hit left/right.")]
-    [SerializeField]
-    private float attackRadius = 0.75f;
+    [Tooltip("Forgiveness around the aim ray. 0.35-0.6 is usually good.")]
 
-    [Tooltip("Vertical height of the melee attack area. Should cover sitting/crouching/standing players.")]
     [SerializeField]
-    private float attackHeight = 2.0f;
+    private float  AttackRange = 1.5f;
 
-    [Tooltip("Vertical center of the attack area above the bad guy root.")]
     [SerializeField]
-    private float attackCenterHeight = 1.0f;
+    private float attackRadius = 0.45f;
 
     [SerializeField]
     private float attackCooldownSeconds = 1.0f;
 
-    [Tooltip("Layers the melee attack can hit. Usually leave as Everything for now.")]
+    [Tooltip("Layers the attack can hit. Usually leave as Everything for now.")]
     [SerializeField]
     private LayerMask attackHitMask = ~0;
 
-    [Tooltip("How far the client-reported attack origin may be from the server player position before it is ignored.")]
+    [Tooltip("How far the assigned attack origin may be from the server player position before the attack is rejected.")]
     [SerializeField]
-    private float maxClientOriginDistanceFromServer = 2.5f;
+    private float maxAttackOriginDistanceFromServer = 2.5f;
 
-    private readonly Collider[] _hitBuffer = new Collider[64];
-    private readonly HashSet<PlayerLifeState> _seenTargets = new HashSet<PlayerLifeState>();
+    private readonly RaycastHit[] _hitBuffer = new RaycastHit[64];
 
-    private Camera _ownerCamera;
     private double _nextServerAttackTime;
     private float _nextLocalAttackTime;
+    private bool _warnedMissingAttackOrigin;
 
     private void Reset()
     {
@@ -84,13 +76,34 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
         if (!CanAttackLocally())
             return;
 
+        if (attackOriginOverride == null)
+        {
+            WarnMissingAttackOriginOnce();
+            return;
+        }
+
         if (Time.unscaledTime < _nextLocalAttackTime)
             return;
 
         _nextLocalAttackTime = Time.unscaledTime + attackCooldownSeconds;
 
-        GetLocalAttackPose(out Vector3 origin, out Vector3 forward);
+        Vector3 origin = attackOriginOverride.position;
+        Vector3 forward = attackOriginOverride.forward;
+
         RequestAttackServerRpc(origin, forward);
+    }
+
+    private void WarnMissingAttackOriginOnce()
+    {
+        if (_warnedMissingAttackOrigin)
+            return;
+
+        _warnedMissingAttackOrigin = true;
+
+        Debug.LogWarning(
+            "[PlayerBadGuyAttack] Attack Origin Override is not assigned. Drag the real PlayerCamera transform into this field on the player prefab.",
+            this
+        );
     }
 
     private bool CanAttackLocally()
@@ -112,30 +125,6 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
         return playerSetup != null && playerSetup.IsBadGuy.Value;
     }
 
-    private void GetLocalAttackPose(out Vector3 origin, out Vector3 forward)
-    {
-        Transform originTransform = attackOriginOverride;
-
-        if (originTransform == null)
-        {
-            if (_ownerCamera == null)
-                _ownerCamera = GetComponentInChildren<Camera>(true);
-
-            if (_ownerCamera != null)
-                originTransform = _ownerCamera.transform;
-        }
-
-        if (originTransform != null)
-        {
-            origin = originTransform.position;
-            forward = originTransform.forward;
-            return;
-        }
-
-        origin = transform.position + Vector3.up * attackCenterHeight;
-        forward = transform.forward;
-    }
-
     [ServerRpc]
     private void RequestAttackServerRpc(
         Vector3 clientOrigin,
@@ -146,18 +135,21 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
         if (!CanAttackOnServer(serverRpcParams.Receive.SenderClientId))
             return;
 
-        double now = NetworkManager.Singleton != null ? NetworkManager.Singleton.ServerTime.Time : 0d;
+        double now = NetworkManager.Singleton != null
+            ? NetworkManager.Singleton.ServerTime.Time
+            : 0d;
 
         if (now < _nextServerAttackTime)
             return;
 
         _nextServerAttackTime = now + attackCooldownSeconds;
 
-        Vector3 attackForward = GetHorizontalForward(clientForward);
-        Vector3 attackCenter = GetServerAttackCenter(clientOrigin, attackForward);
-        Quaternion attackRotation = Quaternion.LookRotation(attackForward, Vector3.up);
+        if (!IsClientOriginValid(clientOrigin))
+            return;
 
-        PlayerLifeState target = FindBestAttackTarget(attackCenter, attackForward, attackRotation);
+        Vector3 attackForward = GetSafeForward(clientForward);
+
+        PlayerLifeState target = FindFirstValidTarget(clientOrigin, attackForward);
 
         if (target == null)
             return;
@@ -165,132 +157,96 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
         target.ServerSetDowned(target.transform.position, OwnerClientId);
     }
 
-    private Vector3 GetHorizontalForward(Vector3 requestedForward)
+    private bool IsClientOriginValid(Vector3 clientOrigin)
     {
-        Vector3 flatForward = Vector3.ProjectOnPlane(requestedForward, Vector3.up);
-
-        if (flatForward.sqrMagnitude < 0.001f)
-            flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
-
-        if (flatForward.sqrMagnitude < 0.001f)
-            flatForward = transform.forward;
-
-        return flatForward.normalized;
-    }
-
-    private Vector3 GetServerAttackCenter(Vector3 clientOrigin, Vector3 attackForward)
-    {
-        Vector3 expectedClientOrigin = transform.position + Vector3.up * attackCenterHeight;
-
         float maxSqrDistance =
-            maxClientOriginDistanceFromServer * maxClientOriginDistanceFromServer;
+            maxAttackOriginDistanceFromServer * maxAttackOriginDistanceFromServer;
 
-        bool clientOriginLooksValid =
-            (clientOrigin - expectedClientOrigin).sqrMagnitude <= maxSqrDistance;
-
-        Vector3 basePosition = clientOriginLooksValid
-            ? new Vector3(clientOrigin.x, transform.position.y, clientOrigin.z)
-            : transform.position;
-
-        return basePosition
-            + Vector3.up * attackCenterHeight
-            + attackForward * (AttackRange * 0.5f);
+        return (clientOrigin - transform.position).sqrMagnitude <= maxSqrDistance;
     }
 
-    private PlayerLifeState FindBestAttackTarget(
-        Vector3 attackCenter,
-        Vector3 attackForward,
-        Quaternion attackRotation
-    )
+    private Vector3 GetSafeForward(Vector3 requestedForward)
     {
-        _seenTargets.Clear();
+        if (requestedForward.sqrMagnitude < 0.001f)
+            return transform.forward;
 
-        Vector3 halfExtents = new Vector3(
-            Mathf.Max(0.05f, attackRadius),
-            Mathf.Max(0.1f, attackHeight * 0.5f),
-            AttackRange * 0.5f
-        );
+        return requestedForward.normalized;
+    }
 
-        int hitCount = Physics.OverlapBoxNonAlloc(
-            attackCenter,
-            halfExtents,
+    private PlayerLifeState FindFirstValidTarget(Vector3 origin, Vector3 forward)
+    {
+        int hitCount = Physics.SphereCastNonAlloc(
+            origin,
+            Mathf.Max(0.01f, attackRadius),
+            forward,
             _hitBuffer,
-            attackRotation,
+            AttackRange,
             attackHitMask,
             QueryTriggerInteraction.Ignore
         );
 
-        PlayerLifeState bestTarget = null;
-        float bestScore = float.MaxValue;
+        if (hitCount <= 0)
+            return null;
 
-        Vector3 attackStart = attackCenter - attackForward * (AttackRange * 0.5f);
+        SortHitsByDistance(hitCount);
 
         for (int i = 0; i < hitCount; i++)
         {
-            Collider hit = _hitBuffer[i];
+            RaycastHit hit = _hitBuffer[i];
 
-            if (hit == null)
+            if (hit.collider == null)
                 continue;
 
-            PlayerLifeState candidateLifeState = hit.GetComponentInParent<PlayerLifeState>();
+            PlayerLifeState candidate = hit.collider.GetComponentInParent<PlayerLifeState>();
 
-            if (candidateLifeState == null)
+            if (!IsValidTarget(candidate))
                 continue;
 
-            if (!_seenTargets.Add(candidateLifeState))
-                continue;
-
-            if (candidateLifeState == lifeState)
-                continue;
-
-            if (candidateLifeState.OwnerClientId == OwnerClientId)
-                continue;
-
-            if (!candidateLifeState.CanBeAttacked)
-                continue;
-
-            if (!ScoreTarget(hit, attackStart, attackForward, out float score))
-                continue;
-
-            if (score >= bestScore)
-                continue;
-
-            bestScore = score;
-            bestTarget = candidateLifeState;
+            return candidate;
         }
 
-        return bestTarget;
+        return null;
     }
 
-    private bool ScoreTarget(
-        Collider targetCollider,
-        Vector3 attackStart,
-        Vector3 attackForward,
-        out float score
-    )
+    private void SortHitsByDistance(int hitCount)
     {
-        score = float.MaxValue;
+        for (int i = 0; i < hitCount - 1; i++)
+        {
+            int bestIndex = i;
+            float bestDistance = _hitBuffer[i].distance;
 
-        Vector3 targetCenter = targetCollider.bounds.center;
-        Vector3 toTarget = targetCenter - attackStart;
+            for (int j = i + 1; j < hitCount; j++)
+            {
+                if (_hitBuffer[j].distance >= bestDistance)
+                    continue;
 
-        float forwardDistance = Vector3.Dot(toTarget, attackForward);
+                bestIndex = j;
+                bestDistance = _hitBuffer[j].distance;
+            }
 
-        if (forwardDistance < -attackRadius)
+            if (bestIndex == i)
+                continue;
+
+            RaycastHit temp = _hitBuffer[i];
+            _hitBuffer[i] = _hitBuffer[bestIndex];
+            _hitBuffer[bestIndex] = temp;
+        }
+    }
+
+    private bool IsValidTarget(PlayerLifeState candidate)
+    {
+        if (candidate == null)
             return false;
 
-        if (forwardDistance > AttackRange + attackRadius)
+        if (candidate == lifeState)
             return false;
 
-        Vector3 closestOnAttackLine =
-            attackStart + attackForward * Mathf.Clamp(forwardDistance, 0f, AttackRange);
+        if (candidate.OwnerClientId == OwnerClientId)
+            return false;
 
-        Vector2 targetXZ = new Vector2(targetCenter.x, targetCenter.z);
-        Vector2 lineXZ = new Vector2(closestOnAttackLine.x, closestOnAttackLine.z);
+        if (!candidate.CanBeAttacked)
+            return false;
 
-        float sideDistance = Vector2.Distance(targetXZ, lineXZ);
-
-        score = forwardDistance + sideDistance * 0.5f;
         return true;
     }
 
@@ -298,7 +254,6 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
     {
         _nextLocalAttackTime = 0f;
         _nextServerAttackTime = 0d;
-        _ownerCamera = null;
-        _seenTargets.Clear();
+        _warnedMissingAttackOrigin = false;
     }
 }

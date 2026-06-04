@@ -44,6 +44,9 @@ public class PlayerLifeState
     [SerializeField]
     private PlayerBodyVisibility bodyVisibility;
 
+    [SerializeField]
+    private PlayerMotor playerMotor;
+
     [Header("Downed Body")]
     [Tooltip("Network prefab spawned when this player becomes Downed. Add DownedBodyObject + NetworkObject to the prefab and register it in NetworkManager Network Prefabs.")]
     [SerializeField]
@@ -206,6 +209,9 @@ public class PlayerLifeState
 
         if (bodyVisibility == null)
             bodyVisibility = GetComponent<PlayerBodyVisibility>();
+
+        if (playerMotor == null)
+            playerMotor = GetComponent<PlayerMotor>();
     }
 
     private void HandleLifeStateChanged(
@@ -237,6 +243,7 @@ public class PlayerLifeState
         bool isAlive = newState == PlayerLifeStateType.Alive;
 
         bodyVisibility?.SetBodyVisible(isAlive);
+        playerMotor?.SetControllerCollisionEnabled(isAlive);
 
         if (isAlive)
             return;
@@ -393,6 +400,7 @@ public class PlayerLifeState
         sitAction?.ForceResetLocalForRound();
         laptopVisual?.ForceResetLocalForRound();
         bodyVisibility?.ForceShowBody();
+        playerMotor?.SetControllerCollisionEnabled(true);
 
         if (!IsOwner)
             return;

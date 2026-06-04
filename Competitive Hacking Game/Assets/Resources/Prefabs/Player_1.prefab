@@ -1823,6 +1823,7 @@ MonoBehaviour:
   laptopVisual: {fileID: -2388601857875583894}
   playerLook: {fileID: 6487965562487473033}
   bodyVisibility: {fileID: 3923237512283826011}
+  playerMotor: {fileID: 0}
   downedBodyPrefab: {fileID: -5494535455352275110, guid: e346f06c68ad5d649b8bd8887160d9f7, type: 3}
   downedBodySpawnUpOffset: 0.05
   enableDebugHotkeys: 1
@@ -1866,14 +1867,14 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   playerSetup: {fileID: 7528082831520240939}
   lifeState: {fileID: 4764926159289589612}
-  attackOriginOverride: {fileID: 0}
+  attackOriginOverride: {fileID: 6115870627967093863}
+  attackRange: 7
   attackRadius: 0.65
-  attackHeight: 2
-  attackCenterHeight: 1
   attackCooldownSeconds: 1
   attackHitMask:
     serializedVersion: 2
     m_Bits: 4294967295
+  fallbackAttackOriginHeight: 1.25
   maxClientOriginDistanceFromServer: 2.5
 --- !u!114 &3923237512283826011
 MonoBehaviour:
