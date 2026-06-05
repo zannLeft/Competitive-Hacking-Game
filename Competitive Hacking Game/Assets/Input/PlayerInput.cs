@@ -587,6 +587,34 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                     ""isPartOfComposite"": false
                 }
             ]
+        },
+        {
+            ""name"": ""Downed"",
+            ""id"": ""1dcd47f8-ad1e-4c6c-b026-04652afdd2b3"",
+            ""actions"": [
+                {
+                    ""name"": ""Look"",
+                    ""type"": ""Value"",
+                    ""id"": ""27c87aa3-886c-4686-a24e-715fee7c0507"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
+                }
+            ],
+            ""bindings"": [
+                {
+                    ""name"": """",
+                    ""id"": ""6f757bf0-d22c-47de-95ab-87df62a77457"",
+                    ""path"": ""<Mouse>/delta"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Look"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                }
+            ]
         }
     ],
     ""controlSchemes"": []
@@ -612,6 +640,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         m_Spectator_Look = m_Spectator.FindAction("Look", throwIfNotFound: true);
         m_Spectator_PreviousTarget = m_Spectator.FindAction("PreviousTarget", throwIfNotFound: true);
         m_Spectator_NextTarget = m_Spectator.FindAction("NextTarget", throwIfNotFound: true);
+        // Downed
+        m_Downed = asset.FindActionMap("Downed", throwIfNotFound: true);
+        m_Downed_Look = m_Downed.FindAction("Look", throwIfNotFound: true);
     }
 
     ~@PlayerInput()
@@ -619,6 +650,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         UnityEngine.Debug.Assert(!m_OnFoot.enabled, "This will cause a leak and performance issues, PlayerInput.OnFoot.Disable() has not been called.");
         UnityEngine.Debug.Assert(!m_UI.enabled, "This will cause a leak and performance issues, PlayerInput.UI.Disable() has not been called.");
         UnityEngine.Debug.Assert(!m_Spectator.enabled, "This will cause a leak and performance issues, PlayerInput.Spectator.Disable() has not been called.");
+        UnityEngine.Debug.Assert(!m_Downed.enabled, "This will cause a leak and performance issues, PlayerInput.Downed.Disable() has not been called.");
     }
 
     /// <summary>
@@ -1110,6 +1142,102 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
     /// Provides a new <see cref="SpectatorActions" /> instance referencing this action map.
     /// </summary>
     public SpectatorActions @Spectator => new SpectatorActions(this);
+
+    // Downed
+    private readonly InputActionMap m_Downed;
+    private List<IDownedActions> m_DownedActionsCallbackInterfaces = new List<IDownedActions>();
+    private readonly InputAction m_Downed_Look;
+    /// <summary>
+    /// Provides access to input actions defined in input action map "Downed".
+    /// </summary>
+    public struct DownedActions
+    {
+        private @PlayerInput m_Wrapper;
+
+        /// <summary>
+        /// Construct a new instance of the input action map wrapper class.
+        /// </summary>
+        public DownedActions(@PlayerInput wrapper) { m_Wrapper = wrapper; }
+        /// <summary>
+        /// Provides access to the underlying input action "Downed/Look".
+        /// </summary>
+        public InputAction @Look => m_Wrapper.m_Downed_Look;
+        /// <summary>
+        /// Provides access to the underlying input action map instance.
+        /// </summary>
+        public InputActionMap Get() { return m_Wrapper.m_Downed; }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Enable()" />
+        public void Enable() { Get().Enable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Disable()" />
+        public void Disable() { Get().Disable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.enabled" />
+        public bool enabled => Get().enabled;
+        /// <summary>
+        /// Implicitly converts an <see ref="DownedActions" /> to an <see ref="InputActionMap" /> instance.
+        /// </summary>
+        public static implicit operator InputActionMap(DownedActions set) { return set.Get(); }
+        /// <summary>
+        /// Adds <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <param name="instance">Callback instance.</param>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c> or <paramref name="instance"/> have already been added this method does nothing.
+        /// </remarks>
+        /// <seealso cref="DownedActions" />
+        public void AddCallbacks(IDownedActions instance)
+        {
+            if (instance == null || m_Wrapper.m_DownedActionsCallbackInterfaces.Contains(instance)) return;
+            m_Wrapper.m_DownedActionsCallbackInterfaces.Add(instance);
+            @Look.started += instance.OnLook;
+            @Look.performed += instance.OnLook;
+            @Look.canceled += instance.OnLook;
+        }
+
+        /// <summary>
+        /// Removes <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <remarks>
+        /// Calling this method when <paramref name="instance" /> have not previously been registered has no side-effects.
+        /// </remarks>
+        /// <seealso cref="DownedActions" />
+        private void UnregisterCallbacks(IDownedActions instance)
+        {
+            @Look.started -= instance.OnLook;
+            @Look.performed -= instance.OnLook;
+            @Look.canceled -= instance.OnLook;
+        }
+
+        /// <summary>
+        /// Unregisters <param cref="instance" /> and unregisters all input action callbacks via <see cref="DownedActions.UnregisterCallbacks(IDownedActions)" />.
+        /// </summary>
+        /// <seealso cref="DownedActions.UnregisterCallbacks(IDownedActions)" />
+        public void RemoveCallbacks(IDownedActions instance)
+        {
+            if (m_Wrapper.m_DownedActionsCallbackInterfaces.Remove(instance))
+                UnregisterCallbacks(instance);
+        }
+
+        /// <summary>
+        /// Replaces all existing callback instances and previously registered input action callbacks associated with them with callbacks provided via <param cref="instance" />.
+        /// </summary>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c>, calling this method will only unregister all existing callbacks but not register any new callbacks.
+        /// </remarks>
+        /// <seealso cref="DownedActions.AddCallbacks(IDownedActions)" />
+        /// <seealso cref="DownedActions.RemoveCallbacks(IDownedActions)" />
+        /// <seealso cref="DownedActions.UnregisterCallbacks(IDownedActions)" />
+        public void SetCallbacks(IDownedActions instance)
+        {
+            foreach (var item in m_Wrapper.m_DownedActionsCallbackInterfaces)
+                UnregisterCallbacks(item);
+            m_Wrapper.m_DownedActionsCallbackInterfaces.Clear();
+            AddCallbacks(instance);
+        }
+    }
+    /// <summary>
+    /// Provides a new <see cref="DownedActions" /> instance referencing this action map.
+    /// </summary>
+    public DownedActions @Downed => new DownedActions(this);
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "OnFoot" which allows adding and removing callbacks.
     /// </summary>
@@ -1238,5 +1366,20 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnNextTarget(InputAction.CallbackContext context);
+    }
+    /// <summary>
+    /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "Downed" which allows adding and removing callbacks.
+    /// </summary>
+    /// <seealso cref="DownedActions.AddCallbacks(IDownedActions)" />
+    /// <seealso cref="DownedActions.RemoveCallbacks(IDownedActions)" />
+    public interface IDownedActions
+    {
+        /// <summary>
+        /// Method invoked when associated input action "Look" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnLook(InputAction.CallbackContext context);
     }
 }

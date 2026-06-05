@@ -501,6 +501,34 @@
                     "isPartOfComposite": false
                 }
             ]
+        },
+        {
+            "name": "Downed",
+            "id": "1dcd47f8-ad1e-4c6c-b026-04652afdd2b3",
+            "actions": [
+                {
+                    "name": "Look",
+                    "type": "Value",
+                    "id": "27c87aa3-886c-4686-a24e-715fee7c0507",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "6f757bf0-d22c-47de-95ab-87df62a77457",
+                    "path": "<Mouse>/delta",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Look",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
         }
     ],
     "controlSchemes": []

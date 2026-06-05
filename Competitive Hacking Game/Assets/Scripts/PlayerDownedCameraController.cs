@@ -12,6 +12,9 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
     private PlayerLook playerLook;
 
     [SerializeField]
+    private InputManager inputManager;
+
+    [SerializeField]
     private Camera playerCamera;
 
     [Header("Follow")]
@@ -21,6 +24,22 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
     [SerializeField]
     private float rotationFollowSpeed = 18f;
 
+    [Header("Downed Look")]
+    [SerializeField]
+    private float lookXSensitivity = 30f;
+
+    [SerializeField]
+    private float lookYSensitivity = 30f;
+
+    [SerializeField]
+    private float maxYawFromAnchor = 70f;
+
+    [SerializeField]
+    private float minPitch = -25f;
+
+    [SerializeField]
+    private float maxPitch = 45f;
+
     [Tooltip("Locks camera roll to zero so the downed view does not tilt sideways.")]
     [SerializeField]
     private bool lockRollToHorizon = true;
@@ -29,6 +48,9 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
     private Transform currentAnchor;
 
     private bool isDownedCameraActive;
+
+    private float yawOffset;
+    private float pitchOffset;
 
     private Transform savedCameraParent;
     private Vector3 savedLocalPosition;
@@ -97,7 +119,10 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
                 TryEnterDownedCamera();
 
             if (isDownedCameraActive)
+            {
+                ProcessDownedLookInput();
                 FollowCurrentAnchor();
+            }
 
             return;
         }
@@ -113,6 +138,9 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
 
         if (playerLook == null)
             playerLook = GetComponent<PlayerLook>();
+
+        if (inputManager == null)
+            inputManager = GetComponent<InputManager>();
 
         if (playerCamera == null && playerLook != null)
             playerCamera = playerLook.cam;
@@ -169,12 +197,17 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
         {
             SaveCameraStateIfNeeded();
 
+            yawOffset = 0f;
+            pitchOffset = 0f;
+
             if (playerLook != null)
             {
                 playerLook.SetPhoneAim(false);
                 playerLook.SetAimHeld(false);
                 playerLook.enabled = false;
             }
+
+            inputManager?.SetDownedInputEnabled(true);
 
             playerCamera.transform.SetParent(null, worldPositionStays: true);
 
@@ -235,7 +268,26 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
             return;
 
         playerCamera.transform.position = currentAnchor.position;
-        playerCamera.transform.rotation = GetSafeAnchorRotation();
+        playerCamera.transform.rotation = GetDownedCameraRotation();
+    }
+
+    private void ProcessDownedLookInput()
+    {
+        if (inputManager == null)
+            return;
+
+        Vector2 lookDelta = inputManager.ReadDownedLookInput();
+
+        if (lookDelta.sqrMagnitude <= 0.0001f)
+            return;
+
+        float dt = Time.deltaTime;
+
+        yawOffset += lookDelta.x * lookXSensitivity * dt;
+        pitchOffset -= lookDelta.y * lookYSensitivity * dt;
+
+        yawOffset = Mathf.Clamp(yawOffset, -Mathf.Abs(maxYawFromAnchor), Mathf.Abs(maxYawFromAnchor));
+        pitchOffset = Mathf.Clamp(pitchOffset, minPitch, maxPitch);
     }
 
     private void FollowCurrentAnchor()
@@ -267,23 +319,30 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
 
         cameraTransform.rotation = Quaternion.Slerp(
             cameraTransform.rotation,
-            GetSafeAnchorRotation(),
+            GetDownedCameraRotation(),
             rotationT
         );
     }
 
-    private Quaternion GetSafeAnchorRotation()
+    private Quaternion GetDownedCameraRotation()
     {
         if (currentAnchor == null)
             return playerCamera != null ? playerCamera.transform.rotation : Quaternion.identity;
 
-        Quaternion anchorRotation = currentAnchor.rotation;
-
         if (!lockRollToHorizon)
-            return anchorRotation;
+            return currentAnchor.rotation * Quaternion.Euler(pitchOffset, yawOffset, 0f);
 
-        Vector3 euler = anchorRotation.eulerAngles;
-        return Quaternion.Euler(euler.x, euler.y, 0f);
+        Vector3 anchorForward = Vector3.ProjectOnPlane(currentAnchor.forward, Vector3.up);
+
+        if (anchorForward.sqrMagnitude < 0.0001f)
+            anchorForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+
+        if (anchorForward.sqrMagnitude < 0.0001f)
+            anchorForward = Vector3.forward;
+
+        Quaternion horizonBaseRotation = Quaternion.LookRotation(anchorForward.normalized, Vector3.up);
+
+        return horizonBaseRotation * Quaternion.Euler(pitchOffset, yawOffset, 0f);
     }
 
     private void ExitDownedCamera()
@@ -296,6 +355,8 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
         currentBody = null;
         currentAnchor = null;
         isDownedCameraActive = false;
+        yawOffset = 0f;
+        pitchOffset = 0f;
     }
 
     private void ForceExitDownedCamera()
@@ -308,10 +369,14 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
         currentBody = null;
         currentAnchor = null;
         isDownedCameraActive = false;
+        yawOffset = 0f;
+        pitchOffset = 0f;
     }
 
     private void RestoreCameraState()
     {
+        inputManager?.SetDownedInputEnabled(false);
+
         if (playerCamera == null)
             return;
 

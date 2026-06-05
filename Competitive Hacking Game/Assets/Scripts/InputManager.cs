@@ -10,6 +10,7 @@ public class InputManager : NetworkBehaviour
     private PlayerInput.OnFootActions onFoot;
     private PlayerInput.UIActions ui;
     private PlayerInput.SpectatorActions spectator;
+    private PlayerInput.DownedActions downed;
 
     private PlayerMotor motor;
     private PlayerLook look;
@@ -23,9 +24,11 @@ public class InputManager : NetworkBehaviour
     private bool _wasMovementBlocked;
     private bool _gameplaySuppressed;
     private bool _spectatorInputEnabled;
+    private bool _downedInputEnabled;
 
     public bool GameplaySuppressed => _gameplaySuppressed;
     public bool SpectatorInputEnabled => _spectatorInputEnabled;
+    public bool DownedInputEnabled => _downedInputEnabled;
 
     public event Action SpectatorPreviousTargetPressed;
     public event Action SpectatorNextTargetPressed;
@@ -36,6 +39,7 @@ public class InputManager : NetworkBehaviour
         onFoot = playerInput.OnFoot;
         ui = playerInput.UI;
         spectator = playerInput.Spectator;
+        downed = playerInput.Downed;
 
         CacheReferences();
     }
@@ -159,6 +163,17 @@ public class InputManager : NetworkBehaviour
         return spectator.Look.ReadValue<Vector2>();
     }
 
+    public Vector2 ReadDownedLookInput()
+    {
+        if (!IsOwner)
+            return Vector2.zero;
+
+        if (!_downedInputEnabled)
+            return Vector2.zero;
+
+        return downed.Look.ReadValue<Vector2>();
+    }
+
     public void SetSpectatorInputEnabled(bool enabled)
     {
         if (!IsOwner)
@@ -172,6 +187,10 @@ public class InputManager : NetworkBehaviour
         if (_spectatorInputEnabled)
         {
             ClearMovementInputs();
+
+            _downedInputEnabled = false;
+            downed.Disable();
+
             onFoot.Disable();
             spectator.Enable();
         }
@@ -179,7 +198,39 @@ public class InputManager : NetworkBehaviour
         {
             spectator.Disable();
 
-            if (!_gameplaySuppressed && CanMove() && isActiveAndEnabled)
+            if (!_gameplaySuppressed && !_downedInputEnabled && CanMove() && isActiveAndEnabled)
+            {
+                onFoot.Enable();
+                ReapplyHeldInputsAfterUnblock();
+            }
+        }
+    }
+
+    public void SetDownedInputEnabled(bool enabled)
+    {
+        if (!IsOwner)
+            return;
+
+        if (_downedInputEnabled == enabled)
+            return;
+
+        _downedInputEnabled = enabled;
+
+        if (_downedInputEnabled)
+        {
+            ClearMovementInputs();
+
+            _spectatorInputEnabled = false;
+            spectator.Disable();
+
+            onFoot.Disable();
+            downed.Enable();
+        }
+        else
+        {
+            downed.Disable();
+
+            if (!_gameplaySuppressed && !_spectatorInputEnabled && CanMove() && isActiveAndEnabled)
             {
                 onFoot.Enable();
                 ReapplyHeldInputsAfterUnblock();
@@ -204,7 +255,7 @@ public class InputManager : NetworkBehaviour
         }
         else
         {
-            if (!_spectatorInputEnabled)
+            if (!_spectatorInputEnabled && !_downedInputEnabled)
             {
                 onFoot.Enable();
                 ReapplyHeldInputsAfterUnblock();
@@ -223,7 +274,7 @@ public class InputManager : NetworkBehaviour
         if (!isActiveAndEnabled)
             return;
 
-        if (!_spectatorInputEnabled)
+        if (!_spectatorInputEnabled && !_downedInputEnabled)
         {
             onFoot.Enable();
 
@@ -393,6 +444,7 @@ public class InputManager : NetworkBehaviour
 
         onFoot.Disable();
         spectator.Disable();
+        downed.Disable();
         ui.Disable();
     }
 
@@ -408,7 +460,7 @@ public class InputManager : NetworkBehaviour
             return;
         }
 
-        if (_gameplaySuppressed || !CanMove() || _spectatorInputEnabled)
+        if (_gameplaySuppressed || !CanMove() || _spectatorInputEnabled || _downedInputEnabled)
         {
             ClearMovementInputs();
             onFoot.Disable();
@@ -435,13 +487,12 @@ public class InputManager : NetworkBehaviour
         SpectatorNextTargetPressed?.Invoke();
     }
 
-
     private void OnAttackPerformed(InputAction.CallbackContext ctx)
     {
         if (_gameplaySuppressed)
             return;
 
-        if (_spectatorInputEnabled)
+        if (_spectatorInputEnabled || _downedInputEnabled)
             return;
 
         if (!CanUseBadGuyAttack())
