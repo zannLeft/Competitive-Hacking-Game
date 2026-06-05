@@ -1195,6 +1195,7 @@ GameObject:
   - component: {fileID: 4764926159289589612}
   - component: {fileID: 6469612311198178981}
   - component: {fileID: 3923237512283826011}
+  - component: {fileID: 6742123351397742809}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1868,14 +1869,13 @@ MonoBehaviour:
   playerSetup: {fileID: 7528082831520240939}
   lifeState: {fileID: 4764926159289589612}
   attackOriginOverride: {fileID: 6115870627967093863}
-  attackRange: 7
+  AttackRange: 1.5
   attackRadius: 0.65
   attackCooldownSeconds: 1
   attackHitMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  fallbackAttackOriginHeight: 1.25
-  maxClientOriginDistanceFromServer: 2.5
+  maxAttackOriginDistanceFromServer: 2.5
 --- !u!114 &3923237512283826011
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1894,6 +1894,25 @@ MonoBehaviour:
   renderersToToggle: []
   autoFindRenderersIfNothingAssigned: 0
   includeInactiveAutoRenderers: 1
+--- !u!114 &6742123351397742809
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ccd2210ef02032248bdf4d8e3d3172b1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerDownedCameraController
+  ShowTopMostFoldoutHeaderGroup: 1
+  lifeState: {fileID: 4764926159289589612}
+  playerLook: {fileID: 6487965562487473033}
+  playerCamera: {fileID: 2272284346070443280}
+  positionFollowSpeed: 18
+  rotationFollowSpeed: 18
+  lockRollToHorizon: 1
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

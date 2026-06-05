@@ -8,9 +8,6 @@ public class DownedBodyObject : NetworkBehaviour
     [SerializeField]
     private Transform cameraAnchor;
 
-    [SerializeField]
-    private Transform reviveAnchor;
-
     public NetworkVariable<ulong> DownedPlayerClientId = new NetworkVariable<ulong>(
         ulong.MaxValue,
         NetworkVariableReadPermission.Everyone,
@@ -30,8 +27,6 @@ public class DownedBodyObject : NetworkBehaviour
     );
 
     public Transform CameraAnchor => cameraAnchor != null ? cameraAnchor : transform;
-
-    public Transform ReviveAnchor => reviveAnchor != null ? reviveAnchor : transform;
 
     public bool IsRevivable => BodyState.Value == PlayerLifeStateType.Downed;
 
