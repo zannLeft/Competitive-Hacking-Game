@@ -247,7 +247,7 @@ public class PlayerLifeState
         if (body == null)
             return;
 
-        body.CopyPoseFromSourceTransform(transform);
+        body.CopyPoseAndActivateRagdollFromSourceTransform(transform);
     }
 
     private void ApplyLifeStateSideEffects(
@@ -519,7 +519,7 @@ public class PlayerLifeState
         currentDownedBody = spawnedBody;
         CurrentBodyNetworkObjectId.Value = bodyNetworkObject.NetworkObjectId;
 
-        spawnedBody.ServerCopyPoseFromSource(NetworkObject);
+        spawnedBody.ServerCopyPoseAndActivateRagdollFromSource(NetworkObject);
     }
 
     private bool HasSpawnedDownedBody()

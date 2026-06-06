@@ -2497,6 +2497,8 @@ MonoBehaviour:
   headShirtMaterialIndex: 2
   bodyShirtMaterialIndices: 01000000020000000600000007000000
   copiedBoneNamePrefix: 'mixamorig:'
+  ragdoll: {fileID: 45147990491100926}
+  activateRagdollAfterPoseCopy: 1
   cameraAnchor: {fileID: 6377507867258721071}
   reviveAnchor: {fileID: 8289011250271707821}
   DownedPlayerClientId:
