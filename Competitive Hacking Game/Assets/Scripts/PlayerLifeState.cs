@@ -478,10 +478,15 @@ public class PlayerLifeState
 
         bodyNetworkObject.Spawn(true);
 
+        int shirtIndex = playerSetup != null ? playerSetup.ShirtIndex.Value : 0;
+        bool isBadGuyBody = playerSetup != null && playerSetup.IsBadGuy.Value;
+
         spawnedBody.InitializeServer(
             OwnerClientId,
             NetworkObjectId,
-            bodyState
+            bodyState,
+            shirtIndex,
+            isBadGuyBody
         );
 
         currentDownedBody = spawnedBody;

@@ -1429,7 +1429,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1790951255
+  GlobalObjectIdHash: 1344612927
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -1455,6 +1455,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DownedBodyObject
   ShowTopMostFoldoutHeaderGroup: 1
+  headRenderer: {fileID: 7118883282158582639}
+  bodyRenderer: {fileID: 5410940033150200549}
+  headShirtMaterialIndex: 2
+  bodyShirtMaterialIndices: 01000000020000000600000007000000
   cameraAnchor: {fileID: 6377507867258721071}
   reviveAnchor: {fileID: 8289011250271707821}
   DownedPlayerClientId:
@@ -1472,6 +1476,16 @@ MonoBehaviour:
       MinSecondsBetweenUpdates: 0
       MaxSecondsBetweenUpdates: 0
     m_InternalValue: 1
+  ShirtIndex:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
+  IsBadGuyBody:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
 --- !u!1 &7735530920935521616
 GameObject:
   m_ObjectHideFlags: 0

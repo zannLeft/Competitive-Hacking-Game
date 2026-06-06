@@ -9,6 +9,20 @@ public class DownedBodyObject : NetworkBehaviour
 
     public static IReadOnlyList<DownedBodyObject> SpawnedBodies => spawnedBodies;
 
+    [Header("Renderers")]
+    [SerializeField]
+    private SkinnedMeshRenderer headRenderer;
+
+    [SerializeField]
+    private SkinnedMeshRenderer bodyRenderer;
+
+    [Header("Material Slots")]
+    [SerializeField]
+    private int headShirtMaterialIndex = 2;
+
+    [SerializeField]
+    private int[] bodyShirtMaterialIndices = { 1, 2, 6, 7 };
+
     [Header("Optional Anchors")]
     [SerializeField]
     private Transform cameraAnchor;
@@ -34,6 +48,18 @@ public class DownedBodyObject : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<int> ShirtIndex = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<bool> IsBadGuyBody = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public Transform CameraAnchor => cameraAnchor != null ? cameraAnchor : transform;
 
     public Transform ReviveAnchor => reviveAnchor != null ? reviveAnchor : transform;
@@ -42,15 +68,35 @@ public class DownedBodyObject : NetworkBehaviour
 
     public bool IsDeadBody => BodyState.Value == PlayerLifeStateType.Dead;
 
+    private void Reset()
+    {
+        CacheRendererReferences();
+    }
+
+    private void Awake()
+    {
+        CacheRendererReferences();
+    }
+
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
+
         RegisterBody(this);
+
+        ShirtIndex.OnValueChanged += HandleAppearanceChanged;
+        IsBadGuyBody.OnValueChanged += HandleAppearanceChanged;
+
+        ApplyAppearance();
     }
 
     public override void OnNetworkDespawn()
     {
+        ShirtIndex.OnValueChanged -= HandleAppearanceChanged;
+        IsBadGuyBody.OnValueChanged -= HandleAppearanceChanged;
+
         UnregisterBody(this);
+
         base.OnNetworkDespawn();
     }
 
@@ -58,6 +104,86 @@ public class DownedBodyObject : NetworkBehaviour
     {
         UnregisterBody(this);
         base.OnDestroy();
+    }
+
+    private void CacheRendererReferences()
+    {
+        if (headRenderer == null)
+        {
+            Transform head = transform.Find("Head");
+            if (head != null)
+                headRenderer = head.GetComponent<SkinnedMeshRenderer>();
+        }
+
+        if (bodyRenderer == null)
+        {
+            Transform body = transform.Find("Botee");
+            if (body != null)
+                bodyRenderer = body.GetComponent<SkinnedMeshRenderer>();
+        }
+    }
+
+    private void HandleAppearanceChanged<T>(T previousValue, T newValue)
+    {
+        ApplyAppearance();
+    }
+
+    private void ApplyAppearance()
+    {
+        CacheRendererReferences();
+
+        if (LobbyManager.Instance == null)
+            return;
+
+        CosmeticsManager cosmetics = LobbyManager.Instance.Cosmetics;
+        if (cosmetics == null)
+            return;
+
+        Material shirtMaterial = cosmetics.GetShirtMaterial(ShirtIndex.Value);
+
+        if (IsBadGuyBody.Value && cosmetics.BlackShirtMaterial != null)
+            shirtMaterial = cosmetics.BlackShirtMaterial;
+
+        if (shirtMaterial == null)
+            return;
+
+        ApplyHeadMaterial(shirtMaterial);
+        ApplyBodyMaterial(shirtMaterial);
+    }
+
+    private void ApplyHeadMaterial(Material shirtMaterial)
+    {
+        if (headRenderer == null)
+            return;
+
+        Material[] materials = headRenderer.materials;
+
+        if (headShirtMaterialIndex >= 0 && materials.Length > headShirtMaterialIndex)
+        {
+            materials[headShirtMaterialIndex] = shirtMaterial;
+            headRenderer.materials = materials;
+        }
+    }
+
+    private void ApplyBodyMaterial(Material shirtMaterial)
+    {
+        if (bodyRenderer == null)
+            return;
+
+        Material[] materials = bodyRenderer.materials;
+
+        if (bodyShirtMaterialIndices != null)
+        {
+            for (int i = 0; i < bodyShirtMaterialIndices.Length; i++)
+            {
+                int materialIndex = bodyShirtMaterialIndices[i];
+
+                if (materialIndex >= 0 && materials.Length > materialIndex)
+                    materials[materialIndex] = shirtMaterial;
+            }
+        }
+
+        bodyRenderer.materials = materials;
     }
 
     public bool IsForPlayer(ulong clientId)
@@ -68,7 +194,9 @@ public class DownedBodyObject : NetworkBehaviour
     public void InitializeServer(
         ulong downedPlayerClientId,
         ulong sourcePlayerNetworkObjectId,
-        PlayerLifeStateType bodyState
+        PlayerLifeStateType bodyState,
+        int shirtIndex,
+        bool isBadGuyBody
     )
     {
         if (!IsServer)
@@ -77,6 +205,8 @@ public class DownedBodyObject : NetworkBehaviour
         DownedPlayerClientId.Value = downedPlayerClientId;
         SourcePlayerNetworkObjectId.Value = sourcePlayerNetworkObjectId;
         BodyState.Value = bodyState;
+        ShirtIndex.Value = shirtIndex;
+        IsBadGuyBody.Value = isBadGuyBody;
     }
 
     public void ServerSetBodyState(PlayerLifeStateType bodyState)
