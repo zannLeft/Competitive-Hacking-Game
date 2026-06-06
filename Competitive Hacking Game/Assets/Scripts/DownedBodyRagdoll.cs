@@ -94,17 +94,25 @@ public class DownedBodyRagdoll : MonoBehaviour
             if (rb == null)
                 continue;
 
-            rb.isKinematic = !active;
-            rb.useGravity = active && useGravityWhenActive;
-            rb.detectCollisions = active;
-            rb.collisionDetectionMode = active
-                ? activeCollisionDetectionMode
-                : inactiveCollisionDetectionMode;
-
-            if (!active)
+            if (active)
             {
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
+                rb.isKinematic = false;
+                rb.useGravity = useGravityWhenActive;
+                rb.detectCollisions = true;
+                rb.collisionDetectionMode = activeCollisionDetectionMode;
+            }
+            else
+            {
+                if (!rb.isKinematic)
+                {
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+
+                rb.useGravity = false;
+                rb.detectCollisions = false;
+                rb.collisionDetectionMode = inactiveCollisionDetectionMode;
+                rb.isKinematic = true;
             }
         }
 

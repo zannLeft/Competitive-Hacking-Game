@@ -44,6 +44,22 @@ public class DownedBodyObject : NetworkBehaviour
     [SerializeField]
     private Transform reviveAnchor;
 
+    [Header("Revive Anchor Follow")]
+    [SerializeField]
+    private bool followReviveAnchorToBone = true;
+
+    [SerializeField]
+    private Transform reviveAnchorFollowTarget;
+
+    [SerializeField]
+    private string autoReviveAnchorFollowTargetName = "mixamorig:Hips";
+
+    [SerializeField]
+    private Vector3 reviveAnchorWorldOffset = new Vector3(0f, 0.15f, 0f);
+
+    [SerializeField]
+    private bool copyReviveAnchorRotation = false;
+
     public NetworkVariable<ulong> DownedPlayerClientId = new NetworkVariable<ulong>(
         ulong.MaxValue,
         NetworkVariableReadPermission.Everyone,
@@ -86,12 +102,19 @@ public class DownedBodyObject : NetworkBehaviour
     {
         CacheRendererReferences();
         CacheRagdollReference();
+        CacheAnchorFollowTargets();
     }
 
     private void Awake()
     {
         CacheRendererReferences();
         CacheRagdollReference();
+        CacheAnchorFollowTargets();
+    }
+
+    private void LateUpdate()
+    {
+        UpdateReviveAnchorFollow();
     }
 
     public override void OnNetworkSpawn()
@@ -374,5 +397,50 @@ public class DownedBodyObject : NetworkBehaviour
             return;
 
         spawnedBodies.Remove(body);
+    }
+
+    private void CacheAnchorFollowTargets()
+    {
+        if (reviveAnchorFollowTarget == null && !string.IsNullOrWhiteSpace(autoReviveAnchorFollowTargetName))
+            reviveAnchorFollowTarget = FindChildRecursive(transform, autoReviveAnchorFollowTargetName);
+    }
+
+    private void UpdateReviveAnchorFollow()
+    {
+        if (!followReviveAnchorToBone)
+            return;
+
+        if (reviveAnchor == null)
+            return;
+
+        if (reviveAnchorFollowTarget == null)
+            CacheAnchorFollowTargets();
+
+        if (reviveAnchorFollowTarget == null)
+            return;
+
+        reviveAnchor.position = reviveAnchorFollowTarget.position + reviveAnchorWorldOffset;
+
+        if (copyReviveAnchorRotation)
+            reviveAnchor.rotation = reviveAnchorFollowTarget.rotation;
+    }
+
+    private Transform FindChildRecursive(Transform parent, string childName)
+    {
+        if (parent == null)
+            return null;
+
+        if (parent.name == childName)
+            return parent;
+
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            Transform found = FindChildRecursive(parent.GetChild(i), childName);
+
+            if (found != null)
+                return found;
+        }
+
+        return null;
     }
 }

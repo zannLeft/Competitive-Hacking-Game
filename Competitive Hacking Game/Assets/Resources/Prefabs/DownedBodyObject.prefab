@@ -2501,6 +2501,11 @@ MonoBehaviour:
   activateRagdollAfterPoseCopy: 1
   cameraAnchor: {fileID: 6377507867258721071}
   reviveAnchor: {fileID: 8289011250271707821}
+  followReviveAnchorToBone: 1
+  reviveAnchorFollowTarget: {fileID: 8288512133181727954}
+  autoReviveAnchorFollowTargetName: mixamorig:Hips
+  reviveAnchorWorldOffset: {x: 0, y: 0.15, z: 0}
+  copyReviveAnchorRotation: 0
   DownedPlayerClientId:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0

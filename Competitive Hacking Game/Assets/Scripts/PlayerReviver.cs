@@ -297,7 +297,7 @@ public class PlayerReviver : NetworkBehaviour, IPlayerRoundResettable
         if (!targetLifeState.CanBeRevived)
             return;
 
-        targetLifeState.ServerReviveFromDowned(body.transform.position);
+        targetLifeState.ServerReviveFromDowned(revivePosition);
     }
 
     private bool CanReviveOnServer()
