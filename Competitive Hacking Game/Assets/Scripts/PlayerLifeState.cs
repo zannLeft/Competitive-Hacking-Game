@@ -489,6 +489,8 @@ public class PlayerLifeState
             isBadGuyBody
         );
 
+        spawnedBody.ServerCopyPoseFromSource(NetworkObject);
+
         currentDownedBody = spawnedBody;
         CurrentBodyNetworkObjectId.Value = bodyNetworkObject.NetworkObjectId;
     }

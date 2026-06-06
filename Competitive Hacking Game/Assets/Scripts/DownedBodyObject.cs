@@ -23,6 +23,11 @@ public class DownedBodyObject : NetworkBehaviour
     [SerializeField]
     private int[] bodyShirtMaterialIndices = { 1, 2, 6, 7 };
 
+    [Header("Pose Copy")]
+    [Tooltip("Only transforms whose names start with this prefix will copy pose from the original player.")]
+    [SerializeField]
+    private string copiedBoneNamePrefix = "mixamorig:";
+
     [Header("Optional Anchors")]
     [SerializeField]
     private Transform cameraAnchor;
@@ -207,6 +212,97 @@ public class DownedBodyObject : NetworkBehaviour
         BodyState.Value = bodyState;
         ShirtIndex.Value = shirtIndex;
         IsBadGuyBody.Value = isBadGuyBody;
+    }
+
+    public void ServerCopyPoseFromSource(NetworkObject sourcePlayerNetworkObject)
+    {
+        if (!IsServer)
+            return;
+
+        if (sourcePlayerNetworkObject == null)
+            return;
+
+        CopyPoseFromSourceRoot(sourcePlayerNetworkObject.transform);
+
+        CopyPoseFromSourceClientRpc(sourcePlayerNetworkObject.NetworkObjectId);
+    }
+
+    [ClientRpc]
+    private void CopyPoseFromSourceClientRpc(ulong sourcePlayerNetworkObjectId)
+    {
+        if (NetworkManager.Singleton == null)
+            return;
+
+        if (
+            !NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(
+                sourcePlayerNetworkObjectId,
+                out NetworkObject sourcePlayerNetworkObject
+            )
+        )
+            return;
+
+        CopyPoseFromSourceRoot(sourcePlayerNetworkObject.transform);
+    }
+
+    private void CopyPoseFromSourceRoot(Transform sourceRoot)
+    {
+        if (sourceRoot == null)
+            return;
+
+        Dictionary<string, Transform> sourceBonesByName = BuildSourceBoneLookup(sourceRoot);
+
+        Transform[] targetTransforms = GetComponentsInChildren<Transform>(true);
+
+        for (int i = 0; i < targetTransforms.Length; i++)
+        {
+            Transform targetTransform = targetTransforms[i];
+
+            if (targetTransform == null)
+                continue;
+
+            if (!ShouldCopyBone(targetTransform.name))
+                continue;
+
+            if (!sourceBonesByName.TryGetValue(targetTransform.name, out Transform sourceTransform))
+                continue;
+
+            targetTransform.position = sourceTransform.position;
+            targetTransform.rotation = sourceTransform.rotation;
+            targetTransform.localScale = sourceTransform.localScale;
+        }
+    }
+
+    private Dictionary<string, Transform> BuildSourceBoneLookup(Transform sourceRoot)
+    {
+        Dictionary<string, Transform> lookup = new Dictionary<string, Transform>();
+
+        Transform[] sourceTransforms = sourceRoot.GetComponentsInChildren<Transform>(true);
+
+        for (int i = 0; i < sourceTransforms.Length; i++)
+        {
+            Transform sourceTransform = sourceTransforms[i];
+
+            if (sourceTransform == null)
+                continue;
+
+            if (!ShouldCopyBone(sourceTransform.name))
+                continue;
+
+            lookup[sourceTransform.name] = sourceTransform;
+        }
+
+        return lookup;
+    }
+
+    private bool ShouldCopyBone(string transformName)
+    {
+        if (string.IsNullOrWhiteSpace(transformName))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(copiedBoneNamePrefix))
+            return false;
+
+        return transformName.StartsWith(copiedBoneNamePrefix);
     }
 
     public void ServerSetBodyState(PlayerLifeStateType bodyState)
