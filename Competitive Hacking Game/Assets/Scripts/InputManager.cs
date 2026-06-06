@@ -20,6 +20,7 @@ public class InputManager : NetworkBehaviour
     private PlayerSetup playerSetup;
     private PlayerLifeState lifeState;
     private PlayerBadGuyAttack badGuyAttack;
+    private PlayerReviver reviver;
 
     private bool _wasMovementBlocked;
     private bool _gameplaySuppressed;
@@ -109,11 +110,19 @@ public class InputManager : NetworkBehaviour
 
         if (badGuyAttack == null)
             badGuyAttack = GetComponent<PlayerBadGuyAttack>();
+
+        if (reviver == null)
+            reviver = GetComponent<PlayerReviver>();
     }
 
     private bool MovementBlocked()
     {
         return sit != null && sit.BlocksGameplayMovement;
+    }
+
+    private bool IsSittingOrTransitioning()
+    {
+        return sit != null && sit.IsSittingOrTransitioning;
     }
 
     private bool IsBadGuy()
@@ -294,6 +303,7 @@ public class InputManager : NetworkBehaviour
         look?.SetAimHeld(false);
 
         laptopHacker?.SetHackHeld(false);
+        reviver?.SetReviveHeld(false);
     }
 
     private void ReapplyHeldInputsAfterUnblock()
@@ -370,11 +380,18 @@ public class InputManager : NetworkBehaviour
         if (SurvivorToolInputBlocked())
             return;
 
+        if (!IsSittingOrTransitioning())
+        {
+            reviver?.SetReviveHeld(true);
+            return;
+        }
+
         laptopHacker?.SetHackHeld(true);
     }
 
     private void OnHackCanceled(InputAction.CallbackContext ctx)
     {
+        reviver?.SetReviveHeld(false);
         laptopHacker?.SetHackHeld(false);
     }
 
@@ -395,6 +412,7 @@ public class InputManager : NetworkBehaviour
             look?.SetPhoneAim(false);
             look?.SetAimHeld(false);
             laptopHacker?.SetHackHeld(false);
+            reviver?.SetReviveHeld(false);
         }
 
         bool blocked = MovementBlocked();

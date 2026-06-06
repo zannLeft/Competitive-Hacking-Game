@@ -1196,6 +1196,7 @@ GameObject:
   - component: {fileID: 6469612311198178981}
   - component: {fileID: 3923237512283826011}
   - component: {fileID: 6742123351397742809}
+  - component: {fileID: 8188455232837056083}
   m_Layer: 0
   m_Name: Player_1
   m_TagString: Untagged
@@ -1909,10 +1910,37 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   lifeState: {fileID: 4764926159289589612}
   playerLook: {fileID: 6487965562487473033}
+  inputManager: {fileID: 0}
   playerCamera: {fileID: 2272284346070443280}
   positionFollowSpeed: 18
   rotationFollowSpeed: 18
+  lookXSensitivity: 30
+  lookYSensitivity: 30
+  maxYawFromAnchor: 70
+  minPitch: -25
+  maxPitch: 45
   lockRollToHorizon: 1
+--- !u!114 &8188455232837056083
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5911205127122785075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32a656aaa600fde46aa3e5318bcf998e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerReviver
+  ShowTopMostFoldoutHeaderGroup: 1
+  lifeState: {fileID: 4764926159289589612}
+  playerSetup: {fileID: 7528082831520240939}
+  sitAction: {fileID: 145536466847178049}
+  reviveOriginOverride: {fileID: 6115870627967093863}
+  reviveSeconds: 3
+  reviveRange: 2.2
+  maxTargetAngle: 35
+  maxServerReviveDistance: 3.5
 --- !u!1 &6017817500606899066
 GameObject:
   m_ObjectHideFlags: 0

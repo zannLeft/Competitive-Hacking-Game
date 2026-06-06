@@ -513,6 +513,37 @@ Transform:
   - {fileID: 8585119865010330760}
   m_Father: {fileID: 8288512133181727954}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &3706478626052592080
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8289011250271707821}
+  m_Layer: 0
+  m_Name: ReviveAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8289011250271707821
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3706478626052592080}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.19, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6776748965462379134}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4028983872031565171
 GameObject:
   m_ObjectHideFlags: 0
@@ -1383,6 +1414,7 @@ Transform:
   - {fileID: 5829779776566893994}
   - {fileID: 8288512133181727954}
   - {fileID: 6377507867258721071}
+  - {fileID: 8289011250271707821}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &7661642820004120950
@@ -1424,6 +1456,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DownedBodyObject
   ShowTopMostFoldoutHeaderGroup: 1
   cameraAnchor: {fileID: 6377507867258721071}
+  reviveAnchor: {fileID: 8289011250271707821}
   DownedPlayerClientId:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
