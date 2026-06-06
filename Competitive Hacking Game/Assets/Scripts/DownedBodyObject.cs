@@ -36,6 +36,7 @@ public class DownedBodyObject : NetworkBehaviour
     private bool activateRagdollAfterPoseCopy = true;
 
     private bool poseCopiedAndRagdollActivated;
+    private bool ragdollImpulseApplied;
 
     [Header("Optional Anchors")]
     [SerializeField]
@@ -137,6 +138,7 @@ public class DownedBodyObject : NetworkBehaviour
         UnregisterBody(this);
 
         poseCopiedAndRagdollActivated = false;
+        ragdollImpulseApplied = false;
 
         base.OnNetworkDespawn();
     }
@@ -145,6 +147,7 @@ public class DownedBodyObject : NetworkBehaviour
     {
         UnregisterBody(this);
         poseCopiedAndRagdollActivated = false;
+        ragdollImpulseApplied = false;
         base.OnDestroy();
     }
 
@@ -257,7 +260,11 @@ public class DownedBodyObject : NetworkBehaviour
         IsBadGuyBody.Value = isBadGuyBody;
     }
 
-    public void ServerCopyPoseAndActivateRagdollFromSource(NetworkObject sourcePlayerNetworkObject)
+    public void ServerCopyPoseAndActivateRagdollFromSource(
+        NetworkObject sourcePlayerNetworkObject,
+        Vector3 ragdollImpulse,
+        Vector3 ragdollForcePosition
+    )
     {
         if (!IsServer)
             return;
@@ -266,8 +273,13 @@ public class DownedBodyObject : NetworkBehaviour
             return;
 
         CopyPoseAndActivateRagdollFromSourceTransform(sourcePlayerNetworkObject.transform);
+        ApplyRagdollImpulse(ragdollImpulse, ragdollForcePosition);
 
-        CopyPoseAndActivateRagdollFromSourceClientRpc(sourcePlayerNetworkObject.NetworkObjectId);
+        CopyPoseAndActivateRagdollFromSourceClientRpc(
+            sourcePlayerNetworkObject.NetworkObjectId,
+            ragdollImpulse,
+            ragdollForcePosition
+        );
     }
 
     public void CopyPoseFromSourceTransform(Transform sourceRoot)
@@ -297,7 +309,11 @@ public class DownedBodyObject : NetworkBehaviour
     }
 
     [ClientRpc]
-    private void CopyPoseAndActivateRagdollFromSourceClientRpc(ulong sourcePlayerNetworkObjectId)
+    private void CopyPoseAndActivateRagdollFromSourceClientRpc(
+        ulong sourcePlayerNetworkObjectId,
+        Vector3 ragdollImpulse,
+        Vector3 ragdollForcePosition
+    )
     {
         if (NetworkManager.Singleton == null)
             return;
@@ -311,6 +327,29 @@ public class DownedBodyObject : NetworkBehaviour
             return;
 
         CopyPoseAndActivateRagdollFromSourceTransform(sourcePlayerNetworkObject.transform);
+        ApplyRagdollImpulse(ragdollImpulse, ragdollForcePosition);
+    }
+
+    private void ApplyRagdollImpulse(Vector3 ragdollImpulse, Vector3 ragdollForcePosition)
+    {
+        if (ragdollImpulseApplied)
+            return;
+
+        if (ragdollImpulse.sqrMagnitude <= 0.0001f)
+            return;
+
+        CacheRagdollReference();
+
+        if (ragdoll == null)
+            return;
+
+        ragdoll.ActivateRagdoll(
+            ragdollImpulse,
+            ragdollForcePosition,
+            ForceMode.Impulse
+        );
+
+        ragdollImpulseApplied = true;
     }
 
     private void CopyPoseFromSourceRoot(Transform sourceRoot)

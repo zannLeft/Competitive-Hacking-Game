@@ -335,7 +335,12 @@ public class PlayerLifeState
         );
     }
 
-    public void ServerSetDowned(Vector3 downedPosition, ulong attackerClientId = NoAttackerClientId)
+    public void ServerSetDowned(
+        Vector3 downedPosition,
+        ulong attackerClientId = NoAttackerClientId,
+        Vector3 ragdollImpulse = default,
+        Vector3 ragdollForcePosition = default
+    )
     {
         if (!IsServer)
             return;
@@ -348,7 +353,12 @@ public class PlayerLifeState
 
         Vector3 safeDownedPosition = downedPosition;
 
-        ServerSpawnOrRefreshDownedBody(safeDownedPosition, PlayerLifeStateType.Downed);
+        ServerSpawnOrRefreshDownedBody(
+            safeDownedPosition,
+            PlayerLifeStateType.Downed,
+            ragdollImpulse,
+            ragdollForcePosition
+        );
 
         SetStateServer(
             PlayerLifeStateType.Downed,
@@ -461,7 +471,9 @@ public class PlayerLifeState
 
     private void ServerSpawnOrRefreshDownedBody(
         Vector3 bodyPosition,
-        PlayerLifeStateType bodyState
+        PlayerLifeStateType bodyState,
+        Vector3 ragdollImpulse = default,
+        Vector3 ragdollForcePosition = default
     )
     {
         if (!IsServer)
@@ -519,7 +531,11 @@ public class PlayerLifeState
         currentDownedBody = spawnedBody;
         CurrentBodyNetworkObjectId.Value = bodyNetworkObject.NetworkObjectId;
 
-        spawnedBody.ServerCopyPoseAndActivateRagdollFromSource(NetworkObject);
+        spawnedBody.ServerCopyPoseAndActivateRagdollFromSource(
+            NetworkObject,
+            ragdollImpulse,
+            ragdollForcePosition
+        );
     }
 
     private bool HasSpawnedDownedBody()

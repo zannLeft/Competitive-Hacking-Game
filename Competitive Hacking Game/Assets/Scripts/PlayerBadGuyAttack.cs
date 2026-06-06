@@ -35,6 +35,13 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
     [SerializeField]
     private float maxAttackOriginDistanceFromServer = 2.5f;
 
+    [Header("Ragdoll Impulse")]
+    [SerializeField]
+    private float ragdollImpulseStrength = 4.5f;
+
+    [SerializeField]
+    private float ragdollUpwardImpulse = 0.75f;
+
     private readonly RaycastHit[] _hitBuffer = new RaycastHit[64];
 
     private double _nextServerAttackTime;
@@ -149,12 +156,29 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
 
         Vector3 attackForward = GetSafeForward(clientForward);
 
-        PlayerLifeState target = FindFirstValidTarget(clientOrigin, attackForward);
+        PlayerLifeState target = FindFirstValidTarget(
+            clientOrigin,
+            attackForward,
+            out RaycastHit targetHit
+        );
 
         if (target == null)
             return;
 
-        target.ServerSetDowned(target.transform.position, OwnerClientId);
+        Vector3 impulse =
+            attackForward.normalized * ragdollImpulseStrength
+            + Vector3.up * ragdollUpwardImpulse;
+
+        Vector3 forcePosition = targetHit.collider != null
+            ? targetHit.point
+            : target.transform.position + Vector3.up;
+
+        target.ServerSetDowned(
+            target.transform.position,
+            OwnerClientId,
+            impulse,
+            forcePosition
+        );
     }
 
     private bool IsClientOriginValid(Vector3 clientOrigin)
@@ -173,8 +197,14 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
         return requestedForward.normalized;
     }
 
-    private PlayerLifeState FindFirstValidTarget(Vector3 origin, Vector3 forward)
+    private PlayerLifeState FindFirstValidTarget(
+        Vector3 origin,
+        Vector3 forward,
+        out RaycastHit targetHit
+    )
     {
+        targetHit = default;
+
         int hitCount = Physics.SphereCastNonAlloc(
             origin,
             Mathf.Max(0.01f, attackRadius),
@@ -202,6 +232,7 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
             if (!IsValidTarget(candidate))
                 continue;
 
+            targetHit = hit;
             return candidate;
         }
 
