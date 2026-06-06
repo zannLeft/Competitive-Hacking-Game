@@ -1919,8 +1919,8 @@ MonoBehaviour:
   lookXSensitivity: 30
   lookYSensitivity: 30
   maxYawFromAnchor: 70
-  minPitch: -25
-  maxPitch: 45
+  minPitch: -89
+  maxPitch: 0
   lockRollToHorizon: 1
 --- !u!114 &8188455232837056083
 MonoBehaviour:

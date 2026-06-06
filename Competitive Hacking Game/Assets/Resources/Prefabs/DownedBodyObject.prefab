@@ -2494,6 +2494,9 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   headRenderer: {fileID: 7118883282158582639}
   bodyRenderer: {fileID: 5410940033150200549}
+  hideHeadForDownedOwner: 1
+  localOwnerHeadShadowMode: 3
+  remoteHeadShadowMode: 1
   headShirtMaterialIndex: 2
   bodyShirtMaterialIndices: 01000000020000000600000007000000
   copiedBoneNamePrefix: 'mixamorig:'
@@ -2502,6 +2505,12 @@ MonoBehaviour:
   cameraAnchor: {fileID: 6377507867258721071}
   reviveAnchor: {fileID: 8289011250271707821}
   followReviveAnchorToBone: 1
+  followCameraAnchorToBone: 1
+  cameraAnchorFollowTarget: {fileID: 3408090124847881936}
+  autoCameraAnchorFollowTargetName: mixamorig:Head
+  cameraAnchorLocalOffset: {x: 0, y: 0.13, z: 0}
+  cameraAnchorWorldOffset: {x: 0, y: 0.2, z: 0}
+  copyCameraAnchorRotation: 0
   reviveAnchorFollowTarget: {fileID: 8288512133181727954}
   autoReviveAnchorFollowTargetName: mixamorig:Hips
   reviveAnchorWorldOffset: {x: 0, y: 0.15, z: 0}

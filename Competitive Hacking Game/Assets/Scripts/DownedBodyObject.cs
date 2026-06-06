@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [DisallowMultipleComponent]
 public class DownedBodyObject : NetworkBehaviour
@@ -15,6 +16,16 @@ public class DownedBodyObject : NetworkBehaviour
 
     [SerializeField]
     private SkinnedMeshRenderer bodyRenderer;
+
+    [Header("Local Owner Visibility")]
+    [SerializeField]
+    private bool hideHeadForDownedOwner = true;
+
+    [SerializeField]
+    private ShadowCastingMode localOwnerHeadShadowMode = ShadowCastingMode.ShadowsOnly;
+
+    [SerializeField]
+    private ShadowCastingMode remoteHeadShadowMode = ShadowCastingMode.On;
 
     [Header("Material Slots")]
     [SerializeField]
@@ -48,6 +59,25 @@ public class DownedBodyObject : NetworkBehaviour
     [Header("Revive Anchor Follow")]
     [SerializeField]
     private bool followReviveAnchorToBone = true;
+
+    [Header("Camera Anchor Follow")]
+    [SerializeField]
+    private bool followCameraAnchorToBone = true;
+
+    [SerializeField]
+    private Transform cameraAnchorFollowTarget;
+
+    [SerializeField]
+    private string autoCameraAnchorFollowTargetName = "mixamorig:Spine2";
+
+    [SerializeField]
+    private Vector3 cameraAnchorLocalOffset = new Vector3(0f, 0f, 0f);
+
+    [SerializeField]
+    private Vector3 cameraAnchorWorldOffset = new Vector3(0f, 0f, 0f);
+
+    [SerializeField]
+    private bool copyCameraAnchorRotation = false;
 
     [SerializeField]
     private Transform reviveAnchorFollowTarget;
@@ -116,6 +146,7 @@ public class DownedBodyObject : NetworkBehaviour
     private void LateUpdate()
     {
         UpdateReviveAnchorFollow();
+        UpdateCameraAnchorFollow();
     }
 
     public override void OnNetworkSpawn()
@@ -126,14 +157,17 @@ public class DownedBodyObject : NetworkBehaviour
 
         ShirtIndex.OnValueChanged += HandleAppearanceChanged;
         IsBadGuyBody.OnValueChanged += HandleAppearanceChanged;
+        DownedPlayerClientId.OnValueChanged += HandleDownedPlayerClientIdChanged;
 
         ApplyAppearance();
+        ApplyLocalHeadVisibility();
     }
 
     public override void OnNetworkDespawn()
     {
         ShirtIndex.OnValueChanged -= HandleAppearanceChanged;
         IsBadGuyBody.OnValueChanged -= HandleAppearanceChanged;
+        DownedPlayerClientId.OnValueChanged -= HandleDownedPlayerClientIdChanged;
 
         UnregisterBody(this);
 
@@ -149,6 +183,28 @@ public class DownedBodyObject : NetworkBehaviour
         poseCopiedAndRagdollActivated = false;
         ragdollImpulseApplied = false;
         base.OnDestroy();
+    }
+
+    private void HandleDownedPlayerClientIdChanged(ulong previousValue, ulong newValue)
+    {
+        ApplyLocalHeadVisibility();
+    }
+
+    private void ApplyLocalHeadVisibility()
+    {
+        CacheRendererReferences();
+
+        if (headRenderer == null)
+            return;
+
+        bool isLocalDownedOwner =
+            NetworkManager.Singleton != null
+            && DownedPlayerClientId.Value == NetworkManager.Singleton.LocalClientId;
+
+        headRenderer.shadowCastingMode =
+            hideHeadForDownedOwner && isLocalDownedOwner
+                ? localOwnerHeadShadowMode
+                : remoteHeadShadowMode;
     }
 
     private void CacheRendererReferences()
@@ -442,6 +498,9 @@ public class DownedBodyObject : NetworkBehaviour
     {
         if (reviveAnchorFollowTarget == null && !string.IsNullOrWhiteSpace(autoReviveAnchorFollowTargetName))
             reviveAnchorFollowTarget = FindChildRecursive(transform, autoReviveAnchorFollowTargetName);
+
+        if (cameraAnchorFollowTarget == null && !string.IsNullOrWhiteSpace(autoCameraAnchorFollowTargetName))
+            cameraAnchorFollowTarget = FindChildRecursive(transform, autoCameraAnchorFollowTargetName);
     }
 
     private void UpdateReviveAnchorFollow()
@@ -462,6 +521,29 @@ public class DownedBodyObject : NetworkBehaviour
 
         if (copyReviveAnchorRotation)
             reviveAnchor.rotation = reviveAnchorFollowTarget.rotation;
+    }
+
+    private void UpdateCameraAnchorFollow()
+    {
+        if (!followCameraAnchorToBone)
+            return;
+
+        if (cameraAnchor == null)
+            return;
+
+        if (cameraAnchorFollowTarget == null)
+            CacheAnchorFollowTargets();
+
+        if (cameraAnchorFollowTarget == null)
+            return;
+
+        cameraAnchor.position =
+            cameraAnchorFollowTarget.position
+            + cameraAnchorFollowTarget.rotation * cameraAnchorLocalOffset
+            + cameraAnchorWorldOffset;
+
+        if (copyCameraAnchorRotation)
+            cameraAnchor.rotation = cameraAnchorFollowTarget.rotation;
     }
 
     private Transform FindChildRecursive(Transform parent, string childName)
