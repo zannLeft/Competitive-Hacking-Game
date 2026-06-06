@@ -219,8 +219,35 @@ public class PlayerLifeState
         PlayerLifeStateType newState
     )
     {
+        if (newState == PlayerLifeStateType.Downed)
+            TryCopyCurrentPoseToBodyLocal();
+
         ApplyLifeStateSideEffects(previousState, newState, force: false);
         OnLifeStateChanged?.Invoke(previousState, newState);
+    }
+
+    private void TryCopyCurrentPoseToBodyLocal()
+    {
+        if (CurrentBodyNetworkObjectId.Value == NoBodyNetworkObjectId)
+            return;
+
+        if (NetworkManager.Singleton == null)
+            return;
+
+        if (
+            !NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(
+                CurrentBodyNetworkObjectId.Value,
+                out NetworkObject bodyNetworkObject
+            )
+        )
+            return;
+
+        DownedBodyObject body = bodyNetworkObject.GetComponent<DownedBodyObject>();
+
+        if (body == null)
+            return;
+
+        body.CopyPoseFromSourceTransform(transform);
     }
 
     private void ApplyLifeStateSideEffects(
@@ -319,9 +346,9 @@ public class PlayerLifeState
         if (State.Value == PlayerLifeStateType.Dead)
             return;
 
-        sitAction?.ServerForceResetSitNetworkState();
-
         Vector3 safeDownedPosition = downedPosition;
+
+        ServerSpawnOrRefreshDownedBody(safeDownedPosition, PlayerLifeStateType.Downed);
 
         SetStateServer(
             PlayerLifeStateType.Downed,
@@ -330,7 +357,7 @@ public class PlayerLifeState
             resetDownedTimer: true
         );
 
-        ServerSpawnOrRefreshDownedBody(safeDownedPosition, PlayerLifeStateType.Downed);
+        sitAction?.ServerForceResetSitNetworkState();
     }
 
     public void ServerSetDead(ulong attackerClientId = NoAttackerClientId)
@@ -489,10 +516,10 @@ public class PlayerLifeState
             isBadGuyBody
         );
 
-        spawnedBody.ServerCopyPoseFromSource(NetworkObject);
-
         currentDownedBody = spawnedBody;
         CurrentBodyNetworkObjectId.Value = bodyNetworkObject.NetworkObjectId;
+
+        spawnedBody.ServerCopyPoseFromSource(NetworkObject);
     }
 
     private bool HasSpawnedDownedBody()

@@ -227,6 +227,11 @@ public class DownedBodyObject : NetworkBehaviour
         CopyPoseFromSourceClientRpc(sourcePlayerNetworkObject.NetworkObjectId);
     }
 
+    public void CopyPoseFromSourceTransform(Transform sourceRoot)
+    {
+        CopyPoseFromSourceRoot(sourceRoot);
+    }
+
     [ClientRpc]
     private void CopyPoseFromSourceClientRpc(ulong sourcePlayerNetworkObjectId)
     {
