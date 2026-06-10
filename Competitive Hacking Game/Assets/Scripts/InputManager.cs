@@ -21,6 +21,7 @@ public class InputManager : NetworkBehaviour
     private PlayerLifeState lifeState;
     private PlayerBadGuyAttack badGuyAttack;
     private PlayerReviver reviver;
+    private PlayerFlashlight flashlight;
 
     private bool _wasMovementBlocked;
     private bool _gameplaySuppressed;
@@ -70,6 +71,7 @@ public class InputManager : NetworkBehaviour
         onFoot.Hack.canceled += OnHackCanceled;
 
         onFoot.Attack.performed += OnAttackPerformed;
+        onFoot.Flashlight.performed += OnFlashlightPerformed;
 
         onFoot.Enable();
 
@@ -113,6 +115,9 @@ public class InputManager : NetworkBehaviour
 
         if (reviver == null)
             reviver = GetComponent<PlayerReviver>();
+
+        if (flashlight == null)
+            flashlight = GetComponent<PlayerFlashlight>();
     }
 
     private bool MovementBlocked()
@@ -453,6 +458,7 @@ public class InputManager : NetworkBehaviour
         onFoot.Hack.canceled -= OnHackCanceled;
 
         onFoot.Attack.performed -= OnAttackPerformed;
+        onFoot.Flashlight.performed -= OnFlashlightPerformed;
 
         ui.Pause.performed -= OnPausePerformed;
         ui.Start.performed -= OnStartPerformed;
@@ -517,6 +523,20 @@ public class InputManager : NetworkBehaviour
             return;
 
         badGuyAttack?.TryAttack();
+    }
+
+    private void OnFlashlightPerformed(InputAction.CallbackContext ctx)
+    {
+        if (_gameplaySuppressed)
+            return;
+
+        if (_spectatorInputEnabled || _downedInputEnabled)
+            return;
+
+        if (!CanMove())
+            return;
+
+        flashlight?.TryToggleFlashlight();
     }
 
     private void OnStartPerformed(InputAction.CallbackContext ctx)
