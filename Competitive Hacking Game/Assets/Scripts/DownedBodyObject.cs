@@ -27,6 +27,28 @@ public class DownedBodyObject : NetworkBehaviour
     [SerializeField]
     private ShadowCastingMode remoteHeadShadowMode = ShadowCastingMode.On;
 
+    [Header("Carried Flashlight")]
+    [SerializeField]
+    private GameObject carriedFlashlightVisualRoot;
+
+    [SerializeField]
+    private Light carriedFlashlightLight;
+
+    [SerializeField]
+    private Behaviour carriedFlashlightLensFlare;
+
+    [SerializeField]
+    private Renderer carriedLightBulbsRenderer;
+
+    [SerializeField]
+    private int carriedLightBulbsMaterialIndex = 1;
+
+    [SerializeField]
+    private Material carriedLightBulbsOffMaterial;
+
+    [SerializeField]
+    private Material carriedLightBulbsOnMaterial;
+
     [Header("Material Slots")]
     [SerializeField]
     private int headShirtMaterialIndex = 2;
@@ -121,6 +143,12 @@ public class DownedBodyObject : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<bool> CarriedFlashlightOn = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public Transform CameraAnchor => cameraAnchor != null ? cameraAnchor : transform;
 
     public Transform ReviveAnchor => reviveAnchor != null ? reviveAnchor : transform;
@@ -158,9 +186,11 @@ public class DownedBodyObject : NetworkBehaviour
         ShirtIndex.OnValueChanged += HandleAppearanceChanged;
         IsBadGuyBody.OnValueChanged += HandleAppearanceChanged;
         DownedPlayerClientId.OnValueChanged += HandleDownedPlayerClientIdChanged;
+        CarriedFlashlightOn.OnValueChanged += HandleCarriedFlashlightChanged;
 
         ApplyAppearance();
         ApplyLocalHeadVisibility();
+        ApplyCarriedFlashlightVisuals();
     }
 
     public override void OnNetworkDespawn()
@@ -168,6 +198,7 @@ public class DownedBodyObject : NetworkBehaviour
         ShirtIndex.OnValueChanged -= HandleAppearanceChanged;
         IsBadGuyBody.OnValueChanged -= HandleAppearanceChanged;
         DownedPlayerClientId.OnValueChanged -= HandleDownedPlayerClientIdChanged;
+        CarriedFlashlightOn.OnValueChanged -= HandleCarriedFlashlightChanged;
 
         UnregisterBody(this);
 
@@ -303,7 +334,8 @@ public class DownedBodyObject : NetworkBehaviour
         ulong sourcePlayerNetworkObjectId,
         PlayerLifeStateType bodyState,
         int shirtIndex,
-        bool isBadGuyBody
+        bool isBadGuyBody,
+        bool carriedFlashlightOn
     )
     {
         if (!IsServer)
@@ -314,6 +346,7 @@ public class DownedBodyObject : NetworkBehaviour
         BodyState.Value = bodyState;
         ShirtIndex.Value = shirtIndex;
         IsBadGuyBody.Value = isBadGuyBody;
+        CarriedFlashlightOn.Value = carriedFlashlightOn;
     }
 
     public void ServerCopyPoseAndActivateRagdollFromSource(
@@ -475,6 +508,60 @@ public class DownedBodyObject : NetworkBehaviour
             return;
 
         BodyState.Value = bodyState;
+    }
+
+    public void ServerSetCarriedFlashlightOn(bool isOn)
+    {
+        if (!IsServer)
+            return;
+
+        CarriedFlashlightOn.Value = isOn;
+    }
+
+    private void HandleCarriedFlashlightChanged(bool previousValue, bool newValue)
+    {
+        ApplyCarriedFlashlightVisuals();
+    }
+
+    private void ApplyCarriedFlashlightVisuals()
+    {
+        bool isOn = CarriedFlashlightOn.Value;
+
+        if (carriedFlashlightVisualRoot != null)
+            carriedFlashlightVisualRoot.SetActive(true);
+
+        if (carriedFlashlightLight != null)
+            carriedFlashlightLight.enabled = isOn;
+
+        if (carriedFlashlightLensFlare != null)
+            carriedFlashlightLensFlare.enabled = isOn;
+
+        ApplyCarriedLightBulbsMaterial(isOn);
+    }
+
+    private void ApplyCarriedLightBulbsMaterial(bool isOn)
+    {
+        if (carriedLightBulbsRenderer == null)
+            return;
+
+        if (carriedLightBulbsMaterialIndex < 0)
+            return;
+
+        Material materialToUse = isOn ? carriedLightBulbsOnMaterial : carriedLightBulbsOffMaterial;
+
+        if (materialToUse == null)
+            return;
+
+        Material[] materials = carriedLightBulbsRenderer.sharedMaterials;
+
+        if (carriedLightBulbsMaterialIndex >= materials.Length)
+            return;
+
+        if (materials[carriedLightBulbsMaterialIndex] == materialToUse)
+            return;
+
+        materials[carriedLightBulbsMaterialIndex] = materialToUse;
+        carriedLightBulbsRenderer.sharedMaterials = materials;
     }
 
     private static void RegisterBody(DownedBodyObject body)

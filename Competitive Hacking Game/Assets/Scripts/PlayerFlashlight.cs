@@ -34,6 +34,13 @@ public class PlayerFlashlight
     [SerializeField]
     private Behaviour podLensFlare;
 
+    [Tooltip("Optional. Assign ChestFlashlightVisual. This stays visible while alive and hides while Downed/Dead.")]
+    [SerializeField]
+    private GameObject flashlightVisualRoot;
+
+    [SerializeField]
+    private bool hideVisualWhenNotAlive = true;
+
     [Header("Pod Emission")]
     [Tooltip("Assign the TacticalPodMesh renderer here.")]
     [SerializeField]
@@ -86,6 +93,11 @@ public class PlayerFlashlight
 
     public bool CanUseFlashlight => lifeState == null || lifeState.IsAlive;
 
+    public bool ShouldCarryLitFlashlightToDownedBody()
+    {
+        return IsFlashlightOn;
+    }
+
     private void Reset()
     {
         CacheReferences();
@@ -97,6 +109,7 @@ public class PlayerFlashlight
         CacheDefaultLightBulbMaterialIfNeeded();
         InitializeStableHorizontalForward();
         ApplyFlashlightVisuals(false);
+        ApplyFlashlightVisualRootVisibility();
     }
 
     public override void OnNetworkSpawn()
@@ -116,6 +129,7 @@ public class PlayerFlashlight
         hasSmoothedWorldRotation = false;
 
         ApplyFlashlightVisuals(isFlashlightOn.Value);
+        ApplyFlashlightVisualRootVisibility();
         UpdateStableRig(true);
 
         if (IsOwner)
@@ -446,6 +460,8 @@ public class PlayerFlashlight
         PlayerLifeStateType newState
     )
     {
+        ApplyFlashlightVisualRootVisibility();
+
         if (newState == PlayerLifeStateType.Alive)
             return;
 
@@ -457,6 +473,21 @@ public class PlayerFlashlight
 
         if (IsOwner)
             RequestSetFlashlightServerRpc(false);
+    }
+
+    private void ApplyFlashlightVisualRootVisibility()
+    {
+        if (flashlightVisualRoot == null)
+            return;
+
+        if (!hideVisualWhenNotAlive)
+        {
+            flashlightVisualRoot.SetActive(true);
+            return;
+        }
+
+        bool shouldShow = lifeState == null || lifeState.IsAlive;
+        flashlightVisualRoot.SetActive(shouldShow);
     }
 
     private void ApplyFlashlightVisuals(bool isOn)
@@ -506,6 +537,7 @@ public class PlayerFlashlight
     public void ResetForRound()
     {
         ApplyFlashlightVisuals(false);
+        ApplyFlashlightVisualRootVisibility();
 
         hasCachedVirtualOriginOffset = false;
         hasSmoothedWorldRotation = false;

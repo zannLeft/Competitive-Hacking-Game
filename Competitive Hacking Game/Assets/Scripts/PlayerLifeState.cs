@@ -47,6 +47,9 @@ public class PlayerLifeState
     [SerializeField]
     private PlayerMotor playerMotor;
 
+    [SerializeField]
+    private PlayerFlashlight playerFlashlight;
+
     [Header("Downed Body")]
     [Tooltip("Network prefab spawned when this player becomes Downed. Add DownedBodyObject + NetworkObject to the prefab and register it in NetworkManager Network Prefabs.")]
     [SerializeField]
@@ -212,6 +215,9 @@ public class PlayerLifeState
 
         if (playerMotor == null)
             playerMotor = GetComponent<PlayerMotor>();
+
+        if (playerFlashlight == null)
+            playerFlashlight = GetComponent<PlayerFlashlight>();
     }
 
     private void HandleLifeStateChanged(
@@ -353,9 +359,13 @@ public class PlayerLifeState
 
         Vector3 safeDownedPosition = downedPosition;
 
+        bool flashlightWasOn =
+            playerFlashlight != null && playerFlashlight.ShouldCarryLitFlashlightToDownedBody();
+
         ServerSpawnOrRefreshDownedBody(
             safeDownedPosition,
             PlayerLifeStateType.Downed,
+            flashlightWasOn,
             ragdollImpulse,
             ragdollForcePosition
         );
@@ -472,6 +482,7 @@ public class PlayerLifeState
     private void ServerSpawnOrRefreshDownedBody(
         Vector3 bodyPosition,
         PlayerLifeStateType bodyState,
+        bool flashlightWasOn,
         Vector3 ragdollImpulse = default,
         Vector3 ragdollForcePosition = default
     )
@@ -482,6 +493,7 @@ public class PlayerLifeState
         if (HasSpawnedDownedBody())
         {
             currentDownedBody.ServerSetBodyState(bodyState);
+            currentDownedBody.ServerSetCarriedFlashlightOn(flashlightWasOn);
             CurrentBodyNetworkObjectId.Value = currentDownedBody.NetworkObjectId;
             return;
         }
@@ -525,7 +537,8 @@ public class PlayerLifeState
             NetworkObjectId,
             bodyState,
             shirtIndex,
-            isBadGuyBody
+            isBadGuyBody,
+            flashlightWasOn
         );
 
         currentDownedBody = spawnedBody;

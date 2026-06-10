@@ -897,7 +897,7 @@ MonoBehaviour:
   sampleCount: 32
   occlusionOffset: 0.05
   scale: 0.3
-  allowOffScreen: 1
+  allowOffScreen: 0
   volumetricCloudOcclusion: 0
   occlusionRemapCurve:
     <length>k__BackingField: 2
@@ -1738,7 +1738,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 3859742797
+  GlobalObjectIdHash: 1182312238
   InScenePlacedSourceGlobalObjectIdHash: 1486269952
   DeferredDespawnTick: 0
   Ownership: 1
@@ -2305,6 +2305,7 @@ MonoBehaviour:
   playerLook: {fileID: 6487965562487473033}
   bodyVisibility: {fileID: 3923237512283826011}
   playerMotor: {fileID: 0}
+  playerFlashlight: {fileID: 0}
   downedBodyPrefab: {fileID: -5494535455352275110, guid: e346f06c68ad5d649b8bd8887160d9f7, type: 3}
   downedBodySpawnUpOffset: 0.05
   enableDebugHotkeys: 1
@@ -2442,6 +2443,8 @@ MonoBehaviour:
   aimSource: {fileID: 6115870627967093863}
   flashlightLight: {fileID: 8664211189496720532}
   podLensFlare: {fileID: 2542033700059873970}
+  flashlightVisualRoot: {fileID: 1036631072949722822}
+  hideVisualWhenNotAlive: 1
   lightBulbsRenderer: {fileID: 611709778566107337}
   lightBulbsMaterialIndex: 1
   lightBulbsOffMaterial: {fileID: 2100000, guid: 1dfc2b33c86527b46870b6b42507f133, type: 2}
