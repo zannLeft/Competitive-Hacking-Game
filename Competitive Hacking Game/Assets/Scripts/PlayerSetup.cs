@@ -12,6 +12,19 @@ public class PlayerSetup : NetworkBehaviour
     [SerializeField]
     private string laptopUiLayerName = "LaptopUI";
 
+    [Header("URP Rendering Layers")]
+    [Tooltip("Assigns every renderer under this player, including phone/flashlight visuals, to the owner's unique PlayerBody rendering layer.")]
+    [SerializeField]
+    private bool assignOwnerRenderingLayer = true;
+
+    [Tooltip("Rendering Layer index for PlayerBody0. If you kept Default at index 0 and made PlayerBody0 index 1, set this to 1.")]
+    [SerializeField]
+    private int firstPlayerBodyRenderingLayerIndex = 0;
+
+    [Tooltip("How many PlayerBody rendering layers exist. You said you made PlayerBody0-4, so this should be 5.")]
+    [SerializeField]
+    private int playerBodyRenderingLayerCount = 5;
+
     public NetworkVariable<int> ShirtIndex = new NetworkVariable<int>(
         0,
         NetworkVariableReadPermission.Everyone,
@@ -41,6 +54,8 @@ public class PlayerSetup : NetworkBehaviour
             SetLayerRecursively(gameObject, LayerMask.NameToLayer("MyPlayer"));
         else
             SetLayerRecursively(gameObject, LayerMask.NameToLayer("OtherPlayers"));
+
+        ApplyOwnerRenderingLayerMaskToRenderers();
     }
 
     public override void OnNetworkSpawn()
@@ -69,6 +84,7 @@ public class PlayerSetup : NetworkBehaviour
         IsBadGuy.OnValueChanged += (_, __) => ApplyShirtMaterial();
 
         ApplyShirtMaterial();
+        ApplyOwnerRenderingLayerMaskToRenderers();
     }
 
     public override void OnNetworkDespawn()
@@ -109,6 +125,38 @@ public class PlayerSetup : NetworkBehaviour
                 bodyMats[i] = shirtMaterial;
 
         bodyRenderer.materials = bodyMats;
+    }
+
+    public uint GetOwnerRenderingLayerMask()
+    {
+        return PlayerBodyRenderingLayers.GetOwnerBodyMaskUInt(
+            OwnerClientId,
+            firstPlayerBodyRenderingLayerIndex,
+            playerBodyRenderingLayerCount
+        );
+    }
+
+    public void ApplyOwnerRenderingLayerMaskToRenderers()
+    {
+        if (!assignOwnerRenderingLayer)
+            return;
+
+        uint ownerRenderingLayerMask = GetOwnerRenderingLayerMask();
+
+        if (ownerRenderingLayerMask == 0u)
+            return;
+
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+
+            if (renderer == null)
+                continue;
+
+            renderer.renderingLayerMask = ownerRenderingLayerMask;
+        }
     }
 
     private void SetLayerRecursively(GameObject obj, int newLayer)

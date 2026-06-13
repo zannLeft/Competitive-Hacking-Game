@@ -48,4 +48,9 @@ TagManager:
     locked: 0
   m_RenderingLayers:
   - Default
+  - PlayerBody0
+  - 'PlayerBody1 '
+  - PlayerBody2
+  - PlayerBody3
+  - PlayerBody4
   m_MigratedRenderPipelines: []

@@ -1,6 +1,7 @@
 // PlayerPhone.cs (FULL) — RMB-only, and DISABLED while sliding or coiling
 // UPDATED: Stabilize phone while moving by allowing full IK lock while walking/sprinting
-//          + IK rotation weight now matches IK position weight (prevents jitter from mixed weights)
+//          + IK rotation weight now matches IK position weight
+//          + Assign spawned phone renderers to owner-specific URP Rendering Layer
 
 using Unity.Netcode;
 using UnityEngine;
@@ -67,15 +68,15 @@ public class PlayerPhone : NetworkBehaviour
 
     [Range(0f, 1f)]
     [SerializeField]
-    private float movingIKMax = 1.00f; // NEW: keep phone stable while walking
+    private float movingIKMax = 1.00f;
 
     [Range(0f, 1f)]
     [SerializeField]
-    private float sprintIKMax = 1.00f; // NEW: keep phone stable while sprinting
+    private float sprintIKMax = 1.00f;
 
     [Range(0f, 1f)]
     [SerializeField]
-    private float slideIKMax = 0.01f; // (still allowed if you want “less hand lock” while sliding)
+    private float slideIKMax = 0.01f;
 
     [Header("Remote Approx Target (non-owner)")]
     [SerializeField]
@@ -90,6 +91,19 @@ public class PlayerPhone : NetworkBehaviour
     [SerializeField]
     private Vector3 remoteRotOffsetEuler = new Vector3(0f, 90f, 0f);
 
+    [Header("URP Rendering Layer Filtering")]
+    [Tooltip("Assign spawned phone renderers to the same owner-specific PlayerBody rendering layer as the player body.")]
+    [SerializeField]
+    private bool assignPhoneToOwnerRenderingLayer = true;
+
+    [Tooltip("Rendering Layer index where PlayerBody0 starts. In your setup: Default=0, PlayerBody0=1, so this should be 1.")]
+    [SerializeField]
+    private int firstPlayerBodyRenderingLayerIndex = 1;
+
+    [Tooltip("How many PlayerBody rendering layers exist. In your setup: PlayerBody0-4, so this should be 5.")]
+    [SerializeField]
+    private int playerBodyRenderingLayerCount = 5;
+
     private static readonly Vector3 kPhoneLocalPosition = new Vector3(-0.03f, 0f, 0.01f);
     private static readonly Vector3 kPhoneLocalEuler = new Vector3(20f, 0f, 90f);
     private static readonly Vector3 kIKHandRotOffsetEuler = new Vector3(0f, 90f, -90f);
@@ -101,15 +115,15 @@ public class PlayerPhone : NetworkBehaviour
     [SerializeField]
     private float elbowHintWeight = 0.5f;
 
-    private int _maskHash,
-        _ikHash;
+    private int _maskHash;
+    private int _ikHash;
     private bool _rmbHeld;
 
     private float _targetBlend;
-    private float _maskWeight,
-        _ikWeight;
-    private float _maskVel,
-        _ikVel;
+    private float _maskWeight;
+    private float _ikWeight;
+    private float _maskVel;
+    private float _ikVel;
 
     private bool _phoneVisible;
     private GameObject _spawnedPhone;
@@ -134,8 +148,10 @@ public class PlayerPhone : NetworkBehaviour
     {
         if (animator == null)
             animator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>(true);
+
         if (targetHandler == null)
             targetHandler = GetComponent<PhoneTargetHandler>();
+
         if (motor == null)
             motor = GetComponent<PlayerMotor>();
 
@@ -153,10 +169,10 @@ public class PlayerPhone : NetworkBehaviour
 
         if (phoneAttachR == null && animator != null && animator.isHuman && animator.avatar)
         {
-            var rightHand = animator.GetBoneTransform(HumanBodyBones.RightHand);
+            Transform rightHand = animator.GetBoneTransform(HumanBodyBones.RightHand);
             if (rightHand != null)
             {
-                var found = rightHand.Find("PhoneAttach_R");
+                Transform found = rightHand.Find("PhoneAttach_R");
                 if (found != null)
                     phoneAttachR = found;
             }
@@ -167,19 +183,20 @@ public class PlayerPhone : NetworkBehaviour
             foreach (Transform child in phoneAttachR)
             {
                 _spawnedPhone = child.gameObject;
+                ApplyOwnerRenderingLayerToSpawnedPhone();
                 _spawnedPhone.SetActive(false);
                 break;
             }
         }
 
         ApplyPhoneOffsets();
+        ApplyOwnerRenderingLayerToSpawnedPhone();
     }
 
     void Update()
     {
         float dt = Time.deltaTime;
 
-        // Phone is survivor-only, and is also disabled while sliding or coiling.
         bool phoneAllowed =
             _rmbHeld
             && CanUsePhone()
@@ -204,6 +221,7 @@ public class PlayerPhone : NetworkBehaviour
             );
 
             _maskWeight = Mathf.Clamp01(_maskWeight);
+
             if (_targetBlend <= 0f && _maskWeight < SnapEps)
             {
                 _maskWeight = 0f;
@@ -234,6 +252,7 @@ public class PlayerPhone : NetworkBehaviour
             );
 
             _ikWeight = Mathf.Clamp01(_ikWeight);
+
             if (Mathf.Abs(_ikWeight - ikTarget) < SnapEps)
             {
                 _ikWeight = ikTarget;
@@ -274,11 +293,11 @@ public class PlayerPhone : NetworkBehaviour
 
         ApplyPhoneOffsets();
 
-        // Screen ON only when RMB held AND phone is allowed (owner only)
         if (_spawnedPhone != null && IsOwner)
         {
             if (_screenController == null)
                 _screenController = _spawnedPhone.GetComponent<PhoneScreenController>();
+
             _screenController?.SetScreenOn(phoneAllowed);
         }
     }
@@ -288,7 +307,6 @@ public class PlayerPhone : NetworkBehaviour
         if (animator == null)
             return;
 
-        // UPDATED: Make rotation lock follow IK weight too (prevents jitter from mixed weights)
         float posW = _ikWeight;
         float rotW = _ikWeight;
 
@@ -358,6 +376,7 @@ public class PlayerPhone : NetworkBehaviour
 
         if (_spawnedPhone != null)
         {
+            ApplyOwnerRenderingLayerToSpawnedPhone();
             _spawnedPhone.SetActive(true);
             ApplyPhoneOffsets();
         }
@@ -376,9 +395,49 @@ public class PlayerPhone : NetworkBehaviour
         if (_spawnedPhone == null || phoneAttachR == null)
             return;
 
-        var t = _spawnedPhone.transform;
+        Transform t = _spawnedPhone.transform;
         t.localPosition = kPhoneLocalPosition;
         t.localRotation = Quaternion.Euler(kPhoneLocalEuler);
+    }
+
+    private void ApplyOwnerRenderingLayerToSpawnedPhone()
+    {
+        if (!assignPhoneToOwnerRenderingLayer)
+            return;
+
+        if (_spawnedPhone == null)
+            return;
+
+        uint ownerRenderingLayerMask = GetOwnerRenderingLayerMask();
+
+        if (ownerRenderingLayerMask == 0u)
+            return;
+
+        Renderer[] renderers = _spawnedPhone.GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+
+            if (renderer == null)
+                continue;
+
+            renderer.renderingLayerMask = ownerRenderingLayerMask;
+        }
+    }
+
+    private uint GetOwnerRenderingLayerMask()
+    {
+        if (playerBodyRenderingLayerCount <= 0)
+            return 0u;
+
+        int ownerSlot = (int)(OwnerClientId % (ulong)playerBodyRenderingLayerCount);
+        int renderingLayerIndex = firstPlayerBodyRenderingLayerIndex + ownerSlot;
+
+        if (renderingLayerIndex < 0 || renderingLayerIndex >= 32)
+            return 0u;
+
+        return 1u << renderingLayerIndex;
     }
 
     private void ResolveRemoteApproxTarget(out Vector3 pos, out Quaternion rot)
@@ -404,7 +463,6 @@ public class PlayerPhone : NetworkBehaviour
         if (motor == null)
             return idleIKMax;
 
-        // (Phone is already blocked during sliding, but keep this as a safety cap)
         if (motor.sliding)
             return slideIKMax;
 

@@ -176,9 +176,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.LensFlareComponentSRP
   m_LensFlareData: {fileID: 11400000, guid: bd7eaf3bd49c39f4cb77bd809459aa72, type: 2}
   version: 0
-  intensity: 1
-  maxAttenuationDistance: 100
-  maxAttenuationScale: 100
+  intensity: 0.6
+  maxAttenuationDistance: 20
+  maxAttenuationScale: 20
   distanceAttenuationCurve:
     serializedVersion: 2
     m_Curve:
@@ -259,7 +259,7 @@ MonoBehaviour:
   occlusionRadius: 0.1
   sampleCount: 32
   occlusionOffset: 0.05
-  scale: 0.3
+  scale: 0.1
   allowOffScreen: 0
   volumetricCloudOcclusion: 0
   occlusionRemapCurve:
@@ -413,8 +413,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1088191046080707282}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.014263283, y: -1.062988e-12, z: -1.2015081e-12, w: 0.9998983}
-  m_LocalPosition: {x: 0.00982, y: 0.01453, z: 0.03404}
+  m_LocalRotation: {x: 0.014263283, y: -9.77716e-13, z: -1.2014308e-12, w: 0.9998983}
+  m_LocalPosition: {x: 0.098, y: -2.2749445e-14, z: 0.03999999}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2729,6 +2729,14 @@ MonoBehaviour:
   carriedFlashlightVisualRoot: {fileID: 906385273319489605}
   carriedFlashlightLight: {fileID: 6401100444319571361}
   carriedFlashlightLensFlare: {fileID: 4094112430741491715}
+  hideCarriedLensFlareForDownedOwner: 1
+  excludeLocalPlayerLayerFromOwnCarriedLight: 1
+  localPlayerLayerName: MyPlayer
+  setLocalDownedOwnerRenderersToLocalPlayerLayer: 1
+  assignOwnerRenderingLayer: 1
+  useOwnerRenderingLayerFiltering: 1
+  firstPlayerBodyRenderingLayerIndex: 1
+  playerBodyRenderingLayerCount: 5
   carriedLightBulbsRenderer: {fileID: 550027873087185668}
   carriedLightBulbsMaterialIndex: 1
   carriedLightBulbsOffMaterial: {fileID: 2100000, guid: 1dfc2b33c86527b46870b6b42507f133, type: 2}
@@ -3130,8 +3138,8 @@ Light:
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 5
   m_Range: 18
-  m_SpotAngle: 99.57748
-  m_InnerSpotAngle: 49.577465
+  m_SpotAngle: 100
+  m_InnerSpotAngle: 50
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
     m_Type: 1
@@ -3166,7 +3174,7 @@ Light:
   m_CullingMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_RenderingLayerMask: 1
+  m_RenderingLayerMask: 4294967295
   m_Lightmapping: 4
   m_LightShadowCasterMode: 0
   m_AreaSize: {x: 1, y: 1}
@@ -3202,7 +3210,7 @@ MonoBehaviour:
   m_SoftShadowQuality: 0
   m_RenderingLayersMask:
     serializedVersion: 0
-    m_Bits: 1
+    m_Bits: 4294967295
   m_ShadowRenderingLayersMask:
     serializedVersion: 0
     m_Bits: 1

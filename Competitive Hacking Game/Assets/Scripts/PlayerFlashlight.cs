@@ -1,5 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 [DefaultExecutionOrder(1000)]
 [DisallowMultipleComponent]
@@ -30,9 +31,37 @@ public class PlayerFlashlight
     [SerializeField]
     private Light flashlightLight;
 
+    private UniversalAdditionalLightData flashlightAdditionalLightData;
+
     [Tooltip("Optional. Assign Lens Flare (SRP) from FlashlightLight or FlashlightStableRig.")]
     [SerializeField]
     private Behaviour podLensFlare;
+
+    [Tooltip("When true, the owning player does not see their own lens flare, but other players still do.")]
+    [SerializeField]
+    private bool hideLensFlareForOwner = true;
+
+    [Header("Owner Light Culling")]
+    [Tooltip("Old normal-layer fallback. With URP Rendering Layer Filtering enabled below, this can stay on or be turned off.")]
+    [SerializeField]
+    private bool excludeLocalPlayerLayerFromOwnerLight = false;
+
+    [Tooltip("Layer used by the local player's first-person/body renderers. Usually MyPlayer.")]
+    [SerializeField]
+    private string localPlayerLayerName = "MyPlayer";
+
+    [Header("URP Rendering Layer Filtering")]
+    [Tooltip("When true, every player's flashlight ignores only that same player's PlayerBody rendering layer. This works for local and remote players.")]
+    [SerializeField]
+    private bool useOwnerRenderingLayerFiltering = true;
+
+    [Tooltip("Rendering Layer index for PlayerBody0. If you kept Default at index 0 and made PlayerBody0 index 1, set this to 1.")]
+    [SerializeField]
+    private int firstPlayerBodyRenderingLayerIndex = 1;
+
+    [Tooltip("How many PlayerBody rendering layers exist. You said you made PlayerBody0-4, so this should be 5.")]
+    [SerializeField]
+    private int playerBodyRenderingLayerCount = 5;
 
     [Tooltip("Optional. Assign ChestFlashlightVisual. This stays visible while alive and hides while Downed/Dead.")]
     [SerializeField]
@@ -89,6 +118,12 @@ public class PlayerFlashlight
     private Vector3 lastSentAimForward;
     private float nextAimSendTime;
 
+    private int originalFlashlightLightCullingMask;
+    private bool hasCachedOriginalFlashlightLightCullingMask;
+
+    private int originalFlashlightLightRenderingLayerMask;
+    private bool hasCachedOriginalFlashlightLightRenderingLayerMask;
+
     public bool IsFlashlightOn => isFlashlightOn.Value;
 
     public bool CanUseFlashlight => lifeState == null || lifeState.IsAlive;
@@ -106,6 +141,10 @@ public class PlayerFlashlight
     private void Awake()
     {
         CacheReferences();
+        CacheOriginalFlashlightLightCullingMaskIfNeeded();
+        CacheOriginalFlashlightLightRenderingLayerMaskIfNeeded();
+        ApplyFlashlightLightCullingMask();
+        ApplyFlashlightLightRenderingLayerMask();
         CacheDefaultLightBulbMaterialIfNeeded();
         InitializeStableHorizontalForward();
         ApplyFlashlightVisuals(false);
@@ -117,6 +156,10 @@ public class PlayerFlashlight
         base.OnNetworkSpawn();
 
         CacheReferences();
+        CacheOriginalFlashlightLightCullingMaskIfNeeded();
+        CacheOriginalFlashlightLightRenderingLayerMaskIfNeeded();
+        ApplyFlashlightLightCullingMask();
+        ApplyFlashlightLightRenderingLayerMask();
         CacheDefaultLightBulbMaterialIfNeeded();
         InitializeStableHorizontalForward();
 
@@ -170,6 +213,126 @@ public class PlayerFlashlight
 
         if (flashlightStableRig == null && flashlightLight != null)
             flashlightStableRig = flashlightLight.transform.parent;
+
+        if (flashlightLight != null && flashlightAdditionalLightData == null)
+        {
+            flashlightLight.TryGetComponent(out flashlightAdditionalLightData);
+
+            if (flashlightAdditionalLightData == null)
+                flashlightAdditionalLightData = flashlightLight.gameObject.AddComponent<UniversalAdditionalLightData>();
+        }
+    }
+
+    private void CacheOriginalFlashlightLightCullingMaskIfNeeded()
+    {
+        if (hasCachedOriginalFlashlightLightCullingMask)
+            return;
+
+        if (flashlightLight == null)
+            return;
+
+        originalFlashlightLightCullingMask = flashlightLight.cullingMask;
+        hasCachedOriginalFlashlightLightCullingMask = true;
+    }
+
+    private void ApplyFlashlightLightCullingMask()
+    {
+        if (flashlightLight == null)
+            return;
+
+        CacheOriginalFlashlightLightCullingMaskIfNeeded();
+
+        if (!hasCachedOriginalFlashlightLightCullingMask)
+            return;
+
+        int cullingMask = originalFlashlightLightCullingMask;
+
+        if (excludeLocalPlayerLayerFromOwnerLight && IsOwner)
+        {
+            int localPlayerLayer = LayerMask.NameToLayer(localPlayerLayerName);
+
+            if (localPlayerLayer >= 0)
+                cullingMask &= ~(1 << localPlayerLayer);
+        }
+
+        flashlightLight.cullingMask = cullingMask;
+    }
+
+    private void CacheOriginalFlashlightLightRenderingLayerMaskIfNeeded()
+    {
+        if (hasCachedOriginalFlashlightLightRenderingLayerMask)
+            return;
+
+        if (flashlightLight == null)
+            return;
+
+        // URP's Light inspector reads/writes UniversalAdditionalLightData.renderingLayers.
+        // Cache that value first when available, then fall back to Light.renderingLayerMask.
+        if (flashlightAdditionalLightData != null)
+            originalFlashlightLightRenderingLayerMask = unchecked((int)flashlightAdditionalLightData.renderingLayers);
+        else
+            originalFlashlightLightRenderingLayerMask = flashlightLight.renderingLayerMask;
+
+        hasCachedOriginalFlashlightLightRenderingLayerMask = true;
+    }
+
+    private void ApplyFlashlightLightRenderingLayerMask()
+    {
+        if (flashlightLight == null)
+            return;
+
+        CacheOriginalFlashlightLightRenderingLayerMaskIfNeeded();
+
+        if (!hasCachedOriginalFlashlightLightRenderingLayerMask)
+            return;
+
+        int renderingLayerMask = originalFlashlightLightRenderingLayerMask;
+
+        if (useOwnerRenderingLayerFiltering)
+        {
+            int defaultRenderingLayerMask = 1 << 0;
+            int allPlayerBodyMasks = PlayerBodyRenderingLayers.GetAllPlayerBodyMasksInt(
+                firstPlayerBodyRenderingLayerIndex,
+                playerBodyRenderingLayerCount
+            );
+            int ownerBodyMask = PlayerBodyRenderingLayers.GetOwnerBodyMaskInt(
+                OwnerClientId,
+                firstPlayerBodyRenderingLayerIndex,
+                playerBodyRenderingLayerCount
+            );
+
+            // Force Default + all player body rendering layers, then remove only this owner's layer.
+            renderingLayerMask = defaultRenderingLayerMask | allPlayerBodyMasks;
+            renderingLayerMask &= ~ownerBodyMask;
+        }
+
+        ApplyRenderingLayerMaskToLight(renderingLayerMask);
+    }
+
+    private void ApplyRenderingLayerMaskToLight(int renderingLayerMask)
+    {
+        if (flashlightLight == null)
+            return;
+
+        // Keep Unity's base Light value in sync for versions/tools that read it.
+        flashlightLight.renderingLayerMask = renderingLayerMask;
+
+        if (flashlightAdditionalLightData == null)
+        {
+            flashlightLight.TryGetComponent(out flashlightAdditionalLightData);
+
+            if (flashlightAdditionalLightData == null)
+                flashlightAdditionalLightData = flashlightLight.gameObject.AddComponent<UniversalAdditionalLightData>();
+        }
+
+        uint mask = unchecked((uint)renderingLayerMask);
+
+        // This is the value URP uses for the Light inspector's Rendering Layers field.
+        flashlightAdditionalLightData.renderingLayers = mask;
+
+        // Keep shadows using the same owner-excluding mask.
+        flashlightAdditionalLightData.customShadowLayers = false;
+        flashlightAdditionalLightData.shadowRenderingLayers = mask;
     }
 
     private void CacheDefaultLightBulbMaterialIfNeeded()
@@ -492,13 +655,27 @@ public class PlayerFlashlight
 
     private void ApplyFlashlightVisuals(bool isOn)
     {
+        ApplyFlashlightLightCullingMask();
+        ApplyFlashlightLightRenderingLayerMask();
+
         if (flashlightLight != null)
             flashlightLight.enabled = isOn;
 
         if (podLensFlare != null)
-            podLensFlare.enabled = isOn;
+            podLensFlare.enabled = ShouldShowLensFlare(isOn);
 
         ApplyLightBulbsMaterial(isOn);
+    }
+
+    private bool ShouldShowLensFlare(bool isOn)
+    {
+        if (!isOn)
+            return false;
+
+        if (!hideLensFlareForOwner)
+            return true;
+
+        return !IsOwner;
     }
 
     private void ApplyLightBulbsMaterial(bool isOn)
@@ -536,6 +713,8 @@ public class PlayerFlashlight
 
     public void ResetForRound()
     {
+        ApplyFlashlightLightCullingMask();
+        ApplyFlashlightLightRenderingLayerMask();
         ApplyFlashlightVisuals(false);
         ApplyFlashlightVisualRootVisibility();
 

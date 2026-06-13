@@ -349,8 +349,8 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 7061340856650629941}
   - {fileID: 7929774821368823273}
+  - {fileID: 7061340856650629941}
   - {fileID: 1744606171497442214}
   m_Father: {fileID: 4091974346876725918}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -813,9 +813,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.LensFlareComponentSRP
   m_LensFlareData: {fileID: 11400000, guid: bd7eaf3bd49c39f4cb77bd809459aa72, type: 2}
   version: 0
-  intensity: 1
-  maxAttenuationDistance: 100
-  maxAttenuationScale: 100
+  intensity: 0.6
+  maxAttenuationDistance: 20
+  maxAttenuationScale: 20
   distanceAttenuationCurve:
     serializedVersion: 2
     m_Curve:
@@ -896,7 +896,7 @@ MonoBehaviour:
   occlusionRadius: 0.1
   sampleCount: 32
   occlusionOffset: 0.05
-  scale: 0.3
+  scale: 0.1
   allowOffScreen: 0
   volumetricCloudOcclusion: 0
   occlusionRemapCurve:
@@ -985,8 +985,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3744997025697153201}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.014263283, y: -1.062988e-12, z: -1.2015081e-12, w: 0.9998983}
-  m_LocalPosition: {x: 0.00982, y: 0.01453, z: 0.03404}
+  m_LocalRotation: {x: 0.014263283, y: -1.0914097e-12, z: -1.2019522e-12, w: 0.9998983}
+  m_LocalPosition: {x: 0.098, y: 0.003, z: 0.04}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1445,13 +1445,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5549845414644892245}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.08715578, z: 0, w: 0.9961947}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3556819556419600688}
-  m_LocalEulerAnglesHint: {x: 0, y: 10, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!108 &8664211189496720532
 Light:
   m_ObjectHideFlags: 0
@@ -1465,8 +1465,8 @@ Light:
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 5
   m_Range: 18
-  m_SpotAngle: 99.57748
-  m_InnerSpotAngle: 49.577465
+  m_SpotAngle: 100
+  m_InnerSpotAngle: 50
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
     m_Type: 1
@@ -1885,6 +1885,9 @@ MonoBehaviour:
   headRenderer: {fileID: 9103178378047289684}
   bodyRenderer: {fileID: 3643557171636159750}
   laptopUiLayerName: LaptopUI
+  assignOwnerRenderingLayer: 1
+  firstPlayerBodyRenderingLayerIndex: 1
+  playerBodyRenderingLayerCount: 5
   ShirtIndex:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
@@ -2151,6 +2154,9 @@ MonoBehaviour:
   approxHorizontal: 0.06
   approxVertical: -0.02
   remoteRotOffsetEuler: {x: -20, y: -160, z: -7.8}
+  assignPhoneToOwnerRenderingLayer: 1
+  firstPlayerBodyRenderingLayerIndex: 1
+  playerBodyRenderingLayerCount: 5
   rightElbowHint: {fileID: 0}
   elbowHintWeight: 0.5
 --- !u!114 &145536466847178049
@@ -2443,6 +2449,12 @@ MonoBehaviour:
   aimSource: {fileID: 6115870627967093863}
   flashlightLight: {fileID: 8664211189496720532}
   podLensFlare: {fileID: 2542033700059873970}
+  hideLensFlareForOwner: 1
+  excludeLocalPlayerLayerFromOwnerLight: 1
+  localPlayerLayerName: MyPlayer
+  useOwnerRenderingLayerFiltering: 1
+  firstPlayerBodyRenderingLayerIndex: 1
+  playerBodyRenderingLayerCount: 5
   flashlightVisualRoot: {fileID: 1036631072949722822}
   hideVisualWhenNotAlive: 1
   lightBulbsRenderer: {fileID: 611709778566107337}

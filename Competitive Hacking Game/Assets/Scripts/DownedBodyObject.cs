@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 [DisallowMultipleComponent]
 public class DownedBodyObject : NetworkBehaviour
@@ -34,8 +35,44 @@ public class DownedBodyObject : NetworkBehaviour
     [SerializeField]
     private Light carriedFlashlightLight;
 
+    private UniversalAdditionalLightData carriedFlashlightAdditionalLightData;
+
     [SerializeField]
     private Behaviour carriedFlashlightLensFlare;
+
+    [Tooltip("When true, the player who owns this downed body does not see their own carried lens flare, but other players still do.")]
+    [SerializeField]
+    private bool hideCarriedLensFlareForDownedOwner = true;
+
+    [Header("Owner Carried Light Culling")]
+    [Tooltip("When true, this downed body's own carried flashlight will not light/cast shadows on the local owner body layer on this client.")]
+    [SerializeField]
+    private bool excludeLocalPlayerLayerFromOwnCarriedLight = false;
+
+    [Tooltip("Layer used by the local player's body renderers. Usually MyPlayer.")]
+    [SerializeField]
+    private string localPlayerLayerName = "MyPlayer";
+
+    [Tooltip("For the local owner only, put this downed body's renderers on the local player layer so its own carried light can ignore them without preventing other players' lights from affecting them.")]
+    [SerializeField]
+    private bool setLocalDownedOwnerRenderersToLocalPlayerLayer = false;
+
+    [Header("URP Rendering Layer Filtering")]
+    [Tooltip("Assigns every renderer under this downed body, including the carried phone/flashlight visuals, to the downed player's unique PlayerBody rendering layer.")]
+    [SerializeField]
+    private bool assignOwnerRenderingLayer = true;
+
+    [Tooltip("When true, this carried flashlight ignores only this body's owner PlayerBody rendering layer. This works on every client, not just the owner.")]
+    [SerializeField]
+    private bool useOwnerRenderingLayerFiltering = true;
+
+    [Tooltip("Rendering Layer index for PlayerBody0. If you kept Default at index 0 and made PlayerBody0 index 1, set this to 1.")]
+    [SerializeField]
+    private int firstPlayerBodyRenderingLayerIndex = 1;
+
+    [Tooltip("How many PlayerBody rendering layers exist. You said you made PlayerBody0-4, so this should be 5.")]
+    [SerializeField]
+    private int playerBodyRenderingLayerCount = 5;
 
     [SerializeField]
     private Renderer carriedLightBulbsRenderer;
@@ -70,6 +107,14 @@ public class DownedBodyObject : NetworkBehaviour
 
     private bool poseCopiedAndRagdollActivated;
     private bool ragdollImpulseApplied;
+
+    private int originalCarriedFlashlightLightCullingMask;
+    private bool hasCachedOriginalCarriedFlashlightLightCullingMask;
+
+    private int originalCarriedFlashlightLightRenderingLayerMask;
+    private bool hasCachedOriginalCarriedFlashlightLightRenderingLayerMask;
+
+    private readonly Dictionary<Renderer, int> originalRendererLayersByRenderer = new Dictionary<Renderer, int>();
 
     [Header("Optional Anchors")]
     [SerializeField]
@@ -169,6 +214,8 @@ public class DownedBodyObject : NetworkBehaviour
         CacheRendererReferences();
         CacheRagdollReference();
         CacheAnchorFollowTargets();
+        CacheOriginalCarriedFlashlightLightCullingMaskIfNeeded();
+        CacheOriginalCarriedFlashlightLightRenderingLayerMaskIfNeeded();
     }
 
     private void LateUpdate()
@@ -188,6 +235,10 @@ public class DownedBodyObject : NetworkBehaviour
         DownedPlayerClientId.OnValueChanged += HandleDownedPlayerClientIdChanged;
         CarriedFlashlightOn.OnValueChanged += HandleCarriedFlashlightChanged;
 
+        CacheOriginalCarriedFlashlightLightCullingMaskIfNeeded();
+        CacheOriginalCarriedFlashlightLightRenderingLayerMaskIfNeeded();
+        ApplyOwnerRenderingLayerMaskToRenderers();
+        ApplyLocalOwnerRendererLayers();
         ApplyAppearance();
         ApplyLocalHeadVisibility();
         ApplyCarriedFlashlightVisuals();
@@ -201,6 +252,7 @@ public class DownedBodyObject : NetworkBehaviour
         CarriedFlashlightOn.OnValueChanged -= HandleCarriedFlashlightChanged;
 
         UnregisterBody(this);
+        RestoreOriginalRendererLayers();
 
         poseCopiedAndRagdollActivated = false;
         ragdollImpulseApplied = false;
@@ -211,6 +263,7 @@ public class DownedBodyObject : NetworkBehaviour
     public override void OnDestroy()
     {
         UnregisterBody(this);
+        RestoreOriginalRendererLayers();
         poseCopiedAndRagdollActivated = false;
         ragdollImpulseApplied = false;
         base.OnDestroy();
@@ -218,7 +271,10 @@ public class DownedBodyObject : NetworkBehaviour
 
     private void HandleDownedPlayerClientIdChanged(ulong previousValue, ulong newValue)
     {
+        ApplyOwnerRenderingLayerMaskToRenderers();
+        ApplyLocalOwnerRendererLayers();
         ApplyLocalHeadVisibility();
+        ApplyCarriedFlashlightVisuals();
     }
 
     private void ApplyLocalHeadVisibility()
@@ -228,14 +284,218 @@ public class DownedBodyObject : NetworkBehaviour
         if (headRenderer == null)
             return;
 
-        bool isLocalDownedOwner =
-            NetworkManager.Singleton != null
-            && DownedPlayerClientId.Value == NetworkManager.Singleton.LocalClientId;
+        bool isLocalDownedOwner = IsLocalDownedOwner();
 
         headRenderer.shadowCastingMode =
             hideHeadForDownedOwner && isLocalDownedOwner
                 ? localOwnerHeadShadowMode
                 : remoteHeadShadowMode;
+    }
+
+    private bool IsLocalDownedOwner()
+    {
+        return NetworkManager.Singleton != null
+            && DownedPlayerClientId.Value == NetworkManager.Singleton.LocalClientId;
+    }
+
+    private void CacheOriginalCarriedFlashlightLightCullingMaskIfNeeded()
+    {
+        if (hasCachedOriginalCarriedFlashlightLightCullingMask)
+            return;
+
+        if (carriedFlashlightLight == null)
+            return;
+
+        originalCarriedFlashlightLightCullingMask = carriedFlashlightLight.cullingMask;
+        hasCachedOriginalCarriedFlashlightLightCullingMask = true;
+    }
+
+    private void ApplyCarriedFlashlightLightCullingMask()
+    {
+        if (carriedFlashlightLight == null)
+            return;
+
+        CacheOriginalCarriedFlashlightLightCullingMaskIfNeeded();
+
+        if (!hasCachedOriginalCarriedFlashlightLightCullingMask)
+            return;
+
+        int cullingMask = originalCarriedFlashlightLightCullingMask;
+
+        if (excludeLocalPlayerLayerFromOwnCarriedLight && IsLocalDownedOwner())
+        {
+            int localPlayerLayer = LayerMask.NameToLayer(localPlayerLayerName);
+
+            if (localPlayerLayer >= 0)
+                cullingMask &= ~(1 << localPlayerLayer);
+        }
+
+        carriedFlashlightLight.cullingMask = cullingMask;
+    }
+
+    private void CacheOriginalCarriedFlashlightLightRenderingLayerMaskIfNeeded()
+    {
+        if (hasCachedOriginalCarriedFlashlightLightRenderingLayerMask)
+            return;
+
+        if (carriedFlashlightLight == null)
+            return;
+
+        CacheCarriedFlashlightAdditionalLightDataIfNeeded();
+
+        // URP's Light inspector reads/writes UniversalAdditionalLightData.renderingLayers.
+        // Cache that value first when available, then fall back to Light.renderingLayerMask.
+        if (carriedFlashlightAdditionalLightData != null)
+            originalCarriedFlashlightLightRenderingLayerMask = unchecked((int)carriedFlashlightAdditionalLightData.renderingLayers);
+        else
+            originalCarriedFlashlightLightRenderingLayerMask = carriedFlashlightLight.renderingLayerMask;
+
+        hasCachedOriginalCarriedFlashlightLightRenderingLayerMask = true;
+    }
+
+    private void ApplyCarriedFlashlightLightRenderingLayerMask()
+    {
+        if (carriedFlashlightLight == null)
+            return;
+
+        CacheOriginalCarriedFlashlightLightRenderingLayerMaskIfNeeded();
+
+        if (!hasCachedOriginalCarriedFlashlightLightRenderingLayerMask)
+            return;
+
+        int renderingLayerMask = originalCarriedFlashlightLightRenderingLayerMask;
+
+        if (useOwnerRenderingLayerFiltering && DownedPlayerClientId.Value != ulong.MaxValue)
+        {
+            int defaultRenderingLayerMask = 1 << 0;
+            int allPlayerBodyMasks = PlayerBodyRenderingLayers.GetAllPlayerBodyMasksInt(
+                firstPlayerBodyRenderingLayerIndex,
+                playerBodyRenderingLayerCount
+            );
+            int ownerBodyMask = PlayerBodyRenderingLayers.GetOwnerBodyMaskInt(
+                DownedPlayerClientId.Value,
+                firstPlayerBodyRenderingLayerIndex,
+                playerBodyRenderingLayerCount
+            );
+
+            // Force Default + all player body rendering layers, then remove only this body's owner layer.
+            renderingLayerMask = defaultRenderingLayerMask | allPlayerBodyMasks;
+            renderingLayerMask &= ~ownerBodyMask;
+        }
+
+        ApplyRenderingLayerMaskToCarriedLight(renderingLayerMask);
+    }
+
+    private void CacheCarriedFlashlightAdditionalLightDataIfNeeded()
+    {
+        if (carriedFlashlightLight == null || carriedFlashlightAdditionalLightData != null)
+            return;
+
+        carriedFlashlightLight.TryGetComponent(out carriedFlashlightAdditionalLightData);
+
+        if (carriedFlashlightAdditionalLightData == null)
+            carriedFlashlightAdditionalLightData = carriedFlashlightLight.gameObject.AddComponent<UniversalAdditionalLightData>();
+    }
+
+    private void ApplyRenderingLayerMaskToCarriedLight(int renderingLayerMask)
+    {
+        if (carriedFlashlightLight == null)
+            return;
+
+        // Keep Unity's base Light value in sync for versions/tools that read it.
+        carriedFlashlightLight.renderingLayerMask = renderingLayerMask;
+
+        CacheCarriedFlashlightAdditionalLightDataIfNeeded();
+
+        if (carriedFlashlightAdditionalLightData == null)
+            return;
+
+        uint mask = unchecked((uint)renderingLayerMask);
+
+        // This is the value URP uses for the Light inspector's Rendering Layers field.
+        carriedFlashlightAdditionalLightData.renderingLayers = mask;
+
+        // Keep shadows using the same owner-excluding mask.
+        carriedFlashlightAdditionalLightData.customShadowLayers = false;
+        carriedFlashlightAdditionalLightData.shadowRenderingLayers = mask;
+    }
+
+    private void ApplyOwnerRenderingLayerMaskToRenderers()
+    {
+        if (!assignOwnerRenderingLayer)
+            return;
+
+        if (DownedPlayerClientId.Value == ulong.MaxValue)
+            return;
+
+        uint ownerRenderingLayerMask = PlayerBodyRenderingLayers.GetOwnerBodyMaskUInt(
+            DownedPlayerClientId.Value,
+            firstPlayerBodyRenderingLayerIndex,
+            playerBodyRenderingLayerCount
+        );
+
+        if (ownerRenderingLayerMask == 0u)
+            return;
+
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+
+            if (renderer == null)
+                continue;
+
+            renderer.renderingLayerMask = ownerRenderingLayerMask;
+        }
+    }
+
+    private void ApplyLocalOwnerRendererLayers()
+    {
+        if (!setLocalDownedOwnerRenderersToLocalPlayerLayer)
+        {
+            RestoreOriginalRendererLayers();
+            return;
+        }
+
+        int localPlayerLayer = LayerMask.NameToLayer(localPlayerLayerName);
+
+        if (localPlayerLayer < 0)
+            return;
+
+        bool isLocalDownedOwner = IsLocalDownedOwner();
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+
+            if (renderer == null)
+                continue;
+
+            if (!originalRendererLayersByRenderer.ContainsKey(renderer))
+                originalRendererLayersByRenderer.Add(renderer, renderer.gameObject.layer);
+
+            if (isLocalDownedOwner)
+            {
+                renderer.gameObject.layer = localPlayerLayer;
+            }
+            else if (originalRendererLayersByRenderer.TryGetValue(renderer, out int originalLayer))
+            {
+                renderer.gameObject.layer = originalLayer;
+            }
+        }
+    }
+
+    private void RestoreOriginalRendererLayers()
+    {
+        foreach (KeyValuePair<Renderer, int> entry in originalRendererLayersByRenderer)
+        {
+            if (entry.Key == null)
+                continue;
+
+            entry.Key.gameObject.layer = entry.Value;
+        }
     }
 
     private void CacheRendererReferences()
@@ -527,6 +787,9 @@ public class DownedBodyObject : NetworkBehaviour
     {
         bool isOn = CarriedFlashlightOn.Value;
 
+        ApplyCarriedFlashlightLightCullingMask();
+        ApplyCarriedFlashlightLightRenderingLayerMask();
+
         if (carriedFlashlightVisualRoot != null)
             carriedFlashlightVisualRoot.SetActive(true);
 
@@ -534,9 +797,20 @@ public class DownedBodyObject : NetworkBehaviour
             carriedFlashlightLight.enabled = isOn;
 
         if (carriedFlashlightLensFlare != null)
-            carriedFlashlightLensFlare.enabled = isOn;
+            carriedFlashlightLensFlare.enabled = ShouldShowCarriedLensFlare(isOn);
 
         ApplyCarriedLightBulbsMaterial(isOn);
+    }
+
+    private bool ShouldShowCarriedLensFlare(bool isOn)
+    {
+        if (!isOn)
+            return false;
+
+        if (!hideCarriedLensFlareForDownedOwner)
+            return true;
+
+        return !IsLocalDownedOwner();
     }
 
     private void ApplyCarriedLightBulbsMaterial(bool isOn)
