@@ -206,6 +206,10 @@ public class LobbySceneUIController : MonoBehaviour
 
     public void ShowLobbyScreen()
     {
+        // Main menu / lobby selection should not render or light the city scene.
+        // City_Base is loaded only after joining/creating a lobby session.
+        LoadCityBase.UnloadLocalIfLoaded();
+
         LobbyManager.Instance?.Services?.InitializeUnityAuthentication();
 
         if (gameUI != null)

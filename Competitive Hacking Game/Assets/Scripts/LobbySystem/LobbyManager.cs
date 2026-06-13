@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Threading.Tasks;
 using Unity.Netcode;
 using Unity.Services.Lobbies.Models;
@@ -24,6 +25,9 @@ public class LobbyManager : MonoBehaviour
     [SerializeField]
     private string interiorSceneName = "Interior_01";
 
+    [SerializeField]
+    private string cityBaseSceneName = "City_Base";
+
     [Header("Teleport Tags")]
     [SerializeField]
     private string lobbySpawnTag = "LobbySpawn";
@@ -42,6 +46,8 @@ public class LobbyManager : MonoBehaviour
     public LobbySceneUIController SceneUI { get; private set; }
 
     public event EventHandler<OnLobbyListChangedEventArgs> OnLobbyListChanged;
+
+    private Coroutine _hostLobbyTeleportCoroutine;
 
     public class OnLobbyListChangedEventArgs : EventArgs
     {
@@ -139,10 +145,15 @@ public class LobbyManager : MonoBehaviour
 
             Teleport.RegisterHandlersIfNeeded();
 
+            // City_Base is no longer loaded on the main menu.
+            // The host loads it only after the lobby session starts, and Netcode syncs
+            // this one copy to joining clients.
+            LoadCityBase.LoadForLobbyAsHostIfNeeded(cityBaseSceneName);
+
             SceneUI.HideMenuUI();
             SceneUI.ShowPregameUI();
 
-            MatchFlow.ServerTeleportClientToLobbySpawnWhenReady(Session.LocalClientId);
+            TeleportHostToLobbySpawnAfterCityBaseLoads();
         }
         catch (Exception e)
         {
@@ -219,6 +230,10 @@ public class LobbyManager : MonoBehaviour
     {
         var rsd = Relay.BuildRelayServerData(joinAlloc, "dtls");
         Session.ConfigureTransport(rsd);
+
+        // Clients should not bring a menu copy of City_Base into the network session.
+        // They receive the host's lobby City_Base through Netcode scene sync.
+        LoadCityBase.UnloadLocalIfLoaded(cityBaseSceneName);
 
         Session.RegisterConnectionCallbacks();
         Session.StartClient();
@@ -323,6 +338,9 @@ public class LobbyManager : MonoBehaviour
             MatchFlow.UnloadInteriorLocalIfLoaded();
         }
 
+        // Returning to the lobby selection/main menu should leave no City_Base loaded.
+        LoadCityBase.UnloadLocalIfLoaded(cityBaseSceneName);
+
         if (RoundRoles != null)
             RoundRoles.ResetRoles();
 
@@ -330,6 +348,35 @@ public class LobbyManager : MonoBehaviour
 
         if (clearLobby)
             Services?.ClearLocalLobby();
+    }
+
+    private void TeleportHostToLobbySpawnAfterCityBaseLoads()
+    {
+        if (_hostLobbyTeleportCoroutine != null)
+            StopCoroutine(_hostLobbyTeleportCoroutine);
+
+        _hostLobbyTeleportCoroutine = StartCoroutine(TeleportHostToLobbySpawnAfterCityBaseLoadsRoutine());
+    }
+
+    private IEnumerator TeleportHostToLobbySpawnAfterCityBaseLoadsRoutine()
+    {
+        const float timeoutSeconds = 8f;
+        float remaining = timeoutSeconds;
+
+        while (remaining > 0f && !LoadCityBase.IsLoaded(cityBaseSceneName))
+        {
+            remaining -= Time.deltaTime;
+            yield return null;
+        }
+
+        _hostLobbyTeleportCoroutine = null;
+
+        if (!LoadCityBase.IsLoaded(cityBaseSceneName))
+        {
+            Debug.LogWarning($"[LobbyManager] Timed out waiting for '{cityBaseSceneName}' before teleporting host to lobby spawn. Teleporting anyway.");
+        }
+
+        MatchFlow.ServerTeleportClientToLobbySpawnWhenReady(Session.LocalClientId);
     }
 
     public bool CanStartMatch(out string reason)
