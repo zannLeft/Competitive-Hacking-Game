@@ -93,8 +93,8 @@ LightmapSettings:
     m_ExportTrainingData: 0
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
-  m_LightingDataAsset: {fileID: 112000000, guid: c050df453f157be4f90b2443b5c15975, type: 2}
-  m_LightingSettings: {fileID: 4890085278179872738, guid: e457138067746484db547062f601e416, type: 2}
+  m_LightingDataAsset: {fileID: 112000000, guid: 1685ce7913204214aa70f5967746a6cd, type: 2}
+  m_LightingSettings: {fileID: 4890085278179872738, guid: baabed4b49cd96b42b51d207f2475ec3, type: 2}
 --- !u!196 &4
 NavMeshSettings:
   serializedVersion: 2
@@ -1390,6 +1390,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LoadCityBase
   cityBaseSceneName: City_Base
+  unloadCityBaseOnAwake: 1
 --- !u!1 &444737778
 GameObject:
   m_ObjectHideFlags: 0
@@ -7203,6 +7204,7 @@ MonoBehaviour:
   minPlayersToStart: 2
   lobbySceneName: MainScene
   interiorSceneName: Interior_01
+  cityBaseSceneName: City_Base
   lobbySpawnTag: LobbySpawn
   interiorSpawnTag: InteriorSpawn
 --- !u!114 &8712805426511540832
