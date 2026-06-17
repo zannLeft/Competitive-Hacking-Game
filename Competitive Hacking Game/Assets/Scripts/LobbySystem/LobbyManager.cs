@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Unity.Netcode;
 using Unity.Services.Lobbies.Models;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 [DisallowMultipleComponent]
@@ -17,6 +18,10 @@ public class LobbyManager : MonoBehaviour
 
     [SerializeField]
     private int minPlayersToStart = 2;
+
+    [Header("Debug")]
+    [SerializeField]
+    private bool allowF1SoloStart = true;
 
     [Header("Scene Names")]
     [SerializeField]
@@ -120,6 +125,25 @@ public class LobbyManager : MonoBehaviour
     {
         bool inLobbyScene = SceneManager.GetActiveScene().name == lobbySceneName;
         Services.Tick(Time.deltaTime, inLobbyScene);
+
+        HandleDebugSoloStartInput();
+    }
+
+    private void HandleDebugSoloStartInput()
+    {
+        if (!allowF1SoloStart)
+            return;
+
+        if (Keyboard.current == null || !Keyboard.current.f1Key.wasPressedThisFrame)
+            return;
+
+        if (Session == null || !Session.IsHost)
+        {
+            Debug.Log("[LobbyManager] DEBUG SOLO START ignored: this instance is not the host.");
+            return;
+        }
+
+        StartGameAsHostInternal(ignorePlayerMinimum: true);
     }
 
     public Lobby GetLobby() => Services.CurrentLobby;
@@ -259,13 +283,26 @@ public class LobbyManager : MonoBehaviour
         SceneUI.ShowLobbyScreen();
     }
 
-    public async void StartGameAsHost()
+    public void StartGameAsHost()
     {
-        if (!CanStartMatch(out string reason))
+        StartGameAsHostInternal(ignorePlayerMinimum: false);
+    }
+
+    public void StartGameAsHostIgnoringPlayerMinimum()
+    {
+        StartGameAsHostInternal(ignorePlayerMinimum: true);
+    }
+
+    private async void StartGameAsHostInternal(bool ignorePlayerMinimum)
+    {
+        if (!CanStartMatch(out string reason, ignorePlayerMinimum))
         {
             Debug.LogWarning($"[LobbyManager] Cannot start match: {reason}");
             return;
         }
+
+        if (ignorePlayerMinimum)
+            Debug.LogWarning("[LobbyManager] DEBUG SOLO START: starting match while ignoring minimum player count.");
 
         try
         {
@@ -381,6 +418,11 @@ public class LobbyManager : MonoBehaviour
 
     public bool CanStartMatch(out string reason)
     {
+        return CanStartMatch(out reason, ignorePlayerMinimum: false);
+    }
+
+    private bool CanStartMatch(out string reason, bool ignorePlayerMinimum)
+    {
         reason = "";
 
         if (Session == null || !Session.IsHost)
@@ -397,7 +439,7 @@ public class LobbyManager : MonoBehaviour
 
         int connectedPlayers = GetConnectedPlayerCount();
 
-        if (connectedPlayers < MinPlayersToStart)
+        if (!ignorePlayerMinimum && connectedPlayers < MinPlayersToStart)
         {
             reason =
                 $"Need at least {MinPlayersToStart} players to start. Current players: {connectedPlayers}.";
