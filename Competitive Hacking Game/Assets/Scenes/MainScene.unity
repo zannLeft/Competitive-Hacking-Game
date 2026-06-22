@@ -7202,6 +7202,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxPlayers: 5
   minPlayersToStart: 2
+  allowF1SoloStart: 1
   lobbySceneName: MainScene
   interiorSceneName: Interior_01
   cityBaseSceneName: City_Base
