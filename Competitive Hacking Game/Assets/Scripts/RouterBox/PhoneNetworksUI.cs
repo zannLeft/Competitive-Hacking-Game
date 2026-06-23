@@ -5,47 +5,50 @@ public class PhoneNetworksUI : MonoBehaviour
 {
     [Header("UI")]
     [SerializeField]
-    private Transform contentRoot; // parent with VerticalLayoutGroup
+    private Transform contentRoot;
 
     [SerializeField]
     private NetworkRowUI rowPrefab;
 
     [Header("Update")]
     [SerializeField]
-    private float refreshInterval = 0.10f; // 10 Hz
+    private float refreshInterval = 0.10f;
 
     private readonly List<NetworkRowUI> _rows = new();
     private float _timer;
 
     private Camera _playerCam;
     private Canvas _canvas;
+    private RouterHackCoordinator _coordinator;
 
     private void Awake()
     {
         _canvas = GetComponentInParent<Canvas>(true);
 
-        // Find the local player's camera via your existing stack
-        var look = GetComponentInParent<PlayerLook>();
+        PlayerLook look = GetComponentInParent<PlayerLook>();
+
         if (look != null && look.cam != null)
             _playerCam = look.cam;
         else
             _playerCam = Camera.main;
 
-        RouterHackState.Changed += OnRouterHackStateChanged;
+        AttachCoordinatorIfNeeded();
     }
 
     private void OnDestroy()
     {
-        RouterHackState.Changed -= OnRouterHackStateChanged;
+        DetachCoordinator();
     }
 
     private void Update()
     {
-        // PhoneScreenController toggles canvas enabled only for the owner, so this is a cheap early out.
+        AttachCoordinatorIfNeeded();
+
         if (_canvas != null && !_canvas.enabled)
             return;
 
         _timer -= Time.deltaTime;
+
         if (_timer > 0f)
             return;
 
@@ -53,9 +56,32 @@ public class PhoneNetworksUI : MonoBehaviour
         RefreshList();
     }
 
-    private void OnRouterHackStateChanged()
+    private void AttachCoordinatorIfNeeded()
     {
-        // Force quick refresh when a network gets completed.
+        RouterHackCoordinator instance = RouterHackCoordinator.Instance;
+
+        if (_coordinator == instance)
+            return;
+
+        DetachCoordinator();
+        _coordinator = instance;
+
+        if (_coordinator != null)
+            _coordinator.RecordsChanged += OnCoordinatorRecordsChanged;
+
+        _timer = 0f;
+    }
+
+    private void DetachCoordinator()
+    {
+        if (_coordinator != null)
+            _coordinator.RecordsChanged -= OnCoordinatorRecordsChanged;
+
+        _coordinator = null;
+    }
+
+    private void OnCoordinatorRecordsChanged()
+    {
         _timer = 0f;
     }
 
@@ -65,31 +91,29 @@ public class PhoneNetworksUI : MonoBehaviour
             return;
 
         var routers = RouterRegistry.Routers;
-        Vector3 fromPos = _playerCam ? _playerCam.transform.position : transform.position;
+        Vector3 fromPosition =
+            _playerCam != null ? _playerCam.transform.position : transform.position;
 
         int rowIndex = 0;
 
         for (int i = 0; i < routers.Count; i++)
         {
-            var r = routers[i];
+            RouterBox router = routers[i];
 
-            if (r == null)
+            if (router == null)
                 continue;
 
-            // Hide completed/hacked networks from the phone scanner.
-            if (RouterHackState.IsCompleted(r.NetworkName))
+            if (_coordinator != null && _coordinator.IsCompleted(router.NetworkId))
                 continue;
 
-            float strength = r.GetStrength01(fromPos);
+            float strength = router.GetStrength01(fromPosition);
 
             NetworkRowUI row = GetRow(rowIndex);
             row.gameObject.SetActive(true);
-            row.Set(r.NetworkName, strength);
-
+            row.Set(router.NetworkName, strength);
             rowIndex++;
         }
 
-        // Hide unused pooled rows
         for (int i = rowIndex; i < _rows.Count; i++)
             _rows[i].gameObject.SetActive(false);
     }
@@ -98,7 +122,7 @@ public class PhoneNetworksUI : MonoBehaviour
     {
         while (_rows.Count <= index)
         {
-            var row = Instantiate(rowPrefab, contentRoot);
+            NetworkRowUI row = Instantiate(rowPrefab, contentRoot);
             _rows.Add(row);
         }
 

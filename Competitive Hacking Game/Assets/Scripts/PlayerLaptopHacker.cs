@@ -1,9 +1,8 @@
-using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
 [DisallowMultipleComponent]
-public class PlayerLaptopHacker : NetworkBehaviour
+public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 {
     [Header("Refs")]
     [SerializeField]
@@ -15,40 +14,48 @@ public class PlayerLaptopHacker : NetworkBehaviour
     [SerializeField]
     private PlayerLifeState lifeState;
 
-    [Tooltip("Usually the player camera or player root. Used for router distance checks.")]
+    [SerializeField]
+    private LaptopScreenUI screenUI;
+
+    [Tooltip("Usually the player camera or player root. Used for local router signal checks.")]
     [SerializeField]
     private Transform rangeOrigin;
 
-    [Header("Hack Rules")]
-    [SerializeField]
-    private float hackSeconds = 2.5f;
-
+    [Header("Signal Rules")]
     [SerializeField]
     private int barCount = 5;
 
     [SerializeField]
     private int requiredBars = 5;
 
-    [Tooltip("If ON, hacking only works once the laptop is actually open/focused.")]
+    [Tooltip("If ON, the minigame appears only after the laptop focus animation event.")]
     [SerializeField]
     private bool requireLaptopFocus = true;
 
     [Header("Target Refresh")]
-    [SerializeField]
+    [SerializeField, Min(0.02f)]
     private float targetRefreshInterval = 0.10f;
 
-    private bool _hackHeld;
-    private bool _mustReleaseHack;
-    private float _hackProgress;
-    private float _targetRefreshTimer;
-
+    private RouterHackCoordinator _coordinator;
     private RouterBox _currentTarget;
+    private RouterHackRecord _currentRecord;
+    private bool _targetLockedByMinigame;
+    private bool _showingTerminalResult;
+    private float _targetRefreshTimer;
+    private string _lastPresentationKey = string.Empty;
+    private Vector2 _navigationInput;
+    private bool _primaryHeld;
 
     public RouterBox CurrentTarget => _currentTarget;
-    public string CurrentTargetName => _currentTarget != null ? _currentTarget.NetworkName : "";
-    public float HackProgress01 => hackSeconds <= 0f ? 0f : Mathf.Clamp01(_hackProgress / hackSeconds);
-    public bool IsHoldingHack => _hackHeld;
+    public string CurrentTargetName =>
+        _currentTarget != null ? _currentTarget.NetworkName : string.Empty;
+    public string CurrentNetworkId =>
+        _currentTarget != null ? _currentTarget.NetworkId : string.Empty;
     public bool HasHackableTarget => IsLaptopUsable && _currentTarget != null;
+    public bool HasActiveMinigame =>
+        _targetLockedByMinigame
+        && screenUI != null
+        && screenUI.HasActiveMinigame;
 
     public Vector3 SignalOriginPosition
     {
@@ -78,11 +85,12 @@ public class PlayerLaptopHacker : NetworkBehaviour
         }
     }
 
-    void Reset()
+    private void Reset()
     {
         sitAction = GetComponent<PlayerSitAction>();
         playerSetup = GetComponent<PlayerSetup>();
         lifeState = GetComponent<PlayerLifeState>();
+        screenUI = GetComponentInChildren<LaptopScreenUI>(true);
     }
 
     public override void OnNetworkSpawn()
@@ -98,17 +106,28 @@ public class PlayerLaptopHacker : NetworkBehaviour
         if (lifeState == null)
             lifeState = GetComponent<PlayerLifeState>();
 
+        if (screenUI == null)
+            screenUI = GetComponentInChildren<LaptopScreenUI>(true);
+
         if (rangeOrigin == null)
         {
-            var look = GetComponent<PlayerLook>();
+            PlayerLook look = GetComponent<PlayerLook>();
+
             if (look != null && look.cam != null)
                 rangeOrigin = look.cam.transform;
             else
                 rangeOrigin = transform;
         }
 
-        if (IsServer)
-            SyncCompletedNetworksToOwner();
+        ForceResetLocalForRound();
+        AttachCoordinatorIfNeeded();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        DetachCoordinator();
+        AbortLocalMinigame(clearTarget: true);
+        base.OnNetworkDespawn();
     }
 
     private void Update()
@@ -116,79 +135,216 @@ public class PlayerLaptopHacker : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        if (!CanUseSurvivorTools())
+        AttachCoordinatorIfNeeded();
+
+        if (!CanUseSurvivorTools() || !IsLaptopUsable)
         {
-            ForceResetLocalForRound();
+            AbortLocalMinigame(clearTarget: true);
+            _showingTerminalResult = false;
+            _lastPresentationKey = string.Empty;
             return;
         }
 
-        RefreshTargetTick();
+        if (_showingTerminalResult)
+            return;
 
-        if (!IsLaptopUsable || _currentTarget == null)
+        if (_coordinator == null || !_coordinator.AssignmentsReady)
         {
-            ResetHackProgress();
+            AbortLocalMinigame(clearTarget: true);
+            PresentOnce("waiting", () => screenUI?.ShowWaitingForAssignments());
             return;
         }
 
-        if (!_hackHeld || _mustReleaseHack)
+        if (_targetLockedByMinigame)
         {
-            _hackProgress = 0f;
+            if (!IsCurrentTargetStillEligible())
+            {
+                AbortLocalMinigame(clearTarget: true);
+                PresentOnce("no-network", () => screenUI?.ShowNoNetwork());
+            }
+
             return;
         }
 
-        _hackProgress += Time.deltaTime;
-
-        if (_hackProgress >= hackSeconds)
-        {
-            string completedName = _currentTarget.NetworkName;
-
-            _hackProgress = 0f;
-            _mustReleaseHack = true;
-
-            RequestCompleteHackServerRpc(new FixedString128Bytes(completedName));
-        }
-    }
-
-    public void ForceResetLocalForRound()
-    {
-        _hackHeld = false;
-        _mustReleaseHack = false;
-        _hackProgress = 0f;
-        _targetRefreshTimer = 0f;
-        _currentTarget = null;
-    }
-
-    public void SetHackHeld(bool held)
-    {
-        _hackHeld = held && CanUseSurvivorTools();
-
-        if (!_hackHeld)
-        {
-            _mustReleaseHack = false;
-            _hackProgress = 0f;
-        }
-    }
-
-    private void RefreshTargetTick()
-    {
         _targetRefreshTimer -= Time.deltaTime;
 
         if (_targetRefreshTimer > 0f)
             return;
 
-        _targetRefreshTimer = targetRefreshInterval;
-        _currentTarget = FindBestHackableRouter();
+        _targetRefreshTimer = Mathf.Max(0.02f, targetRefreshInterval);
+        RefreshAndPresentTarget();
+    }
+
+    public void ResetForRound()
+    {
+        ForceResetLocalForRound();
+    }
+
+    public void ForceResetLocalForRound()
+    {
+        AbortLocalMinigame(clearTarget: true);
+        _showingTerminalResult = false;
+        _targetRefreshTimer = 0f;
+        _lastPresentationKey = string.Empty;
+        _navigationInput = Vector2.zero;
+        _primaryHeld = false;
+    }
+
+    public void SetNavigationInput(Vector2 input)
+    {
+        if (!IsOwner)
+            return;
+
+        _navigationInput = Vector2.ClampMagnitude(input, 1f);
+
+        if (HasActiveMinigame)
+            screenUI.SetNavigation(_navigationInput);
+    }
+
+    public void PrimaryPressed()
+    {
+        if (!IsOwner || !HasActiveMinigame || _primaryHeld)
+            return;
+
+        _primaryHeld = true;
+        screenUI.PrimaryPressed();
+    }
+
+    public void PrimaryReleased()
+    {
+        if (!IsOwner || !_primaryHeld)
+            return;
+
+        _primaryHeld = false;
+
+        if (screenUI != null)
+            screenUI.PrimaryReleased();
+    }
+
+    public void ClearLocalInputState()
+    {
+        if (!IsOwner)
+            return;
+
+        _navigationInput = Vector2.zero;
+
+        if (screenUI != null)
+            screenUI.SetNavigation(Vector2.zero);
+
+        PrimaryReleased();
+    }
+
+    // Compatibility for existing cleanup code. The old hold-to-hack system no longer uses this.
+    public void SetHackHeld(bool held)
+    {
+        if (held)
+            PrimaryPressed();
+        else
+            PrimaryReleased();
+    }
+
+    private void RefreshAndPresentTarget()
+    {
+        RouterBox bestTarget = FindBestHackableRouter();
+
+        if (bestTarget == null)
+        {
+            ClearCurrentTarget();
+            PresentOnce("no-network", () => screenUI?.ShowNoNetwork());
+            return;
+        }
+
+        _currentTarget = bestTarget;
+
+        if (!_coordinator.TryGetRecord(bestTarget.NetworkId, out _currentRecord))
+        {
+            PresentOnce(
+                $"missing-record:{bestTarget.NetworkId}",
+                () => screenUI?.ShowMissingAssignment(bestTarget.NetworkName)
+            );
+            return;
+        }
+
+        if (_currentRecord.Completed)
+        {
+            PresentOnce(
+                $"completed:{bestTarget.NetworkId}",
+                () => screenUI?.ShowCompletedElsewhere(bestTarget.NetworkName)
+            );
+            return;
+        }
+
+        if (
+            !_coordinator.TryGetMinigameDefinition(
+                _currentRecord.MinigameId,
+                out LaptopMinigameDefinition definition
+            )
+        )
+        {
+            PresentOnce(
+                $"missing-definition:{_currentRecord.MinigameId}",
+                () =>
+                    screenUI?.ShowMissingDefinition(
+                        bestTarget.NetworkName,
+                        _currentRecord.MinigameId
+                    )
+            );
+            return;
+        }
+
+        LaptopMinigameContext context = new(
+            bestTarget.NetworkId,
+            bestTarget.NetworkName,
+            _currentRecord.MinigameId,
+            definition.DisplayName,
+            _currentRecord.Difficulty,
+            _currentRecord.Seed
+        );
+
+        string presentationKey =
+            $"minigame:{bestTarget.NetworkId}:{_currentRecord.MinigameId}:"
+            + $"{_currentRecord.Difficulty}:{_currentRecord.Seed}";
+
+        if (_lastPresentationKey == presentationKey)
+            return;
+
+        _lastPresentationKey = presentationKey;
+
+        if (screenUI == null)
+        {
+            Debug.LogError(
+                "[PlayerLaptopHacker] No LaptopScreenUI is assigned or present beneath the player.",
+                this
+            );
+            return;
+        }
+
+        bool started = screenUI.TryStartMinigame(
+            definition,
+            context,
+            OnLocalMinigameCompleted,
+            OnLocalMinigameFailed
+        );
+
+        _targetLockedByMinigame = started;
+
+        if (started)
+        {
+            screenUI.SetNavigation(_navigationInput);
+
+            if (_primaryHeld)
+                screenUI.PrimaryPressed();
+        }
     }
 
     private RouterBox FindBestHackableRouter()
     {
-        if (!CanUseSurvivorTools() || !IsLaptopUsable)
+        if (!CanUseSurvivorTools() || !IsLaptopUsable || _coordinator == null)
             return null;
 
         RouterBox best = null;
         float bestStrength = -1f;
-
-        Vector3 fromPos = SignalOriginPosition;
+        Vector3 fromPosition = SignalOriginPosition;
         var routers = RouterRegistry.Routers;
 
         for (int i = 0; i < routers.Count; i++)
@@ -198,10 +354,13 @@ public class PlayerLaptopHacker : NetworkBehaviour
             if (router == null)
                 continue;
 
-            if (RouterHackState.IsCompleted(router.NetworkName))
+            if (!_coordinator.TryGetRecord(router.NetworkId, out RouterHackRecord record))
                 continue;
 
-            float strength = router.GetStrength01(fromPos);
+            if (record.Completed)
+                continue;
+
+            float strength = router.GetStrength01(fromPosition);
 
             if (!HasRequiredBars(strength))
                 continue;
@@ -216,56 +375,136 @@ public class PlayerLaptopHacker : NetworkBehaviour
         return best;
     }
 
+    private bool IsCurrentTargetStillEligible()
+    {
+        if (_currentTarget == null || _coordinator == null)
+            return false;
+
+        if (!_coordinator.TryGetRecord(_currentTarget.NetworkId, out RouterHackRecord record))
+            return false;
+
+        if (record.Completed)
+            return false;
+
+        float strength = _currentTarget.GetStrength01(SignalOriginPosition);
+        return HasRequiredBars(strength);
+    }
+
     private bool HasRequiredBars(float strength01)
     {
-        int bars = Mathf.RoundToInt(Mathf.Clamp01(strength01) * barCount);
-        bars = Mathf.Clamp(bars, 0, barCount);
-
-        return bars >= requiredBars;
+        int safeBarCount = Mathf.Max(1, barCount);
+        int bars = Mathf.RoundToInt(Mathf.Clamp01(strength01) * safeBarCount);
+        bars = Mathf.Clamp(bars, 0, safeBarCount);
+        int safeRequiredBars = Mathf.Clamp(requiredBars, 0, safeBarCount);
+        return bars >= safeRequiredBars;
     }
 
-    private void ResetHackProgress()
+    private void OnLocalMinigameCompleted()
     {
-        _hackProgress = 0f;
-        _mustReleaseHack = false;
+        if (!IsOwner)
+            return;
+
+        string displayName = CurrentTargetName;
+        _targetLockedByMinigame = false;
+        _showingTerminalResult = true;
+        ClearLocalInputState();
+        screenUI?.ShowSuccess(displayName);
+
+        Debug.Log(
+            $"[PlayerLaptopHacker] Local minigame completed for '{CurrentNetworkId}'. "
+                + "Server completion will be connected in the authoritative stage.",
+            this
+        );
     }
 
-    [ServerRpc]
-    private void RequestCompleteHackServerRpc(FixedString128Bytes networkName)
+    private void OnLocalMinigameFailed()
     {
-        string name = networkName.ToString();
-
-        if (!CanUseSurvivorTools())
+        if (!IsOwner)
             return;
 
-        if (RouterHackState.IsCompleted(name))
+        string displayName = CurrentTargetName;
+        _targetLockedByMinigame = false;
+        _showingTerminalResult = true;
+        ClearLocalInputState();
+        screenUI?.ShowFailure(displayName);
+
+        Debug.Log(
+            $"[PlayerLaptopHacker] Local minigame failed for '{CurrentNetworkId}'. "
+                + "The networked alarm will be connected in the audio/validation stage.",
+            this
+        );
+    }
+
+    private void AbortLocalMinigame(bool clearTarget)
+    {
+        ClearLocalInputState();
+        screenUI?.AbortActiveMinigame();
+        _targetLockedByMinigame = false;
+
+        if (clearTarget)
+            ClearCurrentTarget();
+    }
+
+    private void ClearCurrentTarget()
+    {
+        _currentTarget = null;
+        _currentRecord = default;
+        _targetLockedByMinigame = false;
+    }
+
+    private void AttachCoordinatorIfNeeded()
+    {
+        RouterHackCoordinator instance = RouterHackCoordinator.Instance;
+
+        if (_coordinator == instance)
             return;
 
-        RouterBox router = FindRouterByName(name);
+        DetachCoordinator();
+        _coordinator = instance;
 
-        if (router == null)
+        if (_coordinator != null)
+            _coordinator.RecordsChanged += OnCoordinatorRecordsChanged;
+
+        _targetRefreshTimer = 0f;
+        _lastPresentationKey = string.Empty;
+    }
+
+    private void DetachCoordinator()
+    {
+        if (_coordinator != null)
+            _coordinator.RecordsChanged -= OnCoordinatorRecordsChanged;
+
+        _coordinator = null;
+    }
+
+    private void OnCoordinatorRecordsChanged()
+    {
+        if (!IsOwner)
+            return;
+
+        _targetRefreshTimer = 0f;
+        _lastPresentationKey = string.Empty;
+
+        if (
+            _currentTarget != null
+            && _coordinator != null
+            && _coordinator.IsCompleted(_currentTarget.NetworkId)
+        )
         {
-            Debug.LogWarning($"[Hack] Router '{name}' not found on server.");
-            return;
+            string displayName = _currentTarget.NetworkName;
+            AbortLocalMinigame(clearTarget: true);
+            _showingTerminalResult = true;
+            screenUI?.ShowCompletedElsewhere(displayName);
         }
-
-        // Basic server validation.
-        float strength = router.GetStrength01(transform.position);
-
-        if (!HasRequiredBars(strength))
-        {
-            Debug.LogWarning($"[Hack] Client tried to hack '{name}' without enough signal.");
-            return;
-        }
-
-        RouterHackState.MarkCompleted(name);
-        MarkNetworkCompletedClientRpc(networkName);
     }
 
-    [ClientRpc]
-    private void MarkNetworkCompletedClientRpc(FixedString128Bytes networkName)
+    private void PresentOnce(string key, System.Action presentation)
     {
-        RouterHackState.MarkCompleted(networkName.ToString());
+        if (_lastPresentationKey == key)
+            return;
+
+        _lastPresentationKey = key;
+        presentation?.Invoke();
     }
 
     private bool CanUseSurvivorTools()
@@ -279,46 +518,5 @@ public class PlayerLaptopHacker : NetworkBehaviour
     private bool IsBadGuy()
     {
         return playerSetup != null && playerSetup.IsBadGuy.Value;
-    }
-
-    private RouterBox FindRouterByName(string networkName)
-    {
-        var routers = RouterRegistry.Routers;
-
-        for (int i = 0; i < routers.Count; i++)
-        {
-            RouterBox router = routers[i];
-
-            if (router == null)
-                continue;
-
-            if (router.NetworkName == networkName)
-                return router;
-        }
-
-        return null;
-    }
-
-    private void SyncCompletedNetworksToOwner()
-    {
-        var targetParams = new ClientRpcParams
-        {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new[] { OwnerClientId },
-            },
-        };
-
-        foreach (string completed in RouterHackState.CompletedNetworks)
-            SyncCompletedNetworkClientRpc(new FixedString128Bytes(completed), targetParams);
-    }
-
-    [ClientRpc]
-    private void SyncCompletedNetworkClientRpc(
-        FixedString128Bytes networkName,
-        ClientRpcParams clientRpcParams = default
-    )
-    {
-        RouterHackState.MarkCompleted(networkName.ToString());
     }
 }

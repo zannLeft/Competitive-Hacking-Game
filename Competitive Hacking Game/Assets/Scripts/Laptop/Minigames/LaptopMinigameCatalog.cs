@@ -90,8 +90,23 @@ public sealed class LaptopMinigameCatalog : ScriptableObject
             {
                 Debug.LogWarning(
                     $"[LaptopMinigameCatalog] Duplicate minigame ID "
-                    + $"{definition.MinigameId} in '{name}'. IDs must be unique.",
+                        + $"{definition.MinigameId} in '{name}'. IDs must be unique.",
                     this
+                );
+            }
+
+            GameObject prefab = definition.UiPrefab;
+
+            if (
+                prefab != null
+                && prefab.GetComponent<LaptopMinigameBase>() == null
+                && prefab.GetComponentInChildren<LaptopMinigameBase>(true) == null
+            )
+            {
+                Debug.LogWarning(
+                    $"[LaptopMinigameCatalog] UI prefab '{prefab.name}' for "
+                        + $"'{definition.DisplayName}' has no LaptopMinigameBase component.",
+                    prefab
                 );
             }
         }

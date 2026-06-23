@@ -2219,10 +2219,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerLaptopHacker
   ShowTopMostFoldoutHeaderGroup: 1
   sitAction: {fileID: 145536466847178049}
-  playerSetup: {fileID: 0}
-  lifeState: {fileID: 0}
+  playerSetup: {fileID: 7528082831520240939}
+  lifeState: {fileID: 4764926159289589612}
+  screenUI: {fileID: 4586780454097912121}
   rangeOrigin: {fileID: 0}
-  hackSeconds: 5
   barCount: 5
   requiredBars: 5
   requireLaptopFocus: 1
@@ -3308,6 +3308,17 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 914499233266613209, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
   m_PrefabInstance: {fileID: 3787313521619458811}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &4586780454097912121 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 804096018703408066, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}
+  m_PrefabInstance: {fileID: 3787313521619458811}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86a20e62dd1ffec498b7ddb5a5eba10f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LaptopHackUI
 --- !u!4 &6922054760681286898 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6097638280585344521, guid: eae1edb514e9c5246ac9e3b9eefb8e9a, type: 3}

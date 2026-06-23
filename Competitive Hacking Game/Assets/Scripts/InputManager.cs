@@ -27,6 +27,8 @@ public class InputManager : NetworkBehaviour
     private bool _gameplaySuppressed;
     private bool _spectatorInputEnabled;
     private bool _downedInputEnabled;
+    private bool _jumpMinigamePrimaryHeld;
+    private bool _hackMinigamePrimaryHeld;
 
     public bool GameplaySuppressed => _gameplaySuppressed;
     public bool SpectatorInputEnabled => _spectatorInputEnabled;
@@ -128,6 +130,13 @@ public class InputManager : NetworkBehaviour
     private bool IsSittingOrTransitioning()
     {
         return sit != null && sit.IsSittingOrTransitioning;
+    }
+
+    private bool CanRouteInputToLaptopMinigame()
+    {
+        return IsSittingOrTransitioning()
+            && laptopHacker != null
+            && laptopHacker.HasActiveMinigame;
     }
 
     private bool IsBadGuy()
@@ -307,8 +316,37 @@ public class InputManager : NetworkBehaviour
         look?.SetPhoneAim(false);
         look?.SetAimHeld(false);
 
-        laptopHacker?.SetHackHeld(false);
+        ClearLaptopMinigameInputs();
         reviver?.SetReviveHeld(false);
+    }
+
+    private void ClearLaptopMinigameInputs()
+    {
+        _jumpMinigamePrimaryHeld = false;
+        _hackMinigamePrimaryHeld = false;
+        laptopHacker?.ClearLocalInputState();
+    }
+
+    private void PressLaptopPrimary(ref bool sourceHeld)
+    {
+        bool wasAnyPrimaryHeld =
+            _jumpMinigamePrimaryHeld || _hackMinigamePrimaryHeld;
+
+        sourceHeld = true;
+
+        if (!wasAnyPrimaryHeld)
+            laptopHacker?.PrimaryPressed();
+    }
+
+    private void ReleaseLaptopPrimary(ref bool sourceHeld)
+    {
+        if (!sourceHeld)
+            return;
+
+        sourceHeld = false;
+
+        if (!_jumpMinigamePrimaryHeld && !_hackMinigamePrimaryHeld)
+            laptopHacker?.PrimaryReleased();
     }
 
     private void ReapplyHeldInputsAfterUnblock()
@@ -335,6 +373,12 @@ public class InputManager : NetworkBehaviour
 
     private void OnJumpStarted(InputAction.CallbackContext ctx)
     {
+        if (CanRouteInputToLaptopMinigame())
+        {
+            PressLaptopPrimary(ref _jumpMinigamePrimaryHeld);
+            return;
+        }
+
         if (GameplayInputBlocked())
             return;
 
@@ -343,6 +387,12 @@ public class InputManager : NetworkBehaviour
 
     private void OnJumpCanceled(InputAction.CallbackContext ctx)
     {
+        if (_jumpMinigamePrimaryHeld)
+        {
+            ReleaseLaptopPrimary(ref _jumpMinigamePrimaryHeld);
+            return;
+        }
+
         motor.Jump(false);
     }
 
@@ -391,13 +441,14 @@ public class InputManager : NetworkBehaviour
             return;
         }
 
-        laptopHacker?.SetHackHeld(true);
+        if (CanRouteInputToLaptopMinigame())
+            PressLaptopPrimary(ref _hackMinigamePrimaryHeld);
     }
 
     private void OnHackCanceled(InputAction.CallbackContext ctx)
     {
         reviver?.SetReviveHeld(false);
-        laptopHacker?.SetHackHeld(false);
+        ReleaseLaptopPrimary(ref _hackMinigamePrimaryHeld);
     }
 
     void Update()
@@ -416,7 +467,7 @@ public class InputManager : NetworkBehaviour
             phone?.SetHolding(false);
             look?.SetPhoneAim(false);
             look?.SetAimHeld(false);
-            laptopHacker?.SetHackHeld(false);
+            ClearLaptopMinigameInputs();
             reviver?.SetReviveHeld(false);
         }
 
@@ -429,8 +480,21 @@ public class InputManager : NetworkBehaviour
 
         _wasMovementBlocked = blocked;
 
+        Vector2 movementInput = onFoot.Movement.ReadValue<Vector2>();
+
         if (!blocked)
-            motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
+        {
+            laptopHacker?.SetNavigationInput(Vector2.zero);
+            motor.ProcessMove(movementInput);
+        }
+        else if (CanRouteInputToLaptopMinigame())
+        {
+            laptopHacker.SetNavigationInput(movementInput);
+        }
+        else
+        {
+            laptopHacker?.SetNavigationInput(Vector2.zero);
+        }
 
         look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
     }
