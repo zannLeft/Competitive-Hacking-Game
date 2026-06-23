@@ -17,6 +17,7 @@ public class MatchFlowManager : MonoBehaviour
     private NetworkSessionManager _session;
     private RoundRoleManager _roles;
     private RoundResetManager _roundReset;
+    private Coroutine _interiorInitializationRoutine;
 
     public void Configure(string interiorSceneName, string lobbySpawnTag, string interiorSpawnTag)
     {
@@ -108,7 +109,56 @@ public class MatchFlowManager : MonoBehaviour
 
         NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= OnInteriorLoadCompleted;
 
+        if (_interiorInitializationRoutine != null)
+            StopCoroutine(_interiorInitializationRoutine);
+
+        _interiorInitializationRoutine = StartCoroutine(
+            InitializeInteriorThenTeleport()
+        );
+    }
+
+    private IEnumerator InitializeInteriorThenTeleport()
+    {
+        // Let in-scene RouterBox and NetworkObject instances finish enabling/spawning.
+        yield return null;
+
+        const float coordinatorTimeoutSeconds = 5f;
+        float remaining = coordinatorTimeoutSeconds;
+        RouterHackCoordinator coordinator = null;
+
+        while (remaining > 0f)
+        {
+            coordinator = RouterHackCoordinator.Instance;
+
+            if (coordinator == null)
+            {
+                coordinator = FindAnyObjectByType<RouterHackCoordinator>(
+                    FindObjectsInactive.Include
+                );
+            }
+
+            if (coordinator != null && coordinator.IsSpawned)
+                break;
+
+            remaining -= Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (coordinator == null || !coordinator.IsSpawned)
+        {
+            Debug.LogError(
+                "[MatchFlow] No spawned RouterHackCoordinator was found in the interior scene."
+            );
+        }
+        else if (!coordinator.ServerInitializeAssignments())
+        {
+            Debug.LogError(
+                "[MatchFlow] Router minigame assignments could not be initialized."
+            );
+        }
+
         TeleportAllClients(_interiorSpawnTag);
+        _interiorInitializationRoutine = null;
     }
 
     public void EndMatchAsHost()

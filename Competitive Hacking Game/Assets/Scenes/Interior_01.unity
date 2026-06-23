@@ -2271,6 +2271,10 @@ PrefabInstance:
       value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 8624560201978889925, guid: df710ea6c178237488992bdd1a68503e, type: 3}
+      propertyPath: networkId
+      value: network_02
+      objectReference: {fileID: 0}
+    - target: {fileID: 8624560201978889925, guid: df710ea6c178237488992bdd1a68503e, type: 3}
       propertyPath: networkName
       value: Network 2
       objectReference: {fileID: 0}
@@ -2466,6 +2470,10 @@ PrefabInstance:
       propertyPath: m_StaticEditorFlags
       value: 2147483647
       objectReference: {fileID: 0}
+    - target: {fileID: 8624560201978889925, guid: df710ea6c178237488992bdd1a68503e, type: 3}
+      propertyPath: networkId
+      value: network_01
+      objectReference: {fileID: 0}
     - target: {fileID: 8709141501051514079, guid: df710ea6c178237488992bdd1a68503e, type: 3}
       propertyPath: m_StaticEditorFlags
       value: 2147483647
@@ -2602,6 +2610,79 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+--- !u!1 &2106987048
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2106987050}
+  - component: {fileID: 2106987049}
+  - component: {fileID: 2106987051}
+  m_Layer: 0
+  m_Name: RouterHackCoordinator
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2106987049
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2106987048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 4103159344
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!4 &2106987050
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2106987048}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2106987051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2106987048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3806f146e9b0e8342b6d8399f1437695, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RouterHackCoordinator
+  ShowTopMostFoldoutHeaderGroup: 1
+  minigameCatalog: {fileID: 11400000, guid: 98e933238d8c4de4da2dae45cfe32121, type: 2}
+  logAssignments: 1
 --- !u!1 &2122511865
 GameObject:
   m_ObjectHideFlags: 0
@@ -2784,6 +2865,10 @@ PrefabInstance:
     - target: {fileID: 6826140519563119110, guid: df710ea6c178237488992bdd1a68503e, type: 3}
       propertyPath: m_StaticEditorFlags
       value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 8624560201978889925, guid: df710ea6c178237488992bdd1a68503e, type: 3}
+      propertyPath: networkId
+      value: network_03
       objectReference: {fileID: 0}
     - target: {fileID: 8624560201978889925, guid: df710ea6c178237488992bdd1a68503e, type: 3}
       propertyPath: networkName
@@ -4182,6 +4267,7 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 1245916945}
+  - {fileID: 2106987050}
   - {fileID: 5519857202882440226}
   - {fileID: 1872159446}
   - {fileID: 1841156892}

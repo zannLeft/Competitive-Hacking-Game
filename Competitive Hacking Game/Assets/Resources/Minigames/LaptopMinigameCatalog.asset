@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c393f6095192b244680ea8582a1a123b, type: 3}
+  m_Name: LaptopMinigameCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::LaptopMinigameCatalog
+  minigames:
+  - minigameId: 1
+    displayName: Firewall Runner
+    uiPrefab: {fileID: 0}
+    selectionWeight: 1
+    allowEasy: 1
+    allowHard: 1
+    hardChance: 0.35
+    minimumEasyCompletionSeconds: 8
+    minimumHardCompletionSeconds: 12
