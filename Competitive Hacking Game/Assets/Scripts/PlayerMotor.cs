@@ -111,6 +111,33 @@ public class PlayerMotor : NetworkBehaviour
     [SerializeField]
     private float standCheckEpsilon = 0.01f;
 
+    // Camera wall protection is intentionally fixed in code rather than exposed as a
+    // large group of tuning fields. It uses the same environment mask as the stand
+    // obstruction check and automatically accounts for the camera's current local
+    // position, pitch, yaw, near clip plane, aspect ratio, and FOV (including sprint FOV).
+    private const float CameraWallPadding = 0.0125f;
+    private const float CameraWallGroundStickDistance = 0.002f;
+    private const float CameraWallMaxCorrectionPerPass = 0.5f;
+    private const int CameraWallResolvePasses = 4;
+    private const float CameraWallMaxNormalY = 0.65f;
+
+    private readonly RaycastHit[] cameraWallHits = new RaycastHit[16];
+
+    // Full near-plane coverage. The corners are especially important while sprinting,
+    // because the wider FOV makes them extend farther sideways into nearby walls.
+    private static readonly Vector2[] CameraNearPlaneSamples =
+    {
+        new Vector2(0f, 0f),
+        new Vector2(-1f, -1f),
+        new Vector2(1f, -1f),
+        new Vector2(-1f, 1f),
+        new Vector2(1f, 1f),
+        new Vector2(0f, -1f),
+        new Vector2(0f, 1f),
+        new Vector2(-1f, 0f),
+        new Vector2(1f, 0f),
+    };
+
     [Header("Airborne Behavior")]
     [SerializeField]
     private float fallLeaveGroundVy = 0.05f;
@@ -133,6 +160,11 @@ public class PlayerMotor : NetworkBehaviour
     private bool useMirror;
 
     private float lastAirbornePlanarSpeed = 0f;
+
+    // CharacterController.velocity reflects the most recent Move call. Camera wall
+    // correction runs later in the frame, so keep gameplay velocity separately to
+    // avoid that correction affecting slide cancellation, landing, or animations.
+    private Vector3 lastGameplayControllerVelocity = Vector3.zero;
 
     public bool IsSprintHeld => sprintButtonHeld;
     public bool IsCrouchHeld => crouchButtonHeld;
@@ -229,6 +261,7 @@ public class PlayerMotor : NetworkBehaviour
         currentSpeedVertical = 0f;
         targetSpeed = 0f;
         lastAirbornePlanarSpeed = 0f;
+        lastGameplayControllerVelocity = Vector3.zero;
 
         sprinting = false;
         crouching = false;
@@ -489,7 +522,7 @@ public class PlayerMotor : NetworkBehaviour
 
     private void BecameAirborne()
     {
-        float vy = controller.velocity.y;
+        float vy = lastGameplayControllerVelocity.y;
         bool falling = vy <= fallLeaveGroundVy;
 
         if (falling && crouching && !sliding)
@@ -578,9 +611,13 @@ public class PlayerMotor : NetworkBehaviour
             return;
         }
 
-        Vector3 planarVel = new Vector3(controller.velocity.x, 0, controller.velocity.z);
+        Vector3 planarVel = new Vector3(
+            lastGameplayControllerVelocity.x,
+            0f,
+            lastGameplayControllerVelocity.z
+        );
         currentSpeed = planarVel.magnitude;
-        currentSpeedVertical = controller.velocity.y;
+        currentSpeedVertical = lastGameplayControllerVelocity.y;
 
         if (!isGrounded)
             lastAirbornePlanarSpeed = Mathf.Max(lastAirbornePlanarSpeed * 0.9f, currentSpeed);
@@ -625,11 +662,14 @@ public class PlayerMotor : NetworkBehaviour
 
         Vector3 move = moveDirection * speed + playerVelocity;
         controller.Move(move * Time.deltaTime);
+        lastGameplayControllerVelocity = controller.velocity;
 
         if (isGrounded && playerVelocity.y < 0)
             playerVelocity.y = -2f;
 
-        Vector3 localVelocity = transform.InverseTransformDirection(controller.velocity);
+        Vector3 localVelocity = transform.InverseTransformDirection(
+            lastGameplayControllerVelocity
+        );
 
         float animX = localVelocity.x;
         float animZ = localVelocity.z;
@@ -645,9 +685,198 @@ public class PlayerMotor : NetworkBehaviour
         float dampTime = 0.08f;
         animator.SetFloat(xVelHash, animX, dampTime, Time.deltaTime);
         animator.SetFloat(zVelHash, animZ, dampTime, Time.deltaTime);
-        animator.SetFloat(yVelHash, controller.velocity.y);
+        animator.SetFloat(yVelHash, lastGameplayControllerVelocity.y);
     }
     #endregion
+
+    public void ResolveCameraWallPenetration(Camera playerCamera)
+    {
+        CacheComponents();
+
+        if (
+            !IsOwner
+            || playerCamera == null
+            || controller == null
+            || !controller.enabled
+            || !controllerCollisionEnabled
+            || sittingCollider
+            || standObstructionMask.value == 0
+        )
+        {
+            return;
+        }
+
+        // More than one pass lets the controller resolve against two walls in a corner.
+        for (int pass = 0; pass < CameraWallResolvePasses; pass++)
+        {
+            if (!TryGetCameraWallCorrection(playerCamera, out Vector3 correction))
+                break;
+
+            correction = Vector3.ClampMagnitude(
+                correction,
+                CameraWallMaxCorrectionPerPass
+            );
+
+            bool keepGrounded = isGrounded || controller.isGrounded;
+            Vector3 controllerMove = correction;
+
+            if (keepGrounded)
+                controllerMove += Vector3.down * CameraWallGroundStickDistance;
+
+            controller.Move(controllerMove);
+        }
+    }
+
+    private bool TryGetCameraWallCorrection(Camera playerCamera, out Vector3 correction)
+    {
+        correction = Vector3.zero;
+
+        Transform cameraTransform = playerCamera.transform;
+
+        // IMPORTANT: cast from the CharacterController's protected center axis, not
+        // from the camera. During sprint the camera moves farther forward; if the camera
+        // itself has already crossed a wall, a ray starting at the camera can begin
+        // inside that wall and miss it completely. The controller axis remains safely
+        // behind the wall, so these casts catch both the camera position and near plane.
+        Vector3 safeOrigin = transform.TransformPoint(controller.center);
+        Bounds controllerBounds = controller.bounds;
+        float verticalInset = Mathf.Min(0.05f, controller.radius * 0.25f);
+        safeOrigin.y = Mathf.Clamp(
+            cameraTransform.position.y,
+            controllerBounds.min.y + verticalInset,
+            controllerBounds.max.y - verticalInset
+        );
+
+        float bestCorrectionSqr = 0f;
+
+        // Protect the physical camera position too. This is what makes the guard remain
+        // reliable when the sprint pose pushes the camera farther forward than normal.
+        EvaluateCameraProtectionPoint(
+            safeOrigin,
+            cameraTransform.position,
+            ref correction,
+            ref bestCorrectionSqr
+        );
+
+        float nearDistance = Mathf.Max(0.001f, playerCamera.nearClipPlane);
+
+        for (int i = 0; i < CameraNearPlaneSamples.Length; i++)
+        {
+            Vector2 sample = CameraNearPlaneSamples[i];
+            float viewportX = 0.5f + sample.x * 0.5f;
+            float viewportY = 0.5f + sample.y * 0.5f;
+
+            Vector3 desiredPoint = playerCamera.ViewportToWorldPoint(
+                new Vector3(viewportX, viewportY, nearDistance)
+            );
+
+            EvaluateCameraProtectionPoint(
+                safeOrigin,
+                desiredPoint,
+                ref correction,
+                ref bestCorrectionSqr
+            );
+        }
+
+        return bestCorrectionSqr > 0.0000001f;
+    }
+
+    private void EvaluateCameraProtectionPoint(
+        Vector3 safeOrigin,
+        Vector3 desiredPoint,
+        ref Vector3 bestCorrection,
+        ref float bestCorrectionSqr
+    )
+    {
+        Vector3 ray = desiredPoint - safeOrigin;
+        float desiredDistance = ray.magnitude;
+
+        if (desiredDistance <= 0.0001f)
+            return;
+
+        Vector3 direction = ray / desiredDistance;
+        float castDistance = desiredDistance + CameraWallPadding * 2f;
+
+        if (!TryGetNearestCameraWallHit(safeOrigin, direction, castDistance, out RaycastHit hit))
+            return;
+
+        // This guard is for walls. Floors and ceilings are already handled by the motor
+        // and should not shove the player sideways.
+        if (Mathf.Abs(hit.normal.y) > CameraWallMaxNormalY)
+            return;
+
+        if (Vector3.Dot(direction, hit.normal) >= -0.0001f)
+            return;
+
+        Vector3 planarNormal = Vector3.ProjectOnPlane(hit.normal, Vector3.up);
+        float planarNormalMagnitude = planarNormal.magnitude;
+
+        if (planarNormalMagnitude <= 0.0001f)
+            return;
+
+        // Negative signed clearance means the protected point has crossed behind the
+        // wall surface. Keep a tiny positive clearance so the near plane never flickers
+        // through at high sprint speed or during FOV interpolation.
+        float signedClearance = Vector3.Dot(desiredPoint - hit.point, hit.normal);
+        float requiredNormalClearance = CameraWallPadding - signedClearance;
+
+        if (requiredNormalClearance <= 0f)
+            return;
+
+        Vector3 planarDirection = planarNormal / planarNormalMagnitude;
+        float requiredPlanarDistance = requiredNormalClearance / planarNormalMagnitude;
+        Vector3 candidate = planarDirection * requiredPlanarDistance;
+
+        if (candidate.sqrMagnitude > bestCorrectionSqr)
+        {
+            bestCorrection = candidate;
+            bestCorrectionSqr = candidate.sqrMagnitude;
+        }
+    }
+
+    private bool TryGetNearestCameraWallHit(
+        Vector3 origin,
+        Vector3 direction,
+        float distance,
+        out RaycastHit nearestHit
+    )
+    {
+        nearestHit = default;
+
+        int hitCount = Physics.RaycastNonAlloc(
+            origin,
+            direction,
+            cameraWallHits,
+            distance,
+            standObstructionMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        float nearestDistance = float.PositiveInfinity;
+        bool found = false;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = cameraWallHits[i];
+            Collider hitCollider = hit.collider;
+
+            if (hitCollider == null)
+                continue;
+
+            Transform hitTransform = hitCollider.transform;
+            if (hitTransform == transform || hitTransform.IsChildOf(transform))
+                continue;
+
+            if (hit.distance >= nearestDistance)
+                continue;
+
+            nearestDistance = hit.distance;
+            nearestHit = hit;
+            found = true;
+        }
+
+        return found;
+    }
 
     private bool CanStand()
     {
@@ -725,7 +954,11 @@ public class PlayerMotor : NetworkBehaviour
 
     public void Land()
     {
-        float planarNow = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        float planarNow = new Vector3(
+            lastGameplayControllerVelocity.x,
+            0f,
+            lastGameplayControllerVelocity.z
+        ).magnitude;
         float effectiveSpeed = Mathf.Max(planarNow, lastAirbornePlanarSpeed);
         lastAirbornePlanarSpeed = 0f;
 
@@ -886,7 +1119,11 @@ public class PlayerMotor : NetworkBehaviour
         sliding = true;
         animator.SetBool("Sliding", true);
 
-        float planarNow = new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude;
+        float planarNow = new Vector3(
+            lastGameplayControllerVelocity.x,
+            0f,
+            lastGameplayControllerVelocity.z
+        ).magnitude;
         slideSpeed = Mathf.Max(8f, planarNow, lastAirbornePlanarSpeed);
 
         sprinting = false;

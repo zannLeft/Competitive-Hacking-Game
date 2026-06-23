@@ -451,6 +451,14 @@ public class PlayerLook : NetworkBehaviour
         _wasLaptopFocus = laptopFocus;
     }
 
+    private void LateUpdate()
+    {
+        if (!IsOwner || cam == null || motor == null)
+            return;
+
+        motor.ResolveCameraWallPenetration(cam);
+    }
+
     public void ProcessLook(Vector2 input)
     {
         if (!IsOwner)

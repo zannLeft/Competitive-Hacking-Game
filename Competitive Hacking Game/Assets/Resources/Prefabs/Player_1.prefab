@@ -1723,7 +1723,7 @@ CharacterController:
   m_Radius: 0.26
   m_SlopeLimit: 45
   m_StepOffset: 0.3
-  m_SkinWidth: 0.08
+  m_SkinWidth: 0.026
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0.92, z: 0}
 --- !u!114 &4849575058270281992
@@ -1842,8 +1842,8 @@ MonoBehaviour:
   jumpHeight: 2
   crouchHeight: 0.5
   standHeight: 1.685
-  crouchCenterY: 0.4375
-  standCenterY: 0.92
+  crouchCenterY: 0.27
+  standCenterY: 0.87
   slideSpeed: 9
   slideSpeedDecay: 6.3
   minSlideSpeed: 2
