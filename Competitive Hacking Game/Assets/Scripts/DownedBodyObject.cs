@@ -19,6 +19,7 @@ public class DownedBodyObject : NetworkBehaviour
     private SkinnedMeshRenderer bodyRenderer;
 
     [Header("Local Owner Visibility")]
+    [Tooltip("When enabled, the local owner's ragdoll head uses the configured hidden shadow mode only while the body is Downed. Dead bodies always use the normal visible head mode.")]
     [SerializeField]
     private bool hideHeadForDownedOwner = true;
 
@@ -233,6 +234,7 @@ public class DownedBodyObject : NetworkBehaviour
         ShirtIndex.OnValueChanged += HandleAppearanceChanged;
         IsBadGuyBody.OnValueChanged += HandleAppearanceChanged;
         DownedPlayerClientId.OnValueChanged += HandleDownedPlayerClientIdChanged;
+        BodyState.OnValueChanged += HandleBodyStateChanged;
         CarriedFlashlightOn.OnValueChanged += HandleCarriedFlashlightChanged;
 
         CacheOriginalCarriedFlashlightLightCullingMaskIfNeeded();
@@ -249,6 +251,7 @@ public class DownedBodyObject : NetworkBehaviour
         ShirtIndex.OnValueChanged -= HandleAppearanceChanged;
         IsBadGuyBody.OnValueChanged -= HandleAppearanceChanged;
         DownedPlayerClientId.OnValueChanged -= HandleDownedPlayerClientIdChanged;
+        BodyState.OnValueChanged -= HandleBodyStateChanged;
         CarriedFlashlightOn.OnValueChanged -= HandleCarriedFlashlightChanged;
 
         UnregisterBody(this);
@@ -277,6 +280,14 @@ public class DownedBodyObject : NetworkBehaviour
         ApplyCarriedFlashlightVisuals();
     }
 
+    private void HandleBodyStateChanged(
+        PlayerLifeStateType previousValue,
+        PlayerLifeStateType newValue
+    )
+    {
+        ApplyLocalHeadVisibility();
+    }
+
     private void ApplyLocalHeadVisibility()
     {
         CacheRendererReferences();
@@ -284,12 +295,14 @@ public class DownedBodyObject : NetworkBehaviour
         if (headRenderer == null)
             return;
 
-        bool isLocalDownedOwner = IsLocalDownedOwner();
+        bool shouldHideForLocalDownedOwner =
+            hideHeadForDownedOwner
+            && IsLocalDownedOwner()
+            && BodyState.Value == PlayerLifeStateType.Downed;
 
-        headRenderer.shadowCastingMode =
-            hideHeadForDownedOwner && isLocalDownedOwner
-                ? localOwnerHeadShadowMode
-                : remoteHeadShadowMode;
+        headRenderer.shadowCastingMode = shouldHideForLocalDownedOwner
+            ? localOwnerHeadShadowMode
+            : remoteHeadShadowMode;
     }
 
     private bool IsLocalDownedOwner()
