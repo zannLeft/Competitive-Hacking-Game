@@ -5,15 +5,29 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
+[DefaultExecutionOrder(100)]
 [DisallowMultipleComponent]
 public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettable
 {
+    private sealed class SpectatorTarget
+    {
+        public ulong ClientId;
+        public PlayerSetup PlayerSetup;
+        public PlayerLifeState LifeState;
+    }
+
     [Header("References")]
+    [SerializeField]
+    private PlayerLifeState lifeState;
+
     [SerializeField]
     private PlayerLook playerLook;
 
     [SerializeField]
     private InputManager inputManager;
+
+    [SerializeField]
+    private PlayerDownedCameraController downedCameraController;
 
     [SerializeField]
     private Camera spectatorCamera;
@@ -52,19 +66,6 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     [SerializeField]
     private string spectatorControlsTextName = "SpectatorControlsText";
 
-    [Header("Testing")]
-    [Tooltip("Temporary local test toggle. Later the knockdown system should call EnterSpectatorModeForKnockdown().")]
-    [SerializeField]
-    private bool enableTestToggle = true;
-
-    [Tooltip("Temporary: lets one-player testing spectate yourself. Keep true until the real knockdown flow exists.")]
-    [SerializeField]
-    private bool includeSelfForTesting = true;
-
-    [Tooltip("Temporary: lets test mode target bad guys too. Turn this off later.")]
-    [SerializeField]
-    private bool includeBadGuysForTesting = true;
-
     [Header("Orbit")]
     [SerializeField]
     private float orbitDistance = 3.25f;
@@ -78,6 +79,20 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     [Tooltip("Only the anchor Y is smoothed. X/Z follow instantly so switching and following feel tight.")]
     [SerializeField]
     private float anchorVerticalSmoothTime = 0.12f;
+
+    [Header("Body Targets")]
+    [Tooltip("Uses the body's hips-following ReviveAnchor instead of the head-following CameraAnchor. This keeps corpse spectating stable while the ragdoll settles.")]
+    [SerializeField]
+    private bool useReviveAnchorForBodies = true;
+
+    [Tooltip("World-space height added to the selected body anchor so the orbit centers around the torso rather than the floor/hips.")]
+    [SerializeField]
+    private float bodyAnchorUpOffset = 0.35f;
+
+    [Tooltip("Briefly keep the previous anchor while a body despawns or a revived player becomes Alive, avoiding a one-frame target jump.")]
+    [Min(0f)]
+    [SerializeField]
+    private float missingTargetGraceSeconds = 0.35f;
 
     [Header("Camera Collision")]
     [Tooltip("Prevents the spectator camera from clipping through walls/solid level geometry.")]
@@ -113,37 +128,47 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     [SerializeField]
     private float fallbackMouseSmoothingTime = 0.05f;
 
-    private readonly List<PlayerSetup> _targets = new List<PlayerSetup>();
+    private readonly List<SpectatorTarget> targets = new List<SpectatorTarget>();
 
-    private PlayerSetup _currentTarget;
-    private Transform _originalCameraParent;
-    private Vector3 _originalCameraLocalPosition;
-    private Quaternion _originalCameraLocalRotation;
-    private float _originalCameraFOV;
+    private SpectatorTarget currentTarget;
 
-    private bool _isSpectating;
-    private bool _activeIncludeSelf;
-    private bool _activeIncludeBadGuys;
+    private Transform originalCameraParent;
+    private Vector3 originalCameraLocalPosition;
+    private Quaternion originalCameraLocalRotation;
+    private Vector3 originalCameraLocalScale;
+    private float originalCameraFOV;
+    private bool hasSavedCameraState;
 
-    private float _orbitYaw;
-    private float _orbitPitch;
-    private Vector2 _smoothedLookDelta;
+    private bool isSpectating;
+    private bool activeIncludeSelf;
+    private bool activeIncludeBadGuys;
+    private bool pendingOwnerStateRefresh;
 
-    private Vector3 _smoothedAnchor;
-    private float _anchorYVelocity;
+    private float orbitYaw;
+    private float orbitPitch;
+    private Vector2 smoothedLookDelta;
 
-    private bool _hasCachedUiState;
-    private bool _gameUIWasActive;
-    private bool _spectatorUIWasActive;
-    private bool _subscribedToInputManager;
+    private Vector3 smoothedAnchor;
+    private float anchorYVelocity;
+    private bool hasAnchor;
+    private float currentTargetMissingSince = -1f;
 
-    public bool IsSpectating => _isSpectating;
-    public PlayerSetup CurrentTarget => _currentTarget;
+    private bool hasCachedUiState;
+    private bool gameUIWasActive;
+    private bool spectatorUIWasActive;
+    private bool subscribedToInputManager;
+    private bool subscribedToLifeState;
+
+    private ulong lastUiTargetClientId = ulong.MaxValue;
+    private PlayerLifeStateType lastUiTargetState;
+    private bool hadUiTarget;
+
+    public bool IsSpectating => isSpectating;
+    public PlayerSetup CurrentTarget => currentTarget != null ? currentTarget.PlayerSetup : null;
 
     private void Reset()
     {
-        playerLook = GetComponent<PlayerLook>();
-        inputManager = GetComponent<InputManager>();
+        CacheReferences();
     }
 
     private void Awake()
@@ -151,71 +176,147 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         CacheReferences();
     }
 
+    private void OnEnable()
+    {
+        if (IsSpawned && IsOwner)
+            pendingOwnerStateRefresh = true;
+    }
+
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
         CacheReferences();
 
-        if (IsOwner)
-            SubscribeToInputManager();
+        if (!IsOwner)
+            return;
+
+        SubscribeToInputManager();
+        SubscribeToLifeState();
+        pendingOwnerStateRefresh = true;
     }
 
-    private void Update()
+    private void LateUpdate()
     {
         if (!IsOwner)
             return;
 
-        Keyboard keyboard = Keyboard.current;
+        if (pendingOwnerStateRefresh)
+            RefreshOwnerSpectatorState();
 
-        if (enableTestToggle && keyboard != null && keyboard.f6Key.wasPressedThisFrame)
-        {
-            if (_isSpectating)
-                ExitSpectatorMode();
-            else
-                EnterSpectatorMode(OwnerClientId, includeSelfForTesting, includeBadGuysForTesting);
-        }
-
-        if (!_isSpectating)
+        if (!isSpectating)
             return;
 
         HandleOrbitLookInput();
         UpdateSpectatorCamera(snapAnchor: false);
+        RefreshSpectatorUiIfTargetChanged();
     }
 
-    public void EnterSpectatorModeForKnockdown()
-    {
-        EnterSpectatorMode(OwnerClientId, includeSelf: true, includeBadGuys: false);
-    }
-
-    public void EnterSpectatorMode(ulong preferredTargetClientId, bool includeSelf, bool includeBadGuys)
+    private void HandleOwnerLifeStateChanged(
+        PlayerLifeStateType previousState,
+        PlayerLifeStateType newState
+    )
     {
         if (!IsOwner)
             return;
+
+        if (newState == PlayerLifeStateType.Dead)
+        {
+            pendingOwnerStateRefresh = true;
+            return;
+        }
+
+        pendingOwnerStateRefresh = false;
+
+        if (isSpectating)
+            ForceExitSpectatorMode();
+    }
+
+    private void RefreshOwnerSpectatorState()
+    {
+        pendingOwnerStateRefresh = false;
+        CacheReferences();
+
+        if (lifeState == null || !lifeState.ShouldBeInSpectatorMode)
+        {
+            if (isSpectating)
+                ForceExitSpectatorMode();
+
+            return;
+        }
+
+        if (!TryEnterSpectatorMode(OwnerClientId, includeSelf: true, includeBadGuys: false))
+            pendingOwnerStateRefresh = true;
+    }
+
+    public void EnterSpectatorModeForDeath()
+    {
+        if (!IsOwner)
+            return;
+
+        if (lifeState != null && !lifeState.IsDead)
+            return;
+
+        TryEnterSpectatorMode(OwnerClientId, includeSelf: true, includeBadGuys: false);
+    }
+
+    // Kept as a compatibility alias for any existing UnityEvent or older call site.
+    // It is deliberately guarded so Downed players cannot run both camera controllers.
+    public void EnterSpectatorModeForKnockdown()
+    {
+        EnterSpectatorModeForDeath();
+    }
+
+    public void EnterSpectatorMode(
+        ulong preferredTargetClientId,
+        bool includeSelf,
+        bool includeBadGuys
+    )
+    {
+        if (!IsOwner)
+            return;
+
+        if (lifeState != null && !lifeState.IsDead)
+            return;
+
+        TryEnterSpectatorMode(preferredTargetClientId, includeSelf, includeBadGuys);
+    }
+
+    private bool TryEnterSpectatorMode(
+        ulong preferredTargetClientId,
+        bool includeSelf,
+        bool includeBadGuys
+    )
+    {
+        if (!IsOwner)
+            return false;
 
         CacheReferences();
 
         if (spectatorCamera == null)
         {
             Debug.LogWarning("[PlayerSpectatorController] No camera found for spectator mode.");
-            return;
+            return false;
         }
 
-        _activeIncludeSelf = includeSelf;
-        _activeIncludeBadGuys = includeBadGuys;
+        activeIncludeSelf = includeSelf;
+        activeIncludeBadGuys = includeBadGuys;
 
-        if (!RebuildTargets())
-        {
-            Debug.LogWarning("[PlayerSpectatorController] No valid spectator targets found.");
-            return;
-        }
+        RebuildTargets();
 
-        if (_isSpectating)
+        if (isSpectating)
         {
-            SelectPreferredTargetOrFallback(preferredTargetClientId);
+            TrySelectPreferredTargetOrFallback(preferredTargetClientId, snapAnchor: true);
             SetSpectatorUiVisible(true);
             UpdateSpectatorCamera(snapAnchor: true);
-            return;
+            return true;
         }
+
+        if (!TrySelectPreferredTargetOrFallback(preferredTargetClientId, snapAnchor: true))
+            return false;
+
+        // The downed camera owns the same Camera while the player is Downed. Restore it
+        // completely before spectator mode records its own normal camera state.
+        downedCameraController?.PrepareForSpectatorMode();
 
         SaveCameraStateIfNeeded();
         InitializeOrbitFromCurrentCamera();
@@ -232,22 +333,27 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
         spectatorCamera.gameObject.SetActive(true);
         spectatorCamera.transform.SetParent(null, worldPositionStays: true);
-        spectatorCamera.fieldOfView = playerLook != null ? playerLook.DefaultFOV : spectatorCamera.fieldOfView;
+        spectatorCamera.fieldOfView =
+            playerLook != null ? playerLook.DefaultFOV : spectatorCamera.fieldOfView;
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        _isSpectating = true;
+        isSpectating = true;
 
         SetSpectatorUiVisible(true);
-
-        SelectPreferredTargetOrFallback(preferredTargetClientId);
         UpdateSpectatorCamera(snapAnchor: true);
+        return true;
     }
 
     public void ExitSpectatorMode()
     {
-        if (!IsOwner || !_isSpectating)
+        if (!IsOwner || !isSpectating)
+            return;
+
+        // Permanent death owns spectator mode. Normal gameplay may only be restored
+        // after the life state leaves Dead (normally during round reset).
+        if (lifeState != null && lifeState.IsDead)
             return;
 
         ForceExitSpectatorMode();
@@ -255,12 +361,13 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
     public void ResetForRound()
     {
-        if (IsOwner && _isSpectating)
+        if (IsOwner)
             ForceExitSpectatorMode();
     }
 
     public override void OnNetworkDespawn()
     {
+        UnsubscribeFromLifeState();
         UnsubscribeFromInputManager();
         ForceExitSpectatorMode();
         base.OnNetworkDespawn();
@@ -273,41 +380,78 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
     public override void OnDestroy()
     {
+        UnsubscribeFromLifeState();
+        UnsubscribeFromInputManager();
         ForceExitSpectatorMode();
         base.OnDestroy();
     }
 
     private void ForceExitSpectatorMode()
     {
-        if (!_isSpectating)
+        if (!isSpectating)
             return;
 
-        _isSpectating = false;
-        _currentTarget = null;
-        _targets.Clear();
-        _smoothedLookDelta = Vector2.zero;
-        _anchorYVelocity = 0f;
+        isSpectating = false;
+        currentTarget = null;
+        targets.Clear();
+        smoothedLookDelta = Vector2.zero;
+        anchorYVelocity = 0f;
+        hasAnchor = false;
+        currentTargetMissingSince = -1f;
+        hadUiTarget = false;
+        lastUiTargetClientId = ulong.MaxValue;
 
         RestoreSpectatorUiState();
         RestoreCameraState();
+
+        inputManager?.SetSpectatorInputEnabled(false);
+
+        bool restoreGameplay = lifeState == null || lifeState.IsAlive;
 
         if (playerLook != null)
         {
             playerLook.SetPhoneAim(false);
             playerLook.SetAimHeld(false);
-            playerLook.enabled = true;
+            playerLook.enabled = restoreGameplay;
         }
 
-        inputManager?.SetSpectatorInputEnabled(false);
-        inputManager?.ForceClearGameplaySuppression();
+        if (restoreGameplay)
+            inputManager?.ForceClearGameplaySuppression();
+        else
+            inputManager?.SetGameplaySuppressed(true);
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
 
+    private void SubscribeToLifeState()
+    {
+        if (subscribedToLifeState)
+            return;
+
+        CacheReferences();
+
+        if (lifeState == null)
+            return;
+
+        lifeState.OnLifeStateChanged += HandleOwnerLifeStateChanged;
+        subscribedToLifeState = true;
+    }
+
+    private void UnsubscribeFromLifeState()
+    {
+        if (!subscribedToLifeState)
+            return;
+
+        if (lifeState != null)
+            lifeState.OnLifeStateChanged -= HandleOwnerLifeStateChanged;
+
+        subscribedToLifeState = false;
+    }
+
     private void SubscribeToInputManager()
     {
-        if (_subscribedToInputManager)
+        if (subscribedToInputManager)
             return;
 
         CacheReferences();
@@ -317,12 +461,12 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
         inputManager.SpectatorPreviousTargetPressed += HandleSpectatorPreviousTargetPressed;
         inputManager.SpectatorNextTargetPressed += HandleSpectatorNextTargetPressed;
-        _subscribedToInputManager = true;
+        subscribedToInputManager = true;
     }
 
     private void UnsubscribeFromInputManager()
     {
-        if (!_subscribedToInputManager)
+        if (!subscribedToInputManager)
             return;
 
         if (inputManager != null)
@@ -331,44 +475,50 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
             inputManager.SpectatorNextTargetPressed -= HandleSpectatorNextTargetPressed;
         }
 
-        _subscribedToInputManager = false;
+        subscribedToInputManager = false;
     }
 
     private void HandleSpectatorPreviousTargetPressed()
     {
-        if (!_isSpectating)
-            return;
-
-        SwitchTarget(-1);
+        if (isSpectating)
+            SwitchTarget(-1);
     }
 
     private void HandleSpectatorNextTargetPressed()
     {
-        if (!_isSpectating)
-            return;
-
-        SwitchTarget(1);
+        if (isSpectating)
+            SwitchTarget(1);
     }
 
     private void RestoreCameraState()
     {
-        if (spectatorCamera == null)
+        if (spectatorCamera == null || !hasSavedCameraState)
             return;
 
-        spectatorCamera.transform.SetParent(_originalCameraParent, worldPositionStays: false);
-        spectatorCamera.transform.localPosition = _originalCameraLocalPosition;
-        spectatorCamera.transform.localRotation = _originalCameraLocalRotation;
-        spectatorCamera.fieldOfView = _originalCameraFOV;
+        Transform cameraTransform = spectatorCamera.transform;
+        cameraTransform.SetParent(originalCameraParent, worldPositionStays: false);
+        cameraTransform.localPosition = originalCameraLocalPosition;
+        cameraTransform.localRotation = originalCameraLocalRotation;
+        cameraTransform.localScale = originalCameraLocalScale;
+        spectatorCamera.fieldOfView = originalCameraFOV;
         spectatorCamera.gameObject.SetActive(true);
+
+        hasSavedCameraState = false;
     }
 
     private void CacheReferences()
     {
+        if (lifeState == null)
+            lifeState = GetComponent<PlayerLifeState>();
+
         if (playerLook == null)
             playerLook = GetComponent<PlayerLook>();
 
         if (inputManager == null)
             inputManager = GetComponent<InputManager>();
+
+        if (downedCameraController == null)
+            downedCameraController = GetComponent<PlayerDownedCameraController>();
 
         if (spectatorCamera == null && playerLook != null)
             spectatorCamera = playerLook.cam;
@@ -425,11 +575,11 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     {
         CacheUiReferences();
 
-        if (!_hasCachedUiState)
+        if (!hasCachedUiState)
         {
-            _gameUIWasActive = gameUIRoot != null && gameUIRoot.activeSelf;
-            _spectatorUIWasActive = spectatorUIRoot != null && spectatorUIRoot.activeSelf;
-            _hasCachedUiState = true;
+            gameUIWasActive = gameUIRoot != null && gameUIRoot.activeSelf;
+            spectatorUIWasActive = spectatorUIRoot != null && spectatorUIRoot.activeSelf;
+            hasCachedUiState = true;
         }
 
         if (gameUIRoot != null)
@@ -446,7 +596,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
     {
         CacheUiReferences();
 
-        if (!_hasCachedUiState)
+        if (!hasCachedUiState)
         {
             if (spectatorUIRoot != null)
                 spectatorUIRoot.SetActive(false);
@@ -455,12 +605,30 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         }
 
         if (gameUIRoot != null)
-            gameUIRoot.SetActive(_gameUIWasActive);
+            gameUIRoot.SetActive(gameUIWasActive);
 
         if (spectatorUIRoot != null)
-            spectatorUIRoot.SetActive(_spectatorUIWasActive);
+            spectatorUIRoot.SetActive(spectatorUIWasActive);
 
-        _hasCachedUiState = false;
+        hasCachedUiState = false;
+    }
+
+    private void RefreshSpectatorUiIfTargetChanged()
+    {
+        bool hasCurrentTarget = currentTarget != null && IsValidTarget(currentTarget);
+        ulong targetClientId = hasCurrentTarget ? currentTarget.ClientId : ulong.MaxValue;
+        PlayerLifeStateType targetState = hasCurrentTarget
+            ? currentTarget.LifeState.CurrentState
+            : PlayerLifeStateType.Alive;
+
+        if (
+            hadUiTarget == hasCurrentTarget
+            && lastUiTargetClientId == targetClientId
+            && (!hasCurrentTarget || lastUiTargetState == targetState)
+        )
+            return;
+
+        UpdateSpectatorUiText();
     }
 
     private void UpdateSpectatorUiText()
@@ -470,26 +638,55 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         if (spectatorTitleText != null)
             spectatorTitleText.text = "SPECTATOR MODE";
 
+        bool hasCurrentTarget = currentTarget != null && IsValidTarget(currentTarget);
+
         if (spectatorTargetText != null)
         {
-            spectatorTargetText.text = _currentTarget != null
-                ? $"Spectating: {GetSpectatorTargetDisplayName(_currentTarget)}"
-                : "Spectating: None";
+            spectatorTargetText.text = hasCurrentTarget
+                ? $"Spectating: {GetSpectatorTargetDisplayName(currentTarget)} | {GetTargetStateLabel(currentTarget)}"
+                : "Spectating: Waiting for survivor target";
         }
 
         if (spectatorControlsText != null)
             spectatorControlsText.text = "Mouse: Orbit  |  LMB/Q: Previous  |  RMB/E: Next";
+
+        hadUiTarget = hasCurrentTarget;
+        lastUiTargetClientId = hasCurrentTarget ? currentTarget.ClientId : ulong.MaxValue;
+        lastUiTargetState = hasCurrentTarget
+            ? currentTarget.LifeState.CurrentState
+            : PlayerLifeStateType.Alive;
     }
 
-    private string GetSpectatorTargetDisplayName(PlayerSetup target)
+    private string GetSpectatorTargetDisplayName(SpectatorTarget target)
     {
         if (target == null)
             return "None";
 
-        if (target.OwnerClientId == OwnerClientId)
+        if (target.ClientId == OwnerClientId)
             return "You";
 
-        return $"Player {target.OwnerClientId}";
+        return $"Player {target.ClientId}";
+    }
+
+    private static string GetTargetStateLabel(SpectatorTarget target)
+    {
+        if (target == null || target.LifeState == null)
+            return "UNKNOWN";
+
+        switch (target.LifeState.CurrentState)
+        {
+            case PlayerLifeStateType.Alive:
+                return "ALIVE";
+
+            case PlayerLifeStateType.Downed:
+                return "DOWNED BODY";
+
+            case PlayerLifeStateType.Dead:
+                return "DEAD BODY";
+
+            default:
+                return "UNKNOWN";
+        }
     }
 
     private static GameObject FindSceneObjectByName(string objectName)
@@ -498,10 +695,7 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
         foreach (GameObject obj in allObjects)
         {
-            if (obj == null)
-                continue;
-
-            if (obj.name != objectName)
+            if (obj == null || obj.name != objectName)
                 continue;
 
             Scene scene = obj.scene;
@@ -517,59 +711,63 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
 
     private void SaveCameraStateIfNeeded()
     {
-        if (spectatorCamera == null)
+        if (spectatorCamera == null || hasSavedCameraState)
             return;
 
-        _originalCameraParent = spectatorCamera.transform.parent;
-        _originalCameraLocalPosition = spectatorCamera.transform.localPosition;
-        _originalCameraLocalRotation = spectatorCamera.transform.localRotation;
-        _originalCameraFOV = spectatorCamera.fieldOfView;
+        Transform cameraTransform = spectatorCamera.transform;
+
+        originalCameraParent = cameraTransform.parent;
+        originalCameraLocalPosition = cameraTransform.localPosition;
+        originalCameraLocalRotation = cameraTransform.localRotation;
+        originalCameraLocalScale = cameraTransform.localScale;
+        originalCameraFOV = spectatorCamera.fieldOfView;
+        hasSavedCameraState = true;
     }
 
     private void InitializeOrbitFromCurrentCamera()
     {
         if (spectatorCamera == null)
         {
-            _orbitYaw = transform.eulerAngles.y;
-            _orbitPitch = 15f;
+            orbitYaw = transform.eulerAngles.y;
+            orbitPitch = 15f;
             return;
         }
 
         Vector3 euler = spectatorCamera.transform.eulerAngles;
-        _orbitYaw = euler.y;
-        _orbitPitch = Mathf.Clamp(NormalizeAngle(euler.x), minPitch, maxPitch);
-        _smoothedLookDelta = Vector2.zero;
+        orbitYaw = euler.y;
+        orbitPitch = Mathf.Clamp(NormalizeAngle(euler.x), minPitch, maxPitch);
+        smoothedLookDelta = Vector2.zero;
     }
 
     private void HandleOrbitLookInput()
     {
         float dt = Time.deltaTime;
-        Vector2 rawDelta = inputManager != null
-            ? inputManager.ReadSpectatorLookInput()
-            : Vector2.zero;
+        Vector2 rawDelta =
+            inputManager != null ? inputManager.ReadSpectatorLookInput() : Vector2.zero;
 
         if (rawDelta == Vector2.zero && inputManager == null && Mouse.current != null)
             rawDelta = Mouse.current.delta.ReadValue();
 
         bool useSmooth = playerLook != null ? playerLook.SmoothMouse : fallbackSmoothMouse;
-        float smoothingTime = playerLook != null ? playerLook.MouseSmoothingTime : fallbackMouseSmoothingTime;
+        float smoothingTime =
+            playerLook != null ? playerLook.MouseSmoothingTime : fallbackMouseSmoothingTime;
 
         if (useSmooth && smoothingTime > 0f)
         {
             float alpha = 1f - Mathf.Exp(-dt / smoothingTime);
-            _smoothedLookDelta = Vector2.Lerp(_smoothedLookDelta, rawDelta, alpha);
+            smoothedLookDelta = Vector2.Lerp(smoothedLookDelta, rawDelta, alpha);
         }
         else
         {
-            _smoothedLookDelta = rawDelta;
+            smoothedLookDelta = rawDelta;
         }
 
         float xSensitivity = playerLook != null ? playerLook.xSensitivity : fallbackXSensitivity;
         float ySensitivity = playerLook != null ? playerLook.ySensitivity : fallbackYSensitivity;
 
-        _orbitYaw += _smoothedLookDelta.x * dt * xSensitivity;
-        _orbitPitch += -_smoothedLookDelta.y * dt * ySensitivity;
-        _orbitPitch = Mathf.Clamp(_orbitPitch, minPitch, maxPitch);
+        orbitYaw += smoothedLookDelta.x * dt * xSensitivity;
+        orbitPitch += -smoothedLookDelta.y * dt * ySensitivity;
+        orbitPitch = Mathf.Clamp(orbitPitch, minPitch, maxPitch);
     }
 
     private void UpdateSpectatorCamera(bool snapAnchor)
@@ -577,52 +775,90 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         if (spectatorCamera == null)
             return;
 
-        if (!IsValidTarget(_currentTarget))
+        if (!TryGetCurrentOrReplacementAnchor(out Vector3 targetAnchor, out bool hasFreshAnchor))
+            return;
+
+        if (snapAnchor || !hasAnchor)
         {
-            ulong previousTargetClientId = _currentTarget != null ? _currentTarget.OwnerClientId : OwnerClientId;
-
-            if (!RebuildTargets())
-            {
-                Debug.LogWarning("[PlayerSpectatorController] No valid spectator targets remain. Exiting spectator mode.");
-                ForceExitSpectatorMode();
-                return;
-            }
-
-            SelectPreferredTargetOrFallback(previousTargetClientId);
-            snapAnchor = true;
+            smoothedAnchor = targetAnchor;
+            anchorYVelocity = 0f;
+            hasAnchor = true;
         }
-
-        Vector3 targetAnchor = GetTargetAnchor(_currentTarget);
-
-        if (snapAnchor)
+        else if (hasFreshAnchor)
         {
-            _smoothedAnchor = targetAnchor;
-            _anchorYVelocity = 0f;
-        }
-        else
-        {
-            _smoothedAnchor.x = targetAnchor.x;
-            _smoothedAnchor.z = targetAnchor.z;
-            _smoothedAnchor.y = Mathf.SmoothDamp(
-                _smoothedAnchor.y,
+            smoothedAnchor.x = targetAnchor.x;
+            smoothedAnchor.z = targetAnchor.z;
+            smoothedAnchor.y = Mathf.SmoothDamp(
+                smoothedAnchor.y,
                 targetAnchor.y,
-                ref _anchorYVelocity,
+                ref anchorYVelocity,
                 Mathf.Max(0.0001f, anchorVerticalSmoothTime),
                 Mathf.Infinity,
                 Time.deltaTime
             );
         }
 
-        Quaternion orbitRotation = Quaternion.Euler(_orbitPitch, _orbitYaw, 0f);
+        Quaternion orbitRotation = Quaternion.Euler(orbitPitch, orbitYaw, 0f);
         Vector3 offset = orbitRotation * Vector3.back * Mathf.Max(0.05f, orbitDistance);
-        Vector3 desiredCameraPosition = _smoothedAnchor + offset;
-        Vector3 cameraPosition = ResolveCameraCollision(_smoothedAnchor, desiredCameraPosition);
+        Vector3 desiredCameraPosition = smoothedAnchor + offset;
+        Vector3 cameraPosition = ResolveCameraCollision(smoothedAnchor, desiredCameraPosition);
 
         spectatorCamera.transform.position = cameraPosition;
-        spectatorCamera.transform.rotation = Quaternion.LookRotation(
-            _smoothedAnchor - cameraPosition,
-            Vector3.up
-        );
+
+        Vector3 lookDirection = smoothedAnchor - cameraPosition;
+        if (lookDirection.sqrMagnitude > 0.0001f)
+            spectatorCamera.transform.rotation = Quaternion.LookRotation(lookDirection, Vector3.up);
+    }
+
+    private bool TryGetCurrentOrReplacementAnchor(
+        out Vector3 targetAnchor,
+        out bool hasFreshAnchor
+    )
+    {
+        targetAnchor = smoothedAnchor;
+        hasFreshAnchor = false;
+
+        if (IsValidTarget(currentTarget) && TryGetTargetAnchor(currentTarget, out targetAnchor))
+        {
+            currentTargetMissingSince = -1f;
+            hasFreshAnchor = true;
+            return true;
+        }
+
+        if (IsValidTarget(currentTarget) && hasAnchor)
+        {
+            if (currentTargetMissingSince < 0f)
+                currentTargetMissingSince = Time.unscaledTime;
+
+            if (
+                Time.unscaledTime - currentTargetMissingSince
+                <= Mathf.Max(0f, missingTargetGraceSeconds)
+            )
+            {
+                targetAnchor = smoothedAnchor;
+                return true;
+            }
+        }
+
+        ulong previousTargetClientId =
+            currentTarget != null ? currentTarget.ClientId : OwnerClientId;
+
+        RebuildTargets();
+
+        if (TrySelectPreferredTargetOrFallback(previousTargetClientId, snapAnchor: true))
+        {
+            currentTargetMissingSince = -1f;
+            hasFreshAnchor = TryGetTargetAnchor(currentTarget, out targetAnchor);
+            return hasFreshAnchor || hasAnchor;
+        }
+
+        currentTarget = null;
+        currentTargetMissingSince = -1f;
+        UpdateSpectatorUiText();
+
+        // A permanently dead player must remain in spectator mode even if every
+        // target is temporarily unavailable during despawn/scene transitions.
+        return hasAnchor;
     }
 
     private Vector3 ResolveCameraCollision(Vector3 anchor, Vector3 desiredCameraPosition)
@@ -685,77 +921,117 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         if (hitTransform.IsChildOf(transform))
             return true;
 
-        if (_currentTarget != null && hitTransform.IsChildOf(_currentTarget.transform))
+        if (
+            currentTarget != null
+            && currentTarget.PlayerSetup != null
+            && hitTransform.IsChildOf(currentTarget.PlayerSetup.transform)
+        )
             return true;
 
         if (hit.collider.GetComponentInParent<PlayerSetup>() != null)
             return true;
 
+        DownedBodyObject hitBody = hit.collider.GetComponentInParent<DownedBodyObject>();
+        if (
+            hitBody != null
+            && currentTarget != null
+            && hitBody.IsForPlayer(currentTarget.ClientId)
+        )
+            return true;
+
         return false;
     }
 
-    private bool RebuildTargets()
+    private void RebuildTargets()
     {
-        _targets.Clear();
+        targets.Clear();
 
-        PlayerSetup[] allPlayers = UnityEngine.Object.FindObjectsByType<PlayerSetup>(FindObjectsInactive.Exclude);
+        PlayerLifeState[] allLifeStates =
+            UnityEngine.Object.FindObjectsByType<PlayerLifeState>(FindObjectsInactive.Exclude);
 
-        foreach (PlayerSetup player in allPlayers)
+        foreach (PlayerLifeState targetLifeState in allLifeStates)
         {
-            if (!IsValidTarget(player))
+            if (targetLifeState == null)
                 continue;
 
-            _targets.Add(player);
+            PlayerSetup targetPlayerSetup = targetLifeState.GetComponent<PlayerSetup>();
+            if (targetPlayerSetup == null)
+                continue;
+
+            SpectatorTarget target = new SpectatorTarget
+            {
+                ClientId = targetPlayerSetup.OwnerClientId,
+                PlayerSetup = targetPlayerSetup,
+                LifeState = targetLifeState,
+            };
+
+            if (IsValidTarget(target))
+                targets.Add(target);
         }
 
-        _targets.Sort((a, b) => a.OwnerClientId.CompareTo(b.OwnerClientId));
-        return _targets.Count > 0;
+        targets.Sort((a, b) => a.ClientId.CompareTo(b.ClientId));
     }
 
-    private bool IsValidTarget(PlayerSetup player)
+    private bool IsValidTarget(SpectatorTarget target)
     {
-        if (player == null || !player.IsSpawned)
+        if (target == null || target.PlayerSetup == null || target.LifeState == null)
             return false;
 
-        bool isSelf = player.OwnerClientId == OwnerClientId;
-
-        if (!_activeIncludeSelf && isSelf)
+        if (!target.PlayerSetup.IsSpawned || !target.LifeState.IsSpawned)
             return false;
 
-        if (!_activeIncludeBadGuys && player.IsBadGuy.Value)
+        bool isSelf = target.ClientId == OwnerClientId;
+
+        if (!activeIncludeSelf && isSelf)
+            return false;
+
+        if (!activeIncludeBadGuys && target.PlayerSetup.IsBadGuy.Value)
             return false;
 
         return true;
     }
 
-    private void SelectPreferredTargetOrFallback(ulong preferredTargetClientId)
+    private bool TrySelectPreferredTargetOrFallback(
+        ulong preferredTargetClientId,
+        bool snapAnchor
+    )
     {
-        for (int i = 0; i < _targets.Count; i++)
+        for (int i = 0; i < targets.Count; i++)
         {
-            if (_targets[i].OwnerClientId == preferredTargetClientId)
-            {
-                SelectTarget(_targets[i], snapAnchor: true);
-                return;
-            }
+            SpectatorTarget target = targets[i];
+
+            if (target.ClientId != preferredTargetClientId)
+                continue;
+
+            if (TryGetTargetAnchor(target, out _))
+                return SelectTarget(target, snapAnchor);
         }
 
-        SelectTarget(_targets[0], snapAnchor: true);
+        for (int i = 0; i < targets.Count; i++)
+        {
+            SpectatorTarget target = targets[i];
+
+            if (TryGetTargetAnchor(target, out _))
+                return SelectTarget(target, snapAnchor);
+        }
+
+        return false;
     }
 
     private void SwitchTarget(int direction)
     {
-        if (!RebuildTargets())
+        RebuildTargets();
+
+        if (targets.Count == 0)
             return;
 
         int currentIndex = -1;
 
-        if (_currentTarget != null)
+        if (currentTarget != null)
         {
-            ulong currentOwner = _currentTarget.OwnerClientId;
-
-            for (int i = 0; i < _targets.Count; i++)
+            for (int i = 0; i < targets.Count; i++)
             {
-                if (_targets[i].OwnerClientId == currentOwner)
+                if (targets[i].ClientId == currentTarget.ClientId)
                 {
                     currentIndex = i;
                     break;
@@ -764,27 +1040,102 @@ public class PlayerSpectatorController : NetworkBehaviour, IPlayerRoundResettabl
         }
 
         if (currentIndex < 0)
-            currentIndex = 0;
+            currentIndex = direction >= 0 ? -1 : 0;
 
-        int nextIndex = Mod(currentIndex + direction, _targets.Count);
-        SelectTarget(_targets[nextIndex], snapAnchor: true);
+        for (int step = 1; step <= targets.Count; step++)
+        {
+            int nextIndex = Mod(currentIndex + direction * step, targets.Count);
+            SpectatorTarget candidate = targets[nextIndex];
+
+            if (!TryGetTargetAnchor(candidate, out _))
+                continue;
+
+            SelectTarget(candidate, snapAnchor: true);
+            UpdateSpectatorCamera(snapAnchor: true);
+            return;
+        }
     }
 
-    private void SelectTarget(PlayerSetup target, bool snapAnchor)
+    private bool SelectTarget(SpectatorTarget target, bool snapAnchor)
     {
-        _currentTarget = target;
+        if (!IsValidTarget(target))
+            return false;
 
-        if (snapAnchor && _currentTarget != null)
+        if (!TryGetTargetAnchor(target, out Vector3 targetAnchor))
+            return false;
+
+        currentTarget = target;
+        currentTargetMissingSince = -1f;
+
+        if (snapAnchor)
         {
-            _smoothedAnchor = GetTargetAnchor(_currentTarget);
-            _anchorYVelocity = 0f;
+            smoothedAnchor = targetAnchor;
+            anchorYVelocity = 0f;
+            hasAnchor = true;
         }
 
-        if (_isSpectating)
+        if (isSpectating)
             UpdateSpectatorUiText();
+
+        return true;
     }
 
-    private Vector3 GetTargetAnchor(PlayerSetup target)
+    private bool TryGetTargetAnchor(SpectatorTarget target, out Vector3 anchor)
+    {
+        anchor = default;
+
+        if (!IsValidTarget(target))
+            return false;
+
+        if (target.LifeState.IsAlive)
+        {
+            anchor = GetAliveTargetAnchor(target.PlayerSetup);
+            return true;
+        }
+
+        if (!TryResolveBody(target, out DownedBodyObject body))
+            return false;
+
+        Transform bodyAnchor = useReviveAnchorForBodies ? body.ReviveAnchor : body.CameraAnchor;
+
+        if (bodyAnchor == null)
+            bodyAnchor = body.transform;
+
+        anchor = bodyAnchor.position + Vector3.up * bodyAnchorUpOffset;
+        return true;
+    }
+
+    private bool TryResolveBody(SpectatorTarget target, out DownedBodyObject body)
+    {
+        body = null;
+
+        if (target == null || target.LifeState == null)
+            return false;
+
+        ulong bodyNetworkObjectId = target.LifeState.CurrentBodyNetworkObjectId.Value;
+
+        if (bodyNetworkObjectId == PlayerLifeState.NoBodyNetworkObjectId)
+            return false;
+
+        if (NetworkManager.Singleton == null)
+            return false;
+
+        if (
+            !NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(
+                bodyNetworkObjectId,
+                out NetworkObject bodyNetworkObject
+            )
+        )
+            return false;
+
+        body = bodyNetworkObject.GetComponent<DownedBodyObject>();
+
+        return body != null
+            && body.IsSpawned
+            && body.IsForPlayer(target.ClientId);
+    }
+
+    private Vector3 GetAliveTargetAnchor(PlayerSetup target)
     {
         if (target == null)
             return transform.position + Vector3.up;

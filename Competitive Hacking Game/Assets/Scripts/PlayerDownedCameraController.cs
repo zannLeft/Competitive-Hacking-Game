@@ -359,6 +359,15 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
         pitchOffset = 0f;
     }
 
+    public void PrepareForSpectatorMode()
+    {
+        if (!IsOwner)
+            return;
+
+        ForceExitDownedCamera();
+        inputManager?.SetDownedInputEnabled(false);
+    }
+
     private void ForceExitDownedCamera()
     {
         if (!isDownedCameraActive)
