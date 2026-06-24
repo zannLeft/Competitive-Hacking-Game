@@ -1,9 +1,28 @@
+using System;
+using System.Collections;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
 [DisallowMultipleComponent]
 public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 {
+    private enum AttemptRejectReason : byte
+    {
+        None = 0,
+        InvalidOwner = 1,
+        PlayerUnavailable = 2,
+        NotSitting = 3,
+        AssignmentsUnavailable = 4,
+        AssignmentMismatch = 5,
+        AlreadyCompleted = 6,
+        OutOfRange = 7,
+        NoActiveAttempt = 8,
+        AttemptMismatch = 9,
+        CompletedTooQuickly = 10,
+        CompletionFailed = 11,
+    }
+
     [Header("Refs")]
     [SerializeField]
     private PlayerSitAction sitAction;
@@ -16,10 +35,6 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 
     [SerializeField]
     private LaptopScreenUI screenUI;
-
-    [Tooltip("Usually the player camera or player root. Used for local router signal checks.")]
-    [SerializeField]
-    private Transform rangeOrigin;
 
     [Header("Signal Rules")]
     [SerializeField]
@@ -36,15 +51,101 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     [SerializeField, Min(0.02f)]
     private float targetRefreshInterval = 0.10f;
 
+    [Header("Networked Keypress Audio")]
+    [Tooltip("Optional always-active transform for the positional sound. Leave empty to use the player root.")]
+    [SerializeField]
+    private Transform audioOrigin;
+
+    [Tooltip("Optional preconfigured source, useful when routing through an Audio Mixer. A source is created automatically when empty.")]
+    [SerializeField]
+    private AudioSource keypressAudioSource;
+
+    [Tooltip("Optional preconfigured source, useful when routing through an Audio Mixer. A source is created automatically when empty.")]
+    [SerializeField]
+    private AudioSource alarmAudioSource;
+
+    [SerializeField]
+    private AudioClip[] keypressClips = Array.Empty<AudioClip>();
+
+    [SerializeField]
+    private AudioClip alarmClip;
+
+    [SerializeField, Range(0f, 1f)]
+    private float keypressVolume = 0.55f;
+
+    [SerializeField, Range(0.5f, 2f)]
+    private float keypressPitchMin = 0.96f;
+
+    [SerializeField, Range(0.5f, 2f)]
+    private float keypressPitchMax = 1.04f;
+
+    [SerializeField, Min(0.01f)]
+    private float keypressMinDistance = 1.25f;
+
+    [SerializeField, Min(0.02f)]
+    private float keypressMaxDistance = 14f;
+
+    [SerializeField]
+    private AudioRolloffMode keypressRolloff = AudioRolloffMode.Logarithmic;
+
+    [Header("Networked Failure Alarm")]
+    [SerializeField, Range(0f, 1f)]
+    private float alarmVolume = 1f;
+
+    [Tooltip("Large minimum distance keeps the alarm loud throughout most of the office.")]
+    [SerializeField, Min(0.01f)]
+    private float alarmMinDistance = 18f;
+
+    [Tooltip("Set this beyond the longest expected office dimension.")]
+    [SerializeField, Min(0.02f)]
+    private float alarmMaxDistance = 140f;
+
+    [SerializeField]
+    private AudioRolloffMode alarmRolloff = AudioRolloffMode.Linear;
+
+    [Header("Server Validation / Rate Limits")]
+    [SerializeField, Min(0.01f)]
+    private float serverAttemptValidationInterval = 0.25f;
+
+    [SerializeField, Min(0f)]
+    private float minimumNetworkedKeypressInterval = 0.04f;
+
+    [SerializeField, Min(0f)]
+    private float minimumNetworkedAlarmInterval = 0.50f;
+
+    [SerializeField, Min(0f)]
+    private float rejectedMessageSeconds = 1.10f;
+
     private RouterHackCoordinator _coordinator;
     private RouterBox _currentTarget;
     private RouterHackRecord _currentRecord;
+    private LaptopMinigameContext _activeContext;
+    private bool _hasActiveContext;
     private bool _targetLockedByMinigame;
+    private bool _clientAttemptOpen;
+    private bool _completionPending;
     private bool _showingTerminalResult;
+    private string _pendingCompletionNetworkId = string.Empty;
+    private string _pendingCompletionDisplayName = string.Empty;
     private float _targetRefreshTimer;
     private string _lastPresentationKey = string.Empty;
     private Vector2 _navigationInput;
     private bool _primaryHeld;
+    private ushort _localActionSequence;
+    private Coroutine _rejectedMessageCoroutine;
+
+    // Server-only attempt state. This lives on the player's existing NetworkObject.
+    private bool _serverAttemptActive;
+    private FixedString128Bytes _serverAttemptNetworkId;
+    private ushort _serverAttemptMinigameId;
+    private LaptopMinigameDifficulty _serverAttemptDifficulty;
+    private int _serverAttemptSeed;
+    private double _serverAttemptStartedAt;
+    private double _serverLastKeypressAt = double.NegativeInfinity;
+    private double _serverLastAlarmAt = double.NegativeInfinity;
+    private float _serverAttemptValidationTimer;
+
+    public event Action HackAlarmEmitted;
 
     public RouterBox CurrentTarget => _currentTarget;
     public string CurrentTargetName =>
@@ -57,16 +158,10 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         && screenUI != null
         && screenUI.HasActiveMinigame;
 
-    public Vector3 SignalOriginPosition
-    {
-        get
-        {
-            if (rangeOrigin != null)
-                return rangeOrigin.position;
-
-            return transform.position;
-        }
-    }
+    // The player root is deliberately used by both owner and server. The previous
+    // camera-based origin could disagree because PlayerLook only moves the camera
+    // on the owning client.
+    public Vector3 SignalOriginPosition => transform.position;
 
     public bool IsLaptopUsable
     {
@@ -91,34 +186,15 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         playerSetup = GetComponent<PlayerSetup>();
         lifeState = GetComponent<PlayerLifeState>();
         screenUI = GetComponentInChildren<LaptopScreenUI>(true);
+        audioOrigin = transform;
     }
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
 
-        if (sitAction == null)
-            sitAction = GetComponent<PlayerSitAction>();
-
-        if (playerSetup == null)
-            playerSetup = GetComponent<PlayerSetup>();
-
-        if (lifeState == null)
-            lifeState = GetComponent<PlayerLifeState>();
-
-        if (screenUI == null)
-            screenUI = GetComponentInChildren<LaptopScreenUI>(true);
-
-        if (rangeOrigin == null)
-        {
-            PlayerLook look = GetComponent<PlayerLook>();
-
-            if (look != null && look.cam != null)
-                rangeOrigin = look.cam.transform;
-            else
-                rangeOrigin = transform;
-        }
-
+        CacheReferences();
+        EnsureAudioSources();
         ForceResetLocalForRound();
         AttachCoordinatorIfNeeded();
     }
@@ -126,12 +202,17 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     public override void OnNetworkDespawn()
     {
         DetachCoordinator();
-        AbortLocalMinigame(clearTarget: true);
+        AbortLocalMinigame(clearTarget: true, notifyServer: false);
+        ClearServerAttempt();
+        StopLaptopAudio();
         base.OnNetworkDespawn();
     }
 
     private void Update()
     {
+        if (IsServer)
+            ServerUpdateActiveAttempt();
+
         if (!IsOwner)
             return;
 
@@ -145,7 +226,7 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             return;
         }
 
-        if (_showingTerminalResult)
+        if (_completionPending || _showingTerminalResult)
             return;
 
         if (_coordinator == null || !_coordinator.AssignmentsReady)
@@ -183,11 +264,18 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     public void ForceResetLocalForRound()
     {
         AbortLocalMinigame(clearTarget: true);
+        ClearServerAttempt();
+        StopLaptopAudio();
+        StopRejectedMessageCoroutine();
+        _completionPending = false;
         _showingTerminalResult = false;
+        _pendingCompletionNetworkId = string.Empty;
+        _pendingCompletionDisplayName = string.Empty;
         _targetRefreshTimer = 0f;
         _lastPresentationKey = string.Empty;
         _navigationInput = Vector2.zero;
         _primaryHeld = false;
+        _localActionSequence = 0;
     }
 
     public void SetNavigationInput(Vector2 input)
@@ -241,6 +329,24 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             PrimaryPressed();
         else
             PrimaryReleased();
+    }
+
+    private void CacheReferences()
+    {
+        if (sitAction == null)
+            sitAction = GetComponent<PlayerSitAction>();
+
+        if (playerSetup == null)
+            playerSetup = GetComponent<PlayerSetup>();
+
+        if (lifeState == null)
+            lifeState = GetComponent<PlayerLifeState>();
+
+        if (screenUI == null)
+            screenUI = GetComponentInChildren<LaptopScreenUI>(true);
+
+        if (audioOrigin == null)
+            audioOrigin = transform;
     }
 
     private void RefreshAndPresentTarget()
@@ -324,18 +430,31 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             context,
             OnLocalMinigameCompleted,
             OnLocalMinigameFailed,
-            OnLocalMinigameAlarmTriggered
+            OnLocalMinigameAlarmTriggered,
+            OnLocalMinigameActionPerformed
         );
 
         _targetLockedByMinigame = started;
 
-        if (started)
-        {
-            screenUI.SetNavigation(_navigationInput);
+        if (!started)
+            return;
 
-            if (_primaryHeld)
-                screenUI.PrimaryPressed();
-        }
+        _activeContext = context;
+        _hasActiveContext = true;
+        _clientAttemptOpen = true;
+        _completionPending = false;
+
+        RequestBeginAttemptServerRpc(
+            new FixedString128Bytes(context.NetworkId),
+            context.MinigameId,
+            context.Difficulty,
+            context.Seed
+        );
+
+        screenUI.SetNavigation(_navigationInput);
+
+        if (_primaryHeld)
+            screenUI.PrimaryPressed();
     }
 
     private RouterBox FindBestHackableRouter()
@@ -400,21 +519,43 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         return bars >= safeRequiredBars;
     }
 
-    private void OnLocalMinigameCompleted()
+    private void OnLocalMinigameActionPerformed()
     {
-        if (!IsOwner)
+        if (!IsOwner || !_clientAttemptOpen || !_hasActiveContext)
             return;
 
-        string displayName = CurrentTargetName;
-        _targetLockedByMinigame = false;
-        _showingTerminalResult = true;
-        ClearLocalInputState();
-        screenUI?.ShowSuccess(displayName);
+        _localActionSequence++;
 
-        Debug.Log(
-            $"[PlayerLaptopHacker] Local minigame completed for '{CurrentNetworkId}'. "
-                + "Server completion will be connected in the authoritative stage.",
-            this
+        if (_localActionSequence == 0)
+            _localActionSequence = 1;
+
+        PlayKeypress(_localActionSequence);
+
+        RequestMinigameActionAudioServerRpc(
+            new FixedString128Bytes(_activeContext.NetworkId),
+            _activeContext.MinigameId,
+            _activeContext.Seed,
+            _localActionSequence
+        );
+    }
+
+    private void OnLocalMinigameCompleted()
+    {
+        if (!IsOwner || !_clientAttemptOpen || !_hasActiveContext)
+            return;
+
+        _targetLockedByMinigame = false;
+        _completionPending = true;
+        _showingTerminalResult = true;
+        _pendingCompletionNetworkId = _activeContext.NetworkId;
+        _pendingCompletionDisplayName = _activeContext.NetworkDisplayName;
+        ClearLocalInputState();
+        screenUI?.ShowVerifying(_pendingCompletionDisplayName);
+
+        RequestCompleteAttemptServerRpc(
+            new FixedString128Bytes(_activeContext.NetworkId),
+            _activeContext.MinigameId,
+            _activeContext.Seed
         );
     }
 
@@ -423,39 +564,66 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         if (!IsOwner)
             return;
 
-        string displayName = CurrentTargetName;
+        string displayName = _hasActiveContext
+            ? _activeContext.NetworkDisplayName
+            : CurrentTargetName;
+
         _targetLockedByMinigame = false;
         _showingTerminalResult = true;
         ClearLocalInputState();
         screenUI?.ShowFailure(displayName);
-
-        Debug.Log(
-            $"[PlayerLaptopHacker] Local minigame failed for '{CurrentNetworkId}'. "
-                + "The networked alarm will be connected in the audio/validation stage.",
-            this
-        );
+        EndClientAttemptAndNotifyServer();
     }
 
     private void OnLocalMinigameAlarmTriggered()
     {
-        if (!IsOwner)
+        if (!IsOwner || !_clientAttemptOpen || !_hasActiveContext)
             return;
 
-        Debug.Log(
-            $"[PlayerLaptopHacker] Local minigame alarm triggered for '{CurrentNetworkId}'. "
-                + "The positional networked sound will be connected in Stage 4.",
-            this
+        PlayAlarmAndRaiseEvent();
+
+        RequestMinigameAlarmServerRpc(
+            new FixedString128Bytes(_activeContext.NetworkId),
+            _activeContext.MinigameId,
+            _activeContext.Seed
         );
     }
 
-    private void AbortLocalMinigame(bool clearTarget)
+    private void AbortLocalMinigame(bool clearTarget, bool notifyServer = true)
     {
+        bool shouldNotifyServer =
+            notifyServer
+            && IsOwner
+            && _clientAttemptOpen
+            && CanSendRpc();
+
         ClearLocalInputState();
         screenUI?.AbortActiveMinigame();
         _targetLockedByMinigame = false;
+        _clientAttemptOpen = false;
+        _completionPending = false;
+        _hasActiveContext = false;
+        _activeContext = default;
+        _pendingCompletionNetworkId = string.Empty;
+        _pendingCompletionDisplayName = string.Empty;
+
+        if (shouldNotifyServer)
+            RequestAbortAttemptServerRpc();
 
         if (clearTarget)
             ClearCurrentTarget();
+    }
+
+    private void EndClientAttemptAndNotifyServer()
+    {
+        bool shouldNotify = IsOwner && _clientAttemptOpen && CanSendRpc();
+        _clientAttemptOpen = false;
+        _completionPending = false;
+        _hasActiveContext = false;
+        _activeContext = default;
+
+        if (shouldNotify)
+            RequestAbortAttemptServerRpc();
     }
 
     private void ClearCurrentTarget()
@@ -499,25 +667,604 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         _lastPresentationKey = string.Empty;
 
         if (
-            _currentTarget != null
-            && _coordinator != null
-            && _coordinator.IsCompleted(_currentTarget.NetworkId)
+            _currentTarget == null
+            || _coordinator == null
+            || !_coordinator.IsCompleted(_currentTarget.NetworkId)
+        )
+            return;
+
+        if (
+            _completionPending
+            && string.Equals(
+                _pendingCompletionNetworkId,
+                _currentTarget.NetworkId,
+                StringComparison.Ordinal
+            )
         )
         {
-            string displayName = _currentTarget.NetworkName;
-            AbortLocalMinigame(clearTarget: true);
-            _showingTerminalResult = true;
-            screenUI?.ShowCompletedElsewhere(displayName);
+            // The targeted server result will decide whether this owner sees
+            // ACCESS GRANTED or a rejection message.
+            return;
         }
+
+        string displayName = _currentTarget.NetworkName;
+        AbortLocalMinigame(clearTarget: true);
+        _showingTerminalResult = true;
+        screenUI?.ShowCompletedElsewhere(displayName);
     }
 
-    private void PresentOnce(string key, System.Action presentation)
+    private void PresentOnce(string key, Action presentation)
     {
         if (_lastPresentationKey == key)
             return;
 
         _lastPresentationKey = key;
         presentation?.Invoke();
+    }
+
+    [ServerRpc]
+    private void RequestBeginAttemptServerRpc(
+        FixedString128Bytes networkId,
+        ushort minigameId,
+        LaptopMinigameDifficulty difficulty,
+        int seed,
+        ServerRpcParams rpcParams = default
+    )
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId)
+            return;
+
+        AttemptRejectReason reason = ValidateServerAttemptRequest(
+            networkId.ToString(),
+            minigameId,
+            difficulty,
+            seed
+        );
+
+        if (reason != AttemptRejectReason.None)
+        {
+            SendBeginRejectedToOwner(networkId, reason);
+            return;
+        }
+
+        _serverAttemptActive = true;
+        _serverAttemptNetworkId = networkId;
+        _serverAttemptMinigameId = minigameId;
+        _serverAttemptDifficulty = difficulty;
+        _serverAttemptSeed = seed;
+        _serverAttemptStartedAt = GetServerTime();
+        _serverLastKeypressAt = double.NegativeInfinity;
+        _serverLastAlarmAt = double.NegativeInfinity;
+        _serverAttemptValidationTimer = Mathf.Max(0.02f, serverAttemptValidationInterval);
+    }
+
+    [ServerRpc]
+    private void RequestAbortAttemptServerRpc(ServerRpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId)
+            return;
+
+        ClearServerAttempt();
+    }
+
+    [ServerRpc]
+    private void RequestCompleteAttemptServerRpc(
+        FixedString128Bytes networkId,
+        ushort minigameId,
+        int seed,
+        ServerRpcParams rpcParams = default
+    )
+    {
+        ulong senderClientId = rpcParams.Receive.SenderClientId;
+
+        if (senderClientId != OwnerClientId)
+            return;
+
+        string id = networkId.ToString();
+        AttemptRejectReason reason = ValidateActiveServerAttempt(
+            id,
+            minigameId,
+            seed
+        );
+
+        if (reason == AttemptRejectReason.None)
+        {
+            if (
+                _coordinator == null
+                || !_coordinator.TryGetMinigameDefinition(
+                    _serverAttemptMinigameId,
+                    out LaptopMinigameDefinition definition
+                )
+            )
+            {
+                reason = AttemptRejectReason.AssignmentMismatch;
+            }
+            else
+            {
+                double elapsed = GetServerTime() - _serverAttemptStartedAt;
+                float minimumSeconds = definition.GetMinimumCompletionSeconds(
+                    _serverAttemptDifficulty
+                );
+
+                if (elapsed + 0.05d < minimumSeconds)
+                    reason = AttemptRejectReason.CompletedTooQuickly;
+            }
+        }
+
+        if (reason == AttemptRejectReason.None)
+        {
+            if (_coordinator == null || !_coordinator.ServerMarkCompleted(id))
+                reason = AttemptRejectReason.CompletionFailed;
+        }
+
+        bool accepted = reason == AttemptRejectReason.None;
+        ClearServerAttempt();
+        SendCompletionResultToOwner(networkId, accepted, reason);
+    }
+
+    [ServerRpc]
+    private void RequestMinigameActionAudioServerRpc(
+        FixedString128Bytes networkId,
+        ushort minigameId,
+        int seed,
+        ushort sequence,
+        ServerRpcParams rpcParams = default
+    )
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId)
+            return;
+
+        if (
+            ValidateActiveServerAttempt(networkId.ToString(), minigameId, seed)
+            != AttemptRejectReason.None
+        )
+            return;
+
+        double now = GetServerTime();
+
+        if (now - _serverLastKeypressAt < minimumNetworkedKeypressInterval)
+            return;
+
+        _serverLastKeypressAt = now;
+        BroadcastMinigameActionAudioClientRpc(sequence);
+    }
+
+    [ServerRpc]
+    private void RequestMinigameAlarmServerRpc(
+        FixedString128Bytes networkId,
+        ushort minigameId,
+        int seed,
+        ServerRpcParams rpcParams = default
+    )
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId)
+            return;
+
+        if (
+            ValidateActiveServerAttempt(networkId.ToString(), minigameId, seed)
+            != AttemptRejectReason.None
+        )
+            return;
+
+        double now = GetServerTime();
+
+        if (now - _serverLastAlarmAt < minimumNetworkedAlarmInterval)
+            return;
+
+        _serverLastAlarmAt = now;
+        BroadcastMinigameAlarmClientRpc();
+    }
+
+    [ClientRpc]
+    private void BroadcastMinigameActionAudioClientRpc(ushort sequence)
+    {
+        // The owner already played it instantly when the minigame accepted the input.
+        if (IsOwner)
+            return;
+
+        PlayKeypress(sequence);
+    }
+
+    [ClientRpc]
+    private void BroadcastMinigameAlarmClientRpc()
+    {
+        // The owner already played it instantly on collision.
+        if (IsOwner)
+            return;
+
+        PlayAlarmAndRaiseEvent();
+    }
+
+    [ClientRpc]
+    private void BeginAttemptRejectedClientRpc(
+        FixedString128Bytes networkId,
+        byte reasonValue,
+        ClientRpcParams clientRpcParams = default
+    )
+    {
+        if (!IsOwner || !_clientAttemptOpen || !_hasActiveContext)
+            return;
+
+        if (
+            !string.Equals(
+                _activeContext.NetworkId,
+                networkId.ToString(),
+                StringComparison.Ordinal
+            )
+        )
+            return;
+
+        string displayName = _activeContext.NetworkDisplayName;
+        AbortLocalMinigame(clearTarget: false, notifyServer: false);
+        ShowRejectedThenRetry(displayName, (AttemptRejectReason)reasonValue);
+    }
+
+    [ClientRpc]
+    private void CompletionResultClientRpc(
+        FixedString128Bytes networkId,
+        bool accepted,
+        byte reasonValue,
+        ClientRpcParams clientRpcParams = default
+    )
+    {
+        if (!IsOwner || !_completionPending)
+            return;
+
+        string id = networkId.ToString();
+
+        if (
+            !string.Equals(
+                _pendingCompletionNetworkId,
+                id,
+                StringComparison.Ordinal
+            )
+        )
+            return;
+
+        string displayName = _pendingCompletionDisplayName;
+        _completionPending = false;
+        _clientAttemptOpen = false;
+        _hasActiveContext = false;
+        _activeContext = default;
+        _pendingCompletionNetworkId = string.Empty;
+        _pendingCompletionDisplayName = string.Empty;
+
+        if (accepted)
+        {
+            _showingTerminalResult = true;
+            ClearCurrentTarget();
+            screenUI?.ShowSuccess(displayName);
+            return;
+        }
+
+        ShowRejectedThenRetry(displayName, (AttemptRejectReason)reasonValue);
+    }
+
+    private AttemptRejectReason ValidateServerAttemptRequest(
+        string networkId,
+        ushort minigameId,
+        LaptopMinigameDifficulty difficulty,
+        int seed
+    )
+    {
+        AttachCoordinatorIfNeeded();
+
+        if (!CanUseSurvivorTools())
+            return AttemptRejectReason.PlayerUnavailable;
+
+        if (
+            sitAction == null
+            || !sitAction.WantsSittingValue
+            || !sitAction.BlocksGameplayMovement
+        )
+            return AttemptRejectReason.NotSitting;
+
+        if (_coordinator == null || !_coordinator.AssignmentsReady)
+            return AttemptRejectReason.AssignmentsUnavailable;
+
+        if (!_coordinator.TryGetRecord(networkId, out RouterHackRecord record))
+            return AttemptRejectReason.AssignmentMismatch;
+
+        if (record.Completed)
+            return AttemptRejectReason.AlreadyCompleted;
+
+        if (
+            record.MinigameId != minigameId
+            || record.Difficulty != difficulty
+            || record.Seed != seed
+        )
+            return AttemptRejectReason.AssignmentMismatch;
+
+        if (!ServerHasRequiredSignal(networkId))
+            return AttemptRejectReason.OutOfRange;
+
+        return AttemptRejectReason.None;
+    }
+
+    private AttemptRejectReason ValidateActiveServerAttempt(
+        string networkId,
+        ushort minigameId,
+        int seed
+    )
+    {
+        if (!_serverAttemptActive)
+            return AttemptRejectReason.NoActiveAttempt;
+
+        if (
+            !string.Equals(
+                _serverAttemptNetworkId.ToString(),
+                networkId,
+                StringComparison.Ordinal
+            )
+            || _serverAttemptMinigameId != minigameId
+            || _serverAttemptSeed != seed
+        )
+            return AttemptRejectReason.AttemptMismatch;
+
+        return ValidateServerAttemptRequest(
+            networkId,
+            minigameId,
+            _serverAttemptDifficulty,
+            seed
+        );
+    }
+
+    private bool ServerHasRequiredSignal(string networkId)
+    {
+        Vector3 origin = SignalOriginPosition;
+        var routers = RouterRegistry.Routers;
+
+        for (int i = 0; i < routers.Count; i++)
+        {
+            RouterBox router = routers[i];
+
+            if (router == null)
+                continue;
+
+            if (!string.Equals(router.NetworkId, networkId, StringComparison.Ordinal))
+                continue;
+
+            if (HasRequiredBars(router.GetStrength01(origin)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private void ServerUpdateActiveAttempt()
+    {
+        if (!_serverAttemptActive)
+            return;
+
+        _serverAttemptValidationTimer -= Time.deltaTime;
+
+        if (_serverAttemptValidationTimer > 0f)
+            return;
+
+        _serverAttemptValidationTimer = Mathf.Max(
+            0.02f,
+            serverAttemptValidationInterval
+        );
+
+        AttemptRejectReason reason = ValidateActiveServerAttempt(
+            _serverAttemptNetworkId.ToString(),
+            _serverAttemptMinigameId,
+            _serverAttemptSeed
+        );
+
+        if (reason != AttemptRejectReason.None)
+            ClearServerAttempt();
+    }
+
+    private void ClearServerAttempt()
+    {
+        _serverAttemptActive = false;
+        _serverAttemptNetworkId = default;
+        _serverAttemptMinigameId = 0;
+        _serverAttemptDifficulty = LaptopMinigameDifficulty.Easy;
+        _serverAttemptSeed = 0;
+        _serverAttemptStartedAt = 0d;
+        _serverLastKeypressAt = double.NegativeInfinity;
+        _serverLastAlarmAt = double.NegativeInfinity;
+        _serverAttemptValidationTimer = 0f;
+    }
+
+    private void SendBeginRejectedToOwner(
+        FixedString128Bytes networkId,
+        AttemptRejectReason reason
+    )
+    {
+        BeginAttemptRejectedClientRpc(
+            networkId,
+            (byte)reason,
+            CreateOwnerClientRpcParams()
+        );
+    }
+
+    private void SendCompletionResultToOwner(
+        FixedString128Bytes networkId,
+        bool accepted,
+        AttemptRejectReason reason
+    )
+    {
+        CompletionResultClientRpc(
+            networkId,
+            accepted,
+            (byte)reason,
+            CreateOwnerClientRpcParams()
+        );
+    }
+
+    private ClientRpcParams CreateOwnerClientRpcParams()
+    {
+        return new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { OwnerClientId },
+            },
+        };
+    }
+
+    private void ShowRejectedThenRetry(
+        string displayName,
+        AttemptRejectReason reason
+    )
+    {
+        StopRejectedMessageCoroutine();
+        _showingTerminalResult = true;
+        screenUI?.ShowCompletionRejected(displayName, GetRejectReasonText(reason));
+        _rejectedMessageCoroutine = StartCoroutine(RejectedMessageRoutine());
+    }
+
+    private IEnumerator RejectedMessageRoutine()
+    {
+        yield return new WaitForSecondsRealtime(Mathf.Max(0f, rejectedMessageSeconds));
+        _rejectedMessageCoroutine = null;
+
+        if (!IsOwner || !IsLaptopUsable || !CanUseSurvivorTools())
+            yield break;
+
+        _showingTerminalResult = false;
+        ClearCurrentTarget();
+        _lastPresentationKey = string.Empty;
+        _targetRefreshTimer = 0f;
+    }
+
+    private void StopRejectedMessageCoroutine()
+    {
+        if (_rejectedMessageCoroutine == null)
+            return;
+
+        StopCoroutine(_rejectedMessageCoroutine);
+        _rejectedMessageCoroutine = null;
+    }
+
+    private static string GetRejectReasonText(AttemptRejectReason reason)
+    {
+        return reason switch
+        {
+            AttemptRejectReason.PlayerUnavailable => "PLAYER CANNOT HACK",
+            AttemptRejectReason.NotSitting => "LAPTOP SESSION IS NOT ACTIVE",
+            AttemptRejectReason.AssignmentsUnavailable => "ROUTER DATA IS NOT READY",
+            AttemptRejectReason.AssignmentMismatch => "MINIGAME ASSIGNMENT MISMATCH",
+            AttemptRejectReason.AlreadyCompleted => "NETWORK ALREADY COMPLETED",
+            AttemptRejectReason.OutOfRange => "SIGNAL LOST",
+            AttemptRejectReason.NoActiveAttempt => "NO SERVER ATTEMPT FOUND",
+            AttemptRejectReason.AttemptMismatch => "ATTEMPT DATA MISMATCH",
+            AttemptRejectReason.CompletedTooQuickly => "BREACH COMPLETED TOO QUICKLY",
+            AttemptRejectReason.CompletionFailed => "NETWORK COMPLETION FAILED",
+            _ => "SERVER VALIDATION FAILED",
+        };
+    }
+
+    private void EnsureAudioSources()
+    {
+        if (audioOrigin == null)
+            audioOrigin = transform;
+
+        if (keypressAudioSource == null)
+            keypressAudioSource = audioOrigin.gameObject.AddComponent<AudioSource>();
+
+        if (alarmAudioSource == null || alarmAudioSource == keypressAudioSource)
+            alarmAudioSource = audioOrigin.gameObject.AddComponent<AudioSource>();
+
+        ConfigureAudioSource(
+            keypressAudioSource,
+            keypressMinDistance,
+            keypressMaxDistance,
+            keypressRolloff,
+            priority: 128
+        );
+
+        ConfigureAudioSource(
+            alarmAudioSource,
+            alarmMinDistance,
+            alarmMaxDistance,
+            alarmRolloff,
+            priority: 32
+        );
+    }
+
+    private static void ConfigureAudioSource(
+        AudioSource source,
+        float minDistance,
+        float maxDistance,
+        AudioRolloffMode rolloffMode,
+        int priority
+    )
+    {
+        if (source == null)
+            return;
+
+        source.playOnAwake = false;
+        source.loop = false;
+        source.spatialBlend = 1f;
+        source.dopplerLevel = 0f;
+        source.rolloffMode = rolloffMode;
+        source.minDistance = Mathf.Max(0.01f, minDistance);
+        source.maxDistance = Mathf.Max(source.minDistance + 0.01f, maxDistance);
+        source.priority = Mathf.Clamp(priority, 0, 256);
+    }
+
+    private void PlayKeypress(ushort sequence)
+    {
+        EnsureAudioSources();
+
+        if (keypressAudioSource == null || keypressClips == null || keypressClips.Length == 0)
+            return;
+
+        int clipIndex = sequence % keypressClips.Length;
+        AudioClip clip = keypressClips[clipIndex];
+
+        if (clip == null)
+            return;
+
+        float minPitch = Mathf.Min(keypressPitchMin, keypressPitchMax);
+        float maxPitch = Mathf.Max(keypressPitchMin, keypressPitchMax);
+        uint hash = (uint)(sequence * 1103515245u + 12345u);
+        float pitchT = (hash & 0xFFFFu) / 65535f;
+        keypressAudioSource.pitch = Mathf.Lerp(minPitch, maxPitch, pitchT);
+        keypressAudioSource.PlayOneShot(clip, Mathf.Clamp01(keypressVolume));
+    }
+
+    private void PlayAlarmAndRaiseEvent()
+    {
+        EnsureAudioSources();
+
+        if (alarmAudioSource != null && alarmClip != null)
+        {
+            alarmAudioSource.pitch = 1f;
+            alarmAudioSource.PlayOneShot(alarmClip, Mathf.Clamp01(alarmVolume));
+        }
+
+        // A future through-wall red reveal component can subscribe to this event
+        // on each player's PlayerLaptopHacker without changing the minigame API.
+        HackAlarmEmitted?.Invoke();
+    }
+
+    private void StopLaptopAudio()
+    {
+        if (keypressAudioSource != null)
+            keypressAudioSource.Stop();
+
+        if (alarmAudioSource != null)
+            alarmAudioSource.Stop();
+    }
+
+    private double GetServerTime()
+    {
+        if (NetworkManager.Singleton == null)
+            return 0d;
+
+        return NetworkManager.Singleton.ServerTime.Time;
+    }
+
+    private bool CanSendRpc()
+    {
+        return IsSpawned
+            && NetworkManager.Singleton != null
+            && NetworkManager.Singleton.IsListening;
     }
 
     private bool CanUseSurvivorTools()

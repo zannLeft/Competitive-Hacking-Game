@@ -2222,11 +2222,35 @@ MonoBehaviour:
   playerSetup: {fileID: 7528082831520240939}
   lifeState: {fileID: 4764926159289589612}
   screenUI: {fileID: 4586780454097912121}
-  rangeOrigin: {fileID: 0}
   barCount: 5
   requiredBars: 5
   requireLaptopFocus: 1
   targetRefreshInterval: 0.1
+  audioOrigin: {fileID: 0}
+  keypressAudioSource: {fileID: 0}
+  alarmAudioSource: {fileID: 0}
+  keypressClips:
+  - {fileID: 8300000, guid: 9dbc4b817ca0c3340a843126b82a0855, type: 3}
+  - {fileID: 8300000, guid: feba6cb6053387c419d52a6a10e3bdf5, type: 3}
+  - {fileID: 8300000, guid: bec48687efa86dc40bb70ed9c9ccf0fe, type: 3}
+  - {fileID: 8300000, guid: 86c68a36a29f1384e9224416459dbd78, type: 3}
+  - {fileID: 8300000, guid: ee5c6b76a8f82e74b92862729942bceb, type: 3}
+  - {fileID: 8300000, guid: d3ef5cc70513d5046a717b45111641ae, type: 3}
+  alarmClip: {fileID: 8300000, guid: 76440fa744387af4aa28fc3d5be39c33, type: 3}
+  keypressVolume: 0.55
+  keypressPitchMin: 0.96
+  keypressPitchMax: 1.04
+  keypressMinDistance: 1.25
+  keypressMaxDistance: 14
+  keypressRolloff: 0
+  alarmVolume: 1
+  alarmMinDistance: 18
+  alarmMaxDistance: 140
+  alarmRolloff: 1
+  serverAttemptValidationInterval: 0.25
+  minimumNetworkedKeypressInterval: 0.04
+  minimumNetworkedAlarmInterval: 0.5
+  rejectedMessageSeconds: 1.1
 --- !u!114 &6402268619689270216
 MonoBehaviour:
   m_ObjectHideFlags: 0

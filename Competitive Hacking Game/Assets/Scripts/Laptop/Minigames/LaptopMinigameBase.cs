@@ -7,6 +7,7 @@ public abstract class LaptopMinigameBase : MonoBehaviour
     public event Action Completed;
     public event Action Failed;
     public event Action AlarmTriggered;
+    public event Action ActionPerformed;
 
     public bool IsRunning { get; private set; }
     public LaptopMinigameContext Context { get; private set; }
@@ -52,6 +53,18 @@ public abstract class LaptopMinigameBase : MonoBehaviour
 
         IsRunning = false;
         OnAbort();
+    }
+
+    /// <summary>
+    /// Call this when the minigame accepts a meaningful player action.
+    /// PlayerLaptopHacker uses it for the immediate local and networked keypress sound.
+    /// </summary>
+    protected void TriggerActionPerformed()
+    {
+        if (!IsRunning)
+            return;
+
+        ActionPerformed?.Invoke();
     }
 
     protected void TriggerAlarm()

@@ -250,6 +250,10 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         if (_state != RunState.Playing)
             return;
 
+        // This is the accepted player action for Firewall Runner.
+        // PlayerLaptopHacker plays it immediately for the owner and relays it
+        // to nearby players as a positional keyboard keypress.
+        TriggerActionPerformed();
         _jumpBufferRemaining = Mathf.Max(_jumpBufferRemaining, jumpBufferSeconds);
     }
 

@@ -28,6 +28,7 @@ public class LaptopScreenUI : MonoBehaviour
     private Action _completedCallback;
     private Action _failedCallback;
     private Action _alarmTriggeredCallback;
+    private Action _actionPerformedCallback;
 
     public bool HasActiveMinigame =>
         _activeMinigame != null && _activeMinigame.IsRunning;
@@ -114,6 +115,16 @@ public class LaptopScreenUI : MonoBehaviour
         );
     }
 
+    public void ShowVerifying(string networkDisplayName)
+    {
+        ShowMessage(
+            "VERIFYING BREACH",
+            "WAITING FOR SERVER CONFIRMATION",
+            SafeNetworkLabel(networkDisplayName),
+            string.Empty
+        );
+    }
+
     public void ShowSuccess(string networkDisplayName)
     {
         ShowMessage(
@@ -121,6 +132,16 @@ public class LaptopScreenUI : MonoBehaviour
             "NETWORK BREACH COMPLETE",
             SafeNetworkLabel(networkDisplayName),
             string.Empty
+        );
+    }
+
+    public void ShowCompletionRejected(string networkDisplayName, string reason)
+    {
+        ShowMessage(
+            "BREACH REJECTED",
+            string.IsNullOrWhiteSpace(reason) ? "SERVER VALIDATION FAILED" : reason,
+            SafeNetworkLabel(networkDisplayName),
+            "RECONNECTING..."
         );
     }
 
@@ -139,7 +160,8 @@ public class LaptopScreenUI : MonoBehaviour
         LaptopMinigameContext context,
         Action completedCallback,
         Action failedCallback,
-        Action alarmTriggeredCallback
+        Action alarmTriggeredCallback,
+        Action actionPerformedCallback
     )
     {
         AbortActiveMinigame();
@@ -214,10 +236,12 @@ public class LaptopScreenUI : MonoBehaviour
         _completedCallback = completedCallback;
         _failedCallback = failedCallback;
         _alarmTriggeredCallback = alarmTriggeredCallback;
+        _actionPerformedCallback = actionPerformedCallback;
 
         _activeMinigame.Completed += OnActiveMinigameCompleted;
         _activeMinigame.Failed += OnActiveMinigameFailed;
         _activeMinigame.AlarmTriggered += OnActiveMinigameAlarmTriggered;
+        _activeMinigame.ActionPerformed += OnActiveMinigameActionPerformed;
 
         SetMessageObjectsVisible(false);
         _activeMinigame.Begin(context);
@@ -246,6 +270,7 @@ public class LaptopScreenUI : MonoBehaviour
             _activeMinigame.Completed -= OnActiveMinigameCompleted;
             _activeMinigame.Failed -= OnActiveMinigameFailed;
             _activeMinigame.AlarmTriggered -= OnActiveMinigameAlarmTriggered;
+            _activeMinigame.ActionPerformed -= OnActiveMinigameActionPerformed;
             _activeMinigame.Abort();
         }
 
@@ -253,6 +278,7 @@ public class LaptopScreenUI : MonoBehaviour
         _completedCallback = null;
         _failedCallback = null;
         _alarmTriggeredCallback = null;
+        _actionPerformedCallback = null;
 
         if (_activeMinigameObject != null)
             Destroy(_activeMinigameObject);
@@ -282,6 +308,11 @@ public class LaptopScreenUI : MonoBehaviour
         _alarmTriggeredCallback?.Invoke();
     }
 
+    private void OnActiveMinigameActionPerformed()
+    {
+        _actionPerformedCallback?.Invoke();
+    }
+
     private void DetachActiveMinigameCallbacks()
     {
         if (_activeMinigame != null)
@@ -289,11 +320,13 @@ public class LaptopScreenUI : MonoBehaviour
             _activeMinigame.Completed -= OnActiveMinigameCompleted;
             _activeMinigame.Failed -= OnActiveMinigameFailed;
             _activeMinigame.AlarmTriggered -= OnActiveMinigameAlarmTriggered;
+            _activeMinigame.ActionPerformed -= OnActiveMinigameActionPerformed;
         }
 
         _completedCallback = null;
         _failedCallback = null;
         _alarmTriggeredCallback = null;
+        _actionPerformedCallback = null;
     }
 
     private void ShowMessage(
