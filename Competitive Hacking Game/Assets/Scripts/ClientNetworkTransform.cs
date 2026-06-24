@@ -18,5 +18,19 @@ namespace Unity.Multiplayer.Samples.Utilities.ClientAuthority
         {
             return false;
         }
+
+        /// <summary>
+        /// Commits a discontinuous owner-authoritative movement as a NetworkTransform
+        /// teleport so non-owner replicas clear interpolation history and snap instead
+        /// of visibly travelling from the previous position.
+        /// </summary>
+        public bool TryTeleportOwnerAuthoritative(Vector3 position, Quaternion rotation)
+        {
+            if (!IsSpawned || !IsOwner)
+                return false;
+
+            Teleport(position, rotation, transform.localScale);
+            return true;
+        }
     }
 }

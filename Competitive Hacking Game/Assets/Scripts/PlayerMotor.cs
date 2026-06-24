@@ -53,6 +53,8 @@ public class PlayerMotor : NetworkBehaviour
 
     public bool IsGrounded => isGrounded;
     public bool UsingSittingCollider => sittingCollider;
+    public float StandingColliderHeight => standHeight;
+    public float StandingColliderCenterY => standCenterY;
 
     [Header("Speeds")]
     [SerializeField]

@@ -516,6 +516,34 @@ public class MatchFlowManager : MonoBehaviour
         return lifeState;
     }
 
+    public bool ServerIsActiveRoundParticipant(ulong clientId)
+    {
+        if (!CanRunServerMatchAuthority())
+            return false;
+
+        if (!_activeMatchParticipantClientIds.Contains(clientId))
+            return false;
+
+        NetworkManager nm = NetworkManager.Singleton;
+        return nm != null
+            && nm.ConnectedClients != null
+            && nm.ConnectedClients.ContainsKey(clientId);
+    }
+
+    public bool ServerCanUseSurvivorInteraction(ulong actorClientId, ulong targetClientId)
+    {
+        if (!ServerIsActiveRoundParticipant(actorClientId))
+            return false;
+
+        if (!ServerIsActiveRoundParticipant(targetClientId))
+            return false;
+
+        if (_roles != null && _roles.IsClientBadGuy(actorClientId))
+            return false;
+
+        return true;
+    }
+
     private bool CanRunServerMatchAuthority()
     {
         return NetworkManager.Singleton != null

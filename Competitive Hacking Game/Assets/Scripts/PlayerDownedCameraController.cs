@@ -402,7 +402,16 @@ public class PlayerDownedCameraController : NetworkBehaviour, IPlayerRoundResett
 
         hasSavedCameraState = false;
 
-        if (playerLook != null && (lifeState == null || lifeState.IsAlive))
+        if (
+            playerLook != null
+            && (
+                lifeState == null
+                || (
+                    lifeState.IsAlive
+                    && !lifeState.IsWaitingForReviveTeleportPresentation
+                )
+            )
+        )
             playerLook.enabled = true;
     }
 
