@@ -327,27 +327,6 @@ public class InputManager : NetworkBehaviour
         laptopHacker?.ClearLocalInputState();
     }
 
-    private void PressLaptopPrimary(ref bool sourceHeld)
-    {
-        bool wasAnyPrimaryHeld =
-            _jumpMinigamePrimaryHeld || _hackMinigamePrimaryHeld;
-
-        sourceHeld = true;
-
-        if (!wasAnyPrimaryHeld)
-            laptopHacker?.PrimaryPressed();
-    }
-
-    private void ReleaseLaptopPrimary(ref bool sourceHeld)
-    {
-        if (!sourceHeld)
-            return;
-
-        sourceHeld = false;
-
-        if (!_jumpMinigamePrimaryHeld && !_hackMinigamePrimaryHeld)
-            laptopHacker?.PrimaryReleased();
-    }
 
     private void ReapplyHeldInputsAfterUnblock()
     {
@@ -375,7 +354,12 @@ public class InputManager : NetworkBehaviour
     {
         if (CanRouteInputToLaptopMinigame())
         {
-            PressLaptopPrimary(ref _jumpMinigamePrimaryHeld);
+            if (!_jumpMinigamePrimaryHeld)
+            {
+                _jumpMinigamePrimaryHeld = true;
+                laptopHacker?.JumpPressed();
+            }
+
             return;
         }
 
@@ -389,7 +373,8 @@ public class InputManager : NetworkBehaviour
     {
         if (_jumpMinigamePrimaryHeld)
         {
-            ReleaseLaptopPrimary(ref _jumpMinigamePrimaryHeld);
+            _jumpMinigamePrimaryHeld = false;
+            laptopHacker?.JumpReleased();
             return;
         }
 
@@ -441,14 +426,22 @@ public class InputManager : NetworkBehaviour
             return;
         }
 
-        if (CanRouteInputToLaptopMinigame())
-            PressLaptopPrimary(ref _hackMinigamePrimaryHeld);
+        if (CanRouteInputToLaptopMinigame() && !_hackMinigamePrimaryHeld)
+        {
+            _hackMinigamePrimaryHeld = true;
+            laptopHacker?.InteractPressed();
+        }
     }
 
     private void OnHackCanceled(InputAction.CallbackContext ctx)
     {
         reviver?.SetReviveHeld(false);
-        ReleaseLaptopPrimary(ref _hackMinigamePrimaryHeld);
+
+        if (_hackMinigamePrimaryHeld)
+        {
+            _hackMinigamePrimaryHeld = false;
+            laptopHacker?.InteractReleased();
+        }
     }
 
     void Update()

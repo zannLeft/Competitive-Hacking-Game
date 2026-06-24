@@ -253,15 +253,29 @@ public class LaptopScreenUI : MonoBehaviour
         _activeMinigame?.SetNavigation(input);
     }
 
-    public void PrimaryPressed()
+    public void JumpPressed()
     {
-        _activeMinigame?.PrimaryPressed();
+        _activeMinigame?.JumpPressed();
     }
 
-    public void PrimaryReleased()
+    public void JumpReleased()
     {
-        _activeMinigame?.PrimaryReleased();
+        _activeMinigame?.JumpReleased();
     }
+
+    public void InteractPressed()
+    {
+        _activeMinigame?.InteractPressed();
+    }
+
+    public void InteractReleased()
+    {
+        _activeMinigame?.InteractReleased();
+    }
+
+    // Compatibility aliases for older callers.
+    public void PrimaryPressed() => InteractPressed();
+    public void PrimaryReleased() => InteractReleased();
 
     public void AbortActiveMinigame()
     {

@@ -36,6 +36,18 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     [SerializeField]
     private LaptopScreenUI screenUI;
 
+    [Header("Owner HUD")]
+    [Tooltip("Normal gameplay HUD root. Leave empty to find the scene object named GameUI automatically.")]
+    [SerializeField]
+    private GameObject gameUIRoot;
+
+    [SerializeField]
+    private string gameUIRootName = "GameUI";
+
+    [Tooltip("Hide the normal gameplay HUD while the laptop focus animation state is active.")]
+    [SerializeField]
+    private bool hideGameUIWhileLaptopFocused = true;
+
     [Header("Signal Rules")]
     [SerializeField]
     private int barCount = 5;
@@ -130,9 +142,12 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     private float _targetRefreshTimer;
     private string _lastPresentationKey = string.Empty;
     private Vector2 _navigationInput;
-    private bool _primaryHeld;
+    private bool _jumpHeld;
+    private bool _interactHeld;
     private ushort _localActionSequence;
     private Coroutine _rejectedMessageCoroutine;
+    private bool _gameUIHiddenByLaptop;
+    private bool _gameUIWasActiveBeforeLaptop;
 
     // Server-only attempt state. This lives on the player's existing NetworkObject.
     private bool _serverAttemptActive;
@@ -201,6 +216,9 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 
     public override void OnNetworkDespawn()
     {
+        if (IsOwner)
+            RestoreGameUIAfterLaptop();
+
         DetachCoordinator();
         AbortLocalMinigame(clearTarget: true, notifyServer: false);
         ClearServerAttempt();
@@ -217,6 +235,7 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             return;
 
         AttachCoordinatorIfNeeded();
+        UpdateOwnerGameUIVisibility();
 
         if (!CanUseSurvivorTools() || !IsLaptopUsable)
         {
@@ -263,6 +282,9 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 
     public void ForceResetLocalForRound()
     {
+        if (IsOwner)
+            RestoreGameUIAfterLaptop();
+
         AbortLocalMinigame(clearTarget: true);
         ClearServerAttempt();
         StopLaptopAudio();
@@ -274,7 +296,8 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         _targetRefreshTimer = 0f;
         _lastPresentationKey = string.Empty;
         _navigationInput = Vector2.zero;
-        _primaryHeld = false;
+        _jumpHeld = false;
+        _interactHeld = false;
         _localActionSequence = 0;
     }
 
@@ -289,25 +312,49 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             screenUI.SetNavigation(_navigationInput);
     }
 
-    public void PrimaryPressed()
+    public void JumpPressed()
     {
-        if (!IsOwner || !HasActiveMinigame || _primaryHeld)
+        if (!IsOwner || !HasActiveMinigame || _jumpHeld)
             return;
 
-        _primaryHeld = true;
-        screenUI.PrimaryPressed();
+        _jumpHeld = true;
+        screenUI.JumpPressed();
     }
 
-    public void PrimaryReleased()
+    public void JumpReleased()
     {
-        if (!IsOwner || !_primaryHeld)
+        if (!IsOwner || !_jumpHeld)
             return;
 
-        _primaryHeld = false;
+        _jumpHeld = false;
 
         if (screenUI != null)
-            screenUI.PrimaryReleased();
+            screenUI.JumpReleased();
     }
+
+    public void InteractPressed()
+    {
+        if (!IsOwner || !HasActiveMinigame || _interactHeld)
+            return;
+
+        _interactHeld = true;
+        screenUI.InteractPressed();
+    }
+
+    public void InteractReleased()
+    {
+        if (!IsOwner || !_interactHeld)
+            return;
+
+        _interactHeld = false;
+
+        if (screenUI != null)
+            screenUI.InteractReleased();
+    }
+
+    // Compatibility aliases. New input routing keeps Space and E separate.
+    public void PrimaryPressed() => InteractPressed();
+    public void PrimaryReleased() => InteractReleased();
 
     public void ClearLocalInputState()
     {
@@ -319,16 +366,17 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         if (screenUI != null)
             screenUI.SetNavigation(Vector2.zero);
 
-        PrimaryReleased();
+        JumpReleased();
+        InteractReleased();
     }
 
     // Compatibility for existing cleanup code. The old hold-to-hack system no longer uses this.
     public void SetHackHeld(bool held)
     {
         if (held)
-            PrimaryPressed();
+            InteractPressed();
         else
-            PrimaryReleased();
+            InteractReleased();
     }
 
     private void CacheReferences()
@@ -347,6 +395,79 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 
         if (audioOrigin == null)
             audioOrigin = transform;
+
+        if (IsOwner && gameUIRoot == null)
+            gameUIRoot = FindSceneObjectByName(gameUIRootName);
+    }
+
+    private void UpdateOwnerGameUIVisibility()
+    {
+        if (!IsOwner)
+            return;
+
+        if (!hideGameUIWhileLaptopFocused)
+        {
+            RestoreGameUIAfterLaptop();
+            return;
+        }
+
+        if (sitAction != null && sitAction.LaptopCameraFocus && CanUseSurvivorTools())
+            HideGameUIForLaptop();
+        else
+            RestoreGameUIAfterLaptop();
+    }
+
+    private void HideGameUIForLaptop()
+    {
+        if (_gameUIHiddenByLaptop)
+            return;
+
+        if (gameUIRoot == null)
+            gameUIRoot = FindSceneObjectByName(gameUIRootName);
+
+        if (gameUIRoot == null)
+            return;
+
+        _gameUIWasActiveBeforeLaptop = gameUIRoot.activeSelf;
+        _gameUIHiddenByLaptop = true;
+
+        if (_gameUIWasActiveBeforeLaptop)
+            gameUIRoot.SetActive(false);
+    }
+
+    private void RestoreGameUIAfterLaptop()
+    {
+        if (!_gameUIHiddenByLaptop)
+            return;
+
+        if (gameUIRoot != null)
+            gameUIRoot.SetActive(_gameUIWasActiveBeforeLaptop);
+
+        _gameUIHiddenByLaptop = false;
+        _gameUIWasActiveBeforeLaptop = false;
+    }
+
+    private static GameObject FindSceneObjectByName(string objectName)
+    {
+        if (string.IsNullOrWhiteSpace(objectName))
+            return null;
+
+        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+
+        for (int i = 0; i < allObjects.Length; i++)
+        {
+            GameObject candidate = allObjects[i];
+
+            if (candidate == null || candidate.name != objectName)
+                continue;
+
+            if (!candidate.scene.IsValid())
+                continue;
+
+            return candidate;
+        }
+
+        return null;
     }
 
     private void RefreshAndPresentTarget()
@@ -453,8 +574,11 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 
         screenUI.SetNavigation(_navigationInput);
 
-        if (_primaryHeld)
-            screenUI.PrimaryPressed();
+        if (_jumpHeld)
+            screenUI.JumpPressed();
+
+        if (_interactHeld)
+            screenUI.InteractPressed();
     }
 
     private RouterBox FindBestHackableRouter()

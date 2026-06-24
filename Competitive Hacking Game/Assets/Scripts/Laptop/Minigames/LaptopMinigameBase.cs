@@ -30,21 +30,42 @@ public abstract class LaptopMinigameBase : MonoBehaviour
         OnNavigationChanged(input);
     }
 
-    public void PrimaryPressed()
+    public void JumpPressed()
     {
         if (!IsRunning)
             return;
 
-        OnPrimaryPressed();
+        OnJumpPressed();
     }
 
-    public void PrimaryReleased()
+    public void JumpReleased()
     {
         if (!IsRunning)
             return;
 
-        OnPrimaryReleased();
+        OnJumpReleased();
     }
+
+    public void InteractPressed()
+    {
+        if (!IsRunning)
+            return;
+
+        OnInteractPressed();
+    }
+
+    public void InteractReleased()
+    {
+        if (!IsRunning)
+            return;
+
+        OnInteractReleased();
+    }
+
+    // Compatibility aliases for older minigames. New minigames should use the
+    // explicit Jump and Interact channels so Space and E can have different roles.
+    public void PrimaryPressed() => InteractPressed();
+    public void PrimaryReleased() => InteractReleased();
 
     public void Abort()
     {
@@ -99,6 +120,22 @@ public abstract class LaptopMinigameBase : MonoBehaviour
 
     protected virtual void OnNavigationChanged(Vector2 input) { }
 
+    protected virtual void OnJumpPressed() { }
+
+    protected virtual void OnJumpReleased() { }
+
+    protected virtual void OnInteractPressed()
+    {
+        OnPrimaryPressed();
+    }
+
+    protected virtual void OnInteractReleased()
+    {
+        OnPrimaryReleased();
+    }
+
+    // Legacy extension points kept so older minigame prefabs/scripts continue
+    // compiling. New code should override OnJump... or OnInteract... explicitly.
     protected virtual void OnPrimaryPressed() { }
 
     protected virtual void OnPrimaryReleased() { }

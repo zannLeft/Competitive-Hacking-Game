@@ -22,3 +22,12 @@ MonoBehaviour:
     hardChance: 0.35
     minimumEasyCompletionSeconds: 8
     minimumHardCompletionSeconds: 12
+  - minigameId: 2
+    displayName: Trace Escape
+    uiPrefab: {fileID: 2660724388933926576, guid: 65e67c370ca785444892b4c1045ce70f, type: 3}
+    selectionWeight: 1
+    allowEasy: 1
+    allowHard: 1
+    hardChance: 0.35
+    minimumEasyCompletionSeconds: 3
+    minimumHardCompletionSeconds: 5

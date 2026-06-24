@@ -1,0 +1,100 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2660724388933926576
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3734950274977124515}
+  - component: {fileID: 2221327112123229053}
+  - component: {fileID: 4558180078913256687}
+  m_Layer: 12
+  m_Name: TraceEscapeMinigame
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &3734950274977124515
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2660724388933926576}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &2221327112123229053
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2660724388933926576}
+  m_CullTransparentMesh: 1
+--- !u!114 &4558180078913256687
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2660724388933926576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2cf4adae720424548a295571f75f696a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TraceEscapeMinigame
+  easy:
+    mazeWidth: 25
+    mazeHeight: 13
+    accessKeyCount: 2
+    traceStartDelay: 2.8
+    traceStepSeconds: 0.18
+    movementRepeatSeconds: 0.105
+    movementInitialRepeatDelay: 0.18
+    visibleTraceTrailLength: 3
+  hard:
+    mazeWidth: 31
+    mazeHeight: 15
+    accessKeyCount: 3
+    traceStartDelay: 1.9
+    traceStepSeconds: 0.135
+    movementRepeatSeconds: 0.09
+    movementInitialRepeatDelay: 0.15
+    visibleTraceTrailLength: 4
+  navigationDeadzone: 0.35
+  failureHoldSeconds: 0.9
+  terminalFont: {fileID: 11400000, guid: 8d914078d7321844790934c1ea6f9fa5, type: 2}
+  backgroundColor: {r: 0.018, g: 0.032, b: 0.065, a: 1}
+  accentColor: {r: 0.43, g: 0.84, b: 1, a: 1}
+  textColor: {r: 0.91, g: 0.97, b: 1, a: 1}
+  mutedTextColor: {r: 0.47, g: 0.63, b: 0.72, a: 1}
+  dangerColor: {r: 1, g: 0.24, b: 0.38, a: 1}
+  playerGlyph: '@'
+  wallGlyph: '#'
+  keyGlyph: K
+  lockedExitGlyph: X
+  openExitGlyph: '>'
+  traceGlyph: '!'
+  traceTrailGlyph: ':'
+  enableTextGlow: 1
+  textGlowAlpha: 0.58
+  textGlowOuter: 0.18
+  textGlowPower: 0.82
+  separatorThickness: 8
+  mazeMinimumFontSize: 28
+  mazeMaximumFontSize: 60
+  mazeLineSpacing: -8

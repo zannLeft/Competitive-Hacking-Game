@@ -1318,7 +1318,7 @@ MonoBehaviour:
   m_RequiresColorTexture: 0
   m_TaaSettings:
     m_Quality: 3
-    m_FrameInfluence: 0.1
+    m_FrameInfluence: 0.100000024
     m_JitterScale: 1
     m_MipBias: 0
     m_VarianceClampScale: 0.9
@@ -2222,6 +2222,9 @@ MonoBehaviour:
   playerSetup: {fileID: 7528082831520240939}
   lifeState: {fileID: 4764926159289589612}
   screenUI: {fileID: 4586780454097912121}
+  gameUIRoot: {fileID: 0}
+  gameUIRootName: GameUI
+  hideGameUIWhileLaptopFocused: 1
   barCount: 5
   requiredBars: 5
   requireLaptopFocus: 1
