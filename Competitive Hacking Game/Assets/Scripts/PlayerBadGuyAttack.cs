@@ -173,9 +173,20 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
             ? targetHit.point
             : target.transform.position + Vector3.up;
 
-        target.ServerSetDowned(
-            target.transform.position,
+        MatchFlowManager matchFlow = GetMatchFlowManager();
+
+        if (matchFlow == null)
+        {
+            Debug.LogError(
+                "[PlayerBadGuyAttack] No MatchFlowManager was found. The server cannot authoritatively resolve this hit."
+            );
+            return;
+        }
+
+        matchFlow.ServerTryApplySurvivorHit(
+            target,
             OwnerClientId,
+            target.transform.position,
             impulse,
             forcePosition
         );
@@ -279,6 +290,14 @@ public class PlayerBadGuyAttack : NetworkBehaviour, IPlayerRoundResettable
             return false;
 
         return true;
+    }
+
+    private MatchFlowManager GetMatchFlowManager()
+    {
+        if (LobbyManager.Instance != null && LobbyManager.Instance.MatchFlow != null)
+            return LobbyManager.Instance.MatchFlow;
+
+        return FindAnyObjectByType<MatchFlowManager>(FindObjectsInactive.Include);
     }
 
     public void ResetForRound()

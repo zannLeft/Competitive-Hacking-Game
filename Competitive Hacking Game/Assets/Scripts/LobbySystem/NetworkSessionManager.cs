@@ -8,6 +8,7 @@ using UnityEngine;
 public class NetworkSessionManager : MonoBehaviour
 {
     public event Action<ulong> ServerClientConnected;
+    public event Action<ulong> ServerClientDisconnected;
     public event Action<ulong> LocalClientDisconnected;
 
     private bool _callbacksRegistered;
@@ -103,7 +104,10 @@ public class NetworkSessionManager : MonoBehaviour
         if (nm == null)
             return;
 
-        // If THIS local client got disconnected, tell the manager to restore UI/menu state
+        if (nm.IsServer)
+            ServerClientDisconnected?.Invoke(clientId);
+
+        // If THIS local client got disconnected, tell the manager to restore UI/menu state.
         if (!nm.IsServer && clientId == nm.LocalClientId)
             LocalClientDisconnected?.Invoke(clientId);
     }

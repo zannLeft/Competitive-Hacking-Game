@@ -59,6 +59,12 @@ public class PlayerLifeState
     [SerializeField]
     private float downedBodySpawnUpOffset = 0.05f;
 
+    [Header("Bleed Out")]
+    [Tooltip("Authoritative server duration before a Downed survivor becomes permanently Dead.")]
+    [Min(1f)]
+    [SerializeField]
+    private float bleedOutDurationSeconds = 30f;
+
     [Header("Debug Testing")]
     [Tooltip("Optional temporary test keys. Leave OFF unless you want to test life states manually.")]
     [SerializeField]
@@ -83,6 +89,12 @@ public class PlayerLifeState
     );
 
     public NetworkVariable<double> DownedStartedServerTime = new NetworkVariable<double>(
+        0d,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<double> DownedExpiresServerTime = new NetworkVariable<double>(
         0d,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
@@ -131,6 +143,17 @@ public class PlayerLifeState
 
             double now = GetNetworkTime();
             return Math.Max(0d, now - DownedStartedServerTime.Value);
+        }
+    }
+
+    public double SecondsUntilBleedOut
+    {
+        get
+        {
+            if (!IsDowned || DownedExpiresServerTime.Value <= 0d)
+                return 0d;
+
+            return Math.Max(0d, DownedExpiresServerTime.Value - GetNetworkTime());
         }
     }
 
@@ -336,8 +359,7 @@ public class PlayerLifeState
         SetStateServer(
             PlayerLifeStateType.Alive,
             transform.position,
-            NoAttackerClientId,
-            resetDownedTimer: true
+            NoAttackerClientId
         );
     }
 
@@ -354,7 +376,10 @@ public class PlayerLifeState
         if (IsBadGuy)
             return;
 
-        if (State.Value == PlayerLifeStateType.Dead)
+        if (State.Value != PlayerLifeStateType.Alive)
+            return;
+
+        if (!ServerCanChangeLifeStateDuringMatch())
             return;
 
         Vector3 safeDownedPosition = downedPosition;
@@ -373,14 +398,17 @@ public class PlayerLifeState
         SetStateServer(
             PlayerLifeStateType.Downed,
             safeDownedPosition,
-            attackerClientId,
-            resetDownedTimer: true
+            attackerClientId
         );
 
         sitAction?.ServerForceResetSitNetworkState();
     }
 
-    public void ServerSetDead(ulong attackerClientId = NoAttackerClientId)
+    public void ServerSetDead(
+        ulong attackerClientId = NoAttackerClientId,
+        Vector3 ragdollImpulse = default,
+        Vector3 ragdollForcePosition = default
+    )
     {
         if (!IsServer)
             return;
@@ -388,20 +416,37 @@ public class PlayerLifeState
         if (IsBadGuy)
             return;
 
+        if (State.Value == PlayerLifeStateType.Dead)
+            return;
+
+        if (!ServerCanChangeLifeStateDuringMatch())
+            return;
+
         sitAction?.ServerForceResetSitNetworkState();
 
         Vector3 relevantPosition =
             State.Value == PlayerLifeStateType.Downed ? DownedPosition.Value : transform.position;
 
-        if (HasSpawnedDownedBody())
-            currentDownedBody.ServerSetBodyState(PlayerLifeStateType.Dead);
+        if (!HasSpawnedDownedBody())
+        {
+            bool flashlightWasOn =
+                playerFlashlight != null
+                && playerFlashlight.ShouldCarryLitFlashlightToDownedBody();
 
-        SetStateServer(
-            PlayerLifeStateType.Dead,
-            relevantPosition,
-            attackerClientId,
-            resetDownedTimer: false
-        );
+            ServerSpawnOrRefreshDownedBody(
+                relevantPosition,
+                PlayerLifeStateType.Dead,
+                flashlightWasOn,
+                ragdollImpulse,
+                ragdollForcePosition
+            );
+        }
+        else
+        {
+            currentDownedBody.ServerSetBodyState(PlayerLifeStateType.Dead);
+        }
+
+        SetStateServer(PlayerLifeStateType.Dead, relevantPosition, attackerClientId);
     }
 
     public void ServerReviveFromDowned(Vector3 revivePosition)
@@ -412,13 +457,22 @@ public class PlayerLifeState
         if (State.Value != PlayerLifeStateType.Downed)
             return;
 
+        if (!ServerCanChangeLifeStateDuringMatch())
+            return;
+
+        double now = GetNetworkTime();
+        if (ServerHasBleedOutExpired(now))
+        {
+            ServerSetDead(LastAttackerClientId.Value);
+            return;
+        }
+
         ServerDespawnDownedBody();
 
         SetStateServer(
             PlayerLifeStateType.Alive,
             revivePosition,
-            NoAttackerClientId,
-            resetDownedTimer: true
+            NoAttackerClientId
         );
     }
 
@@ -433,8 +487,7 @@ public class PlayerLifeState
         SetStateServer(
             PlayerLifeStateType.Alive,
             transform.position,
-            NoAttackerClientId,
-            resetDownedTimer: true
+            NoAttackerClientId
         );
     }
 
@@ -461,22 +514,56 @@ public class PlayerLifeState
     private void SetStateServer(
         PlayerLifeStateType newState,
         Vector3 relevantPosition,
-        ulong attackerClientId,
-        bool resetDownedTimer
+        ulong attackerClientId
     )
     {
         if (!IsServer)
             return;
 
+        PlayerLifeStateType previousState = State.Value;
+
         DownedPosition.Value = relevantPosition;
         LastAttackerClientId.Value = attackerClientId;
 
         if (newState == PlayerLifeStateType.Downed)
-            DownedStartedServerTime.Value = GetNetworkTime();
-        else if (resetDownedTimer)
+        {
+            double now = GetNetworkTime();
+            DownedStartedServerTime.Value = now;
+            DownedExpiresServerTime.Value = now + Math.Max(1d, bleedOutDurationSeconds);
+        }
+        else
+        {
             DownedStartedServerTime.Value = 0d;
+            DownedExpiresServerTime.Value = 0d;
+        }
 
         State.Value = newState;
+
+        if (previousState != newState)
+            GetMatchFlowManager()?.ServerNotifyPlayerLifeStateChanged(this, previousState, newState);
+    }
+
+    public bool ServerHasBleedOutExpired(double serverTime)
+    {
+        if (!IsServer || State.Value != PlayerLifeStateType.Downed)
+            return false;
+
+        double expiresAt = DownedExpiresServerTime.Value;
+        return expiresAt > 0d && serverTime >= expiresAt;
+    }
+
+    private bool ServerCanChangeLifeStateDuringMatch()
+    {
+        MatchFlowManager matchFlow = GetMatchFlowManager();
+        return matchFlow == null || !matchFlow.HasCommittedMatchResult;
+    }
+
+    private MatchFlowManager GetMatchFlowManager()
+    {
+        if (LobbyManager.Instance != null && LobbyManager.Instance.MatchFlow != null)
+            return LobbyManager.Instance.MatchFlow;
+
+        return FindAnyObjectByType<MatchFlowManager>(FindObjectsInactive.Include);
     }
 
     private void ServerSpawnOrRefreshDownedBody(
