@@ -323,7 +323,8 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             definition,
             context,
             OnLocalMinigameCompleted,
-            OnLocalMinigameFailed
+            OnLocalMinigameFailed,
+            OnLocalMinigameAlarmTriggered
         );
 
         _targetLockedByMinigame = started;
@@ -431,6 +432,18 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         Debug.Log(
             $"[PlayerLaptopHacker] Local minigame failed for '{CurrentNetworkId}'. "
                 + "The networked alarm will be connected in the audio/validation stage.",
+            this
+        );
+    }
+
+    private void OnLocalMinigameAlarmTriggered()
+    {
+        if (!IsOwner)
+            return;
+
+        Debug.Log(
+            $"[PlayerLaptopHacker] Local minigame alarm triggered for '{CurrentNetworkId}'. "
+                + "The positional networked sound will be connected in Stage 4.",
             this
         );
     }

@@ -5,8 +5,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class LaptopScreenUI : MonoBehaviour
 {
-    [Header("Temporary Message UI")]
-    [Tooltip("These can reuse the current TitleText, StatusText, TargetText and PromptText objects for Stage 2.")]
+    [Header("Fallback / OS Message UI")]
     [SerializeField]
     private TMP_Text titleText;
 
@@ -19,10 +18,6 @@ public class LaptopScreenUI : MonoBehaviour
     [SerializeField]
     private TMP_Text promptText;
 
-    [Tooltip("Assign the old ProgressRoot here so it stays hidden. It is no longer used by the minigame framework.")]
-    [SerializeField]
-    private GameObject progressRoot;
-
     [Header("Minigame Host")]
     [Tooltip("Empty stretched RectTransform under LaptopUI. Minigame UI prefabs are instantiated beneath it.")]
     [SerializeField]
@@ -32,6 +27,7 @@ public class LaptopScreenUI : MonoBehaviour
     private GameObject _activeMinigameObject;
     private Action _completedCallback;
     private Action _failedCallback;
+    private Action _alarmTriggeredCallback;
 
     public bool HasActiveMinigame =>
         _activeMinigame != null && _activeMinigame.IsRunning;
@@ -40,10 +36,10 @@ public class LaptopScreenUI : MonoBehaviour
 
     protected virtual void Awake()
     {
-        if (progressRoot != null)
-            progressRoot.SetActive(false);
-
         SetMessageObjectsVisible(true);
+
+        if (minigameRoot != null)
+            minigameRoot.gameObject.SetActive(false);
     }
 
     protected virtual void OnDestroy()
@@ -104,7 +100,7 @@ public class LaptopScreenUI : MonoBehaviour
             minigameDisplayName,
             $"{difficulty.ToString().ToUpperInvariant()} MODULE READY",
             SafeNetworkLabel(networkDisplayName),
-            "UI PREFAB WILL BE ADDED IN STAGE 3"
+            "NO UI PREFAB IS ASSIGNED"
         );
     }
 
@@ -142,7 +138,8 @@ public class LaptopScreenUI : MonoBehaviour
         LaptopMinigameDefinition definition,
         LaptopMinigameContext context,
         Action completedCallback,
-        Action failedCallback
+        Action failedCallback,
+        Action alarmTriggeredCallback
     )
     {
         AbortActiveMinigame();
@@ -179,11 +176,15 @@ public class LaptopScreenUI : MonoBehaviour
             return false;
         }
 
+        minigameRoot.gameObject.SetActive(true);
+
         _activeMinigameObject = Instantiate(
             definition.UiPrefab,
             minigameRoot,
             worldPositionStays: false
         );
+
+        FitMinigameToHost(_activeMinigameObject);
 
         _activeMinigame =
             _activeMinigameObject.GetComponent<LaptopMinigameBase>()
@@ -199,6 +200,7 @@ public class LaptopScreenUI : MonoBehaviour
 
             Destroy(_activeMinigameObject);
             _activeMinigameObject = null;
+            minigameRoot.gameObject.SetActive(false);
 
             ShowMessage(
                 "MINIGAME PREFAB ERROR",
@@ -211,13 +213,13 @@ public class LaptopScreenUI : MonoBehaviour
 
         _completedCallback = completedCallback;
         _failedCallback = failedCallback;
+        _alarmTriggeredCallback = alarmTriggeredCallback;
 
         _activeMinigame.Completed += OnActiveMinigameCompleted;
         _activeMinigame.Failed += OnActiveMinigameFailed;
+        _activeMinigame.AlarmTriggered += OnActiveMinigameAlarmTriggered;
 
         SetMessageObjectsVisible(false);
-        minigameRoot.gameObject.SetActive(true);
-
         _activeMinigame.Begin(context);
         return true;
     }
@@ -243,17 +245,22 @@ public class LaptopScreenUI : MonoBehaviour
         {
             _activeMinigame.Completed -= OnActiveMinigameCompleted;
             _activeMinigame.Failed -= OnActiveMinigameFailed;
+            _activeMinigame.AlarmTriggered -= OnActiveMinigameAlarmTriggered;
             _activeMinigame.Abort();
         }
 
         _activeMinigame = null;
         _completedCallback = null;
         _failedCallback = null;
+        _alarmTriggeredCallback = null;
 
         if (_activeMinigameObject != null)
             Destroy(_activeMinigameObject);
 
         _activeMinigameObject = null;
+
+        if (minigameRoot != null)
+            minigameRoot.gameObject.SetActive(false);
     }
 
     private void OnActiveMinigameCompleted()
@@ -270,16 +277,23 @@ public class LaptopScreenUI : MonoBehaviour
         callback?.Invoke();
     }
 
+    private void OnActiveMinigameAlarmTriggered()
+    {
+        _alarmTriggeredCallback?.Invoke();
+    }
+
     private void DetachActiveMinigameCallbacks()
     {
         if (_activeMinigame != null)
         {
             _activeMinigame.Completed -= OnActiveMinigameCompleted;
             _activeMinigame.Failed -= OnActiveMinigameFailed;
+            _activeMinigame.AlarmTriggered -= OnActiveMinigameAlarmTriggered;
         }
 
         _completedCallback = null;
         _failedCallback = null;
+        _alarmTriggeredCallback = null;
     }
 
     private void ShowMessage(
@@ -291,12 +305,6 @@ public class LaptopScreenUI : MonoBehaviour
     {
         AbortActiveMinigame();
         SetMessageObjectsVisible(true);
-
-        if (minigameRoot != null)
-            minigameRoot.gameObject.SetActive(false);
-
-        if (progressRoot != null)
-            progressRoot.SetActive(false);
 
         SetText(titleText, title);
         SetText(statusText, status);
@@ -310,6 +318,25 @@ public class LaptopScreenUI : MonoBehaviour
         SetTextObjectVisible(statusText, visible);
         SetTextObjectVisible(targetText, visible);
         SetTextObjectVisible(promptText, visible);
+    }
+
+    private static void FitMinigameToHost(GameObject minigameObject)
+    {
+        if (minigameObject == null)
+            return;
+
+        RectTransform rect = minigameObject.transform as RectTransform;
+
+        if (rect == null)
+            return;
+
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        rect.localScale = Vector3.one;
+        rect.localRotation = Quaternion.identity;
     }
 
     private static void SetText(TMP_Text text, string value)

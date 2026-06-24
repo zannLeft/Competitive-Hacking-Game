@@ -6,6 +6,7 @@ public abstract class LaptopMinigameBase : MonoBehaviour
 {
     public event Action Completed;
     public event Action Failed;
+    public event Action AlarmTriggered;
 
     public bool IsRunning { get; private set; }
     public LaptopMinigameContext Context { get; private set; }
@@ -51,6 +52,14 @@ public abstract class LaptopMinigameBase : MonoBehaviour
 
         IsRunning = false;
         OnAbort();
+    }
+
+    protected void TriggerAlarm()
+    {
+        if (!IsRunning)
+            return;
+
+        AlarmTriggered?.Invoke();
     }
 
     protected void CompleteMinigame()

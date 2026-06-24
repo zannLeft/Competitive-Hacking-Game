@@ -15,7 +15,7 @@ MonoBehaviour:
   minigames:
   - minigameId: 1
     displayName: Firewall Runner
-    uiPrefab: {fileID: 0}
+    uiPrefab: {fileID: 1611246339416696388, guid: cd05b53a3bea95e4cb2eca89c103a4cd, type: 3}
     selectionWeight: 1
     allowEasy: 1
     allowHard: 1
