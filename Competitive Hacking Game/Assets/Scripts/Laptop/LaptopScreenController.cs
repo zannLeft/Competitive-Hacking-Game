@@ -1,3 +1,4 @@
+using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -18,6 +19,28 @@ public class LaptopScreenController : MonoBehaviour
     [Tooltip("Your Screen mesh material slot. In your screenshot, Element 2 is the actual screen.")]
     [SerializeField]
     private int screenMaterialIndex = 2;
+
+    [Header("Screen Light")]
+    [Tooltip("Optional light attached to the laptop screen. It is enabled and disabled with the screen.")]
+    [SerializeField]
+    private Light laptopLight;
+
+    [Tooltip("If no light is assigned, automatically look for a child light named LaptopLight.")]
+    [SerializeField]
+    private bool autoFindLaptopLight = true;
+
+    [Header("Error Light Feedback")]
+    [Tooltip("Temporarily applied whenever the laptop minigame alarm/error sound plays.")]
+    [SerializeField]
+    private Color errorLightColor = new Color32(255, 102, 115, 255);
+
+    [Tooltip("How long the laptop light remains red after an error alarm.")]
+    [SerializeField, Min(0.05f)]
+    private float errorLightDuration = 0.65f;
+
+    [Tooltip("Automatically listen to the owning PlayerLaptopHacker's alarm event.")]
+    [SerializeField]
+    private bool syncWithMinigameAlarm = true;
 
     [Header("RenderTexture")]
     [Tooltip("MacBook-like 16:10. 1920x1200 is a good starting point.")]
@@ -54,6 +77,12 @@ public class LaptopScreenController : MonoBehaviour
     private bool _configuredAsOwner;
     private bool _screenOn;
 
+    private PlayerLaptopHacker _playerLaptopHacker;
+    private Coroutine _errorLightRoutine;
+    private Color _normalLaptopLightColor = new Color32(48, 196, 168, 255);
+    private bool _hasCachedNormalLightColor;
+    private bool _errorLightActive;
+
     private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
     private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -63,11 +92,28 @@ public class LaptopScreenController : MonoBehaviour
 
     private void Awake()
     {
+        ResolveLaptopLight();
+        CacheNormalLaptopLightColor();
+
         if (uiCam != null)
             uiCam.enabled = false;
 
         if (uiCanvas != null)
             uiCanvas.enabled = false;
+
+        if (laptopLight != null)
+            laptopLight.enabled = false;
+    }
+
+    private void OnEnable()
+    {
+        SubscribeToLaptopAlarm();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFromLaptopAlarm();
+        StopErrorLightPulse(restoreNormalColor: true);
     }
 
     public void ConfigureForOwner(bool isOwner)
@@ -155,6 +201,16 @@ public class LaptopScreenController : MonoBehaviour
         if (uiCanvas != null)
             uiCanvas.enabled = _screenOn && shouldRenderUi;
 
+        ResolveLaptopLight();
+        CacheNormalLaptopLightColor();
+        if (laptopLight != null)
+        {
+            laptopLight.enabled = _screenOn;
+            laptopLight.color = _errorLightActive
+                ? errorLightColor
+                : _normalLaptopLightColor;
+        }
+
         if (_screenMat == null)
             return;
 
@@ -179,6 +235,118 @@ public class LaptopScreenController : MonoBehaviour
             // Remote players see a cheap green emissive screen, not the full UI camera.
             SetMaterialColor(remoteOnBaseColor);
             SetEmission(remoteEmissionColor * Mathf.Max(0f, remoteEmissionIntensity));
+        }
+    }
+
+    /// <summary>
+    /// Flashes the laptop screen light with the configured error color, then restores
+    /// the light's original inspector color. Repeated alarms restart the timer.
+    /// </summary>
+    public void FlashErrorLight()
+    {
+        ResolveLaptopLight();
+        CacheNormalLaptopLightColor();
+
+        if (laptopLight == null || !_screenOn)
+            return;
+
+        if (_errorLightRoutine != null)
+            StopCoroutine(_errorLightRoutine);
+
+        _errorLightRoutine = StartCoroutine(ErrorLightPulseRoutine());
+    }
+
+    private IEnumerator ErrorLightPulseRoutine()
+    {
+        _errorLightActive = true;
+
+        if (laptopLight != null)
+        {
+            laptopLight.color = errorLightColor;
+            laptopLight.enabled = _screenOn;
+        }
+
+        yield return new WaitForSecondsRealtime(Mathf.Max(0.05f, errorLightDuration));
+
+        _errorLightRoutine = null;
+        _errorLightActive = false;
+
+        if (laptopLight != null)
+        {
+            laptopLight.color = _normalLaptopLightColor;
+            laptopLight.enabled = _screenOn;
+        }
+    }
+
+    private void StopErrorLightPulse(bool restoreNormalColor)
+    {
+        if (_errorLightRoutine != null)
+        {
+            StopCoroutine(_errorLightRoutine);
+            _errorLightRoutine = null;
+        }
+
+        _errorLightActive = false;
+
+        if (restoreNormalColor && laptopLight != null)
+            laptopLight.color = _normalLaptopLightColor;
+    }
+
+    private void CacheNormalLaptopLightColor()
+    {
+        if (_hasCachedNormalLightColor || laptopLight == null)
+            return;
+
+        _normalLaptopLightColor = laptopLight.color;
+        _hasCachedNormalLightColor = true;
+    }
+
+    private void SubscribeToLaptopAlarm()
+    {
+        if (!syncWithMinigameAlarm || _playerLaptopHacker != null)
+            return;
+
+        _playerLaptopHacker = GetComponentInParent<PlayerLaptopHacker>(true);
+        if (_playerLaptopHacker != null)
+            _playerLaptopHacker.HackAlarmEmitted += OnHackAlarmEmitted;
+    }
+
+    private void UnsubscribeFromLaptopAlarm()
+    {
+        if (_playerLaptopHacker == null)
+            return;
+
+        _playerLaptopHacker.HackAlarmEmitted -= OnHackAlarmEmitted;
+        _playerLaptopHacker = null;
+    }
+
+    private void OnHackAlarmEmitted()
+    {
+        FlashErrorLight();
+    }
+
+    private void ResolveLaptopLight()
+    {
+        if (laptopLight != null || !autoFindLaptopLight)
+            return;
+
+        Light[] lights = GetComponentsInChildren<Light>(true);
+        for (int i = 0; i < lights.Length; i++)
+        {
+            Light candidate = lights[i];
+            if (candidate != null && candidate.name == "LaptopLight")
+            {
+                laptopLight = candidate;
+                CacheNormalLaptopLightColor();
+                return;
+            }
+        }
+
+        // Safe fallback when the laptop contains only one light.
+        if (lights.Length == 1)
+        {
+            laptopLight = lights[0];
+            CacheNormalLaptopLightColor();
         }
     }
 
@@ -226,6 +394,9 @@ public class LaptopScreenController : MonoBehaviour
 
     private void OnDestroy()
     {
+        UnsubscribeFromLaptopAlarm();
+        StopErrorLightPulse(restoreNormalColor: true);
+
         if (uiCam != null)
             uiCam.targetTexture = null;
 

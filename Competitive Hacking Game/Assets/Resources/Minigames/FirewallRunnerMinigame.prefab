@@ -48,41 +48,88 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 08a8c0a878e953d4dbcf9a6eb9430e2c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FirewallRunnerMinigame
+  tuningVersion: 30
   easy:
-    courseSeconds: 14
-    scrollSpeed: 435
-    firstObstacleSeconds: 2.2
-    minGapSeconds: 1.45
-    maxGapSeconds: 2
-    doubleStackChance: 0.26
-    tripleStackChance: 0.08
+    courseSeconds: 26
+    scrollSpeed: 650
+    endSpeedMultiplier: 1.42
+    firstObstacleSeconds: 2.25
+    minGapSeconds: 0.82
+    maxGapSeconds: 3.15
+    longGapChance: 0.16
+    longGapMultiplier: 1.42
+    doubleStackChance: 0.3
+    tripleStackChance: 0
+    clusteredObstacleChance: 0.48
+    minClusterSpacingSeconds: 0.74
+    maxClusterSpacingSeconds: 1.02
+    thirdClusterObstacleChance: 0.1
+    floorGapChance: 0.17
+    platformPatternChance: 0.22
   hard:
-    courseSeconds: 18
-    scrollSpeed: 555
-    firstObstacleSeconds: 1.95
-    minGapSeconds: 1.08
-    maxGapSeconds: 1.55
-    doubleStackChance: 0.34
-    tripleStackChance: 0.18
+    courseSeconds: 34
+    scrollSpeed: 860
+    endSpeedMultiplier: 1.58
+    firstObstacleSeconds: 2
+    minGapSeconds: 0.68
+    maxGapSeconds: 2.85
+    longGapChance: 0.13
+    longGapMultiplier: 1.38
+    doubleStackChance: 0.46
+    tripleStackChance: 0
+    clusteredObstacleChance: 0.68
+    minClusterSpacingSeconds: 0.7
+    maxClusterSpacingSeconds: 0.98
+    thirdClusterObstacleChance: 0.24
+    floorGapChance: 0.2
+    platformPatternChance: 0.31
   playerWidth: 86
   playerHeight: 86
   playerHorizontalPosition: 0.18
   groundPadding: 86
-  jumpVelocity: 1225
-  gravity: 2200
+  jumpVelocity: 1525
+  gravity: 4800
   releasedJumpVelocityMultiplier: 1
   jumpBufferSeconds: 0.14
   coyoteSeconds: 0.1
-  collisionInset: 11
-  obstacleBlockSize: 82
+  collisionInset: 4
+  platformLandingHorizontalGrace: 18
+  platformLandingVerticalTolerance: 8
+  groundSupportProbeWidthMultiplier: 0.18
+  holeDeathClearance: 8
+  floorGapWidthMultiplier: 1.12
+  obstacleSizeMultiplier: 1.3
   obstacleStackGap: 6
+  obstacleCollisionScale: 0.72
+  obstacleGroundClearance: 4
+  platformHeightInBlocks: 1.25
+  platformThicknessMultiplier: 1
+  gapMaskExtraHeight: 16
+  gapMaskHorizontalOverscan: 6
+  gapMaskTopOverscan: 4
   failureHoldSeconds: 0.9
-  terminalFont: {fileID: 11400000, guid: 8d914078d7321844790934c1ea6f9fa5, type: 2}
-  backgroundColor: {r: 0.018, g: 0.032, b: 0.065, a: 1}
-  accentColor: {r: 0.43, g: 0.84, b: 1, a: 1}
-  textColor: {r: 0.91, g: 0.97, b: 1, a: 1}
-  mutedTextColor: {r: 0.47, g: 0.63, b: 0.72, a: 1}
-  obstacleColor: {r: 1, g: 0.24, b: 0.38, a: 1}
-  packetGlyph: '[>]'
-  obstacleGlyph: '[#]'
+  terminalFont: {fileID: 0}
+  shellName: ZannOS
+  backgroundColor: {r: 0.005, g: 0.02, b: 0.014, a: 1}
+  surfaceColor: {r: 0.01, g: 0.032, b: 0.024, a: 1}
+  raisedSurfaceColor: {r: 0.014, g: 0.042, b: 0.033, a: 1}
+  structureColor: {r: 0.185, g: 0.71, b: 0.59, a: 1}
+  accentColor: {r: 0.76, g: 1, b: 0.9, a: 1}
+  objectiveColor: {r: 0.58, g: 0.97, b: 0.88, a: 1}
+  textColor: {r: 0.91, g: 0.995, b: 0.96, a: 1}
+  mutedTextColor: {r: 0.25, g: 0.52, b: 0.43, a: 1}
+  obstacleColor: {r: 1, g: 0.4, b: 0.45, a: 1}
+  packetGlyph: "\u25A1"
+  obstacleGlyph: "\u25A0"
+  floorGlyph: "\u25A1"
+  floorGlyphFontSize: 72
+  floorGlyphCellWidthEm: 0.82
+  floorGlyphVisualSize: 68
+  floorGlyphGap: 3
+  packetGlyphFontSize: 120
+  packetGlyphVisualSize: 82
+  packetGroundContactOffset: 0
   gameplayVisualScale: 1.45
+  jumpTiltDegrees: 22
+  jumpTiltSmoothing: 18
+  separatorThickness: 8

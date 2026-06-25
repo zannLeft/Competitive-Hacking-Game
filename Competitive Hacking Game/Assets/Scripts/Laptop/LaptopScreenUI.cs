@@ -18,6 +18,14 @@ public class LaptopScreenUI : MonoBehaviour
     [SerializeField]
     private TMP_Text promptText;
 
+    [Header("ZannOS Message Shell")]
+    [Tooltip("Optional. Leave empty to use the TMP default font.")]
+    [SerializeField]
+    private TMP_FontAsset terminalFont;
+
+    [SerializeField]
+    private string shellName = "ZannOS";
+
     [Header("Minigame Host")]
     [Tooltip("Empty stretched RectTransform under LaptopUI. Minigame UI prefabs are instantiated beneath it.")]
     [SerializeField]
@@ -29,6 +37,7 @@ public class LaptopScreenUI : MonoBehaviour
     private Action _failedCallback;
     private Action _alarmTriggeredCallback;
     private Action _actionPerformedCallback;
+    private LaptopTerminalMessageShell _messageShell;
 
     public bool HasActiveMinigame =>
         _activeMinigame != null && _activeMinigame.IsRunning;
@@ -37,10 +46,16 @@ public class LaptopScreenUI : MonoBehaviour
 
     protected virtual void Awake()
     {
+        BuildMessageShell();
         SetMessageObjectsVisible(true);
 
         if (minigameRoot != null)
             minigameRoot.gameObject.SetActive(false);
+    }
+
+    protected virtual void Update()
+    {
+        _messageShell?.Tick(Time.unscaledTime);
     }
 
     protected virtual void OnDestroy()
@@ -51,30 +66,36 @@ public class LaptopScreenUI : MonoBehaviour
     public void ShowWaitingForAssignments()
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Scanning,
+            "> router.sync --assignments",
             "NETWORK SCAN",
             "SYNCING ROUTER DATA...",
             string.Empty,
-            string.Empty
+            "PLEASE WAIT"
         );
     }
 
     public void ShowNoNetwork()
     {
         ShowMessage(
+            LaptopTerminalMessageKind.NoNetwork,
+            "> wlan.scan --hackable",
             "NO NETWORK IN RANGE",
             "NO HACKABLE ACCESS POINT DETECTED",
-            "USE THE PHONE TO LOCATE A FULL-STRENGTH SIGNAL",
-            string.Empty
+            string.Empty,
+            "USE THE PHONE TO FIND A FULL-STRENGTH SIGNAL"
         );
     }
 
     public void ShowMissingAssignment(string networkDisplayName)
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Error,
+            "> module.resolve --assignment",
             "NETWORK DATA ERROR",
             "NO MINIGAME ASSIGNMENT WAS FOUND",
             SafeNetworkLabel(networkDisplayName),
-            string.Empty
+            "RETRYING ROUTER SYNC"
         );
     }
 
@@ -84,10 +105,12 @@ public class LaptopScreenUI : MonoBehaviour
     )
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Error,
+            "> module.resolve --definition",
             "MINIGAME DATA ERROR",
             $"UNKNOWN MINIGAME ID: {minigameId}",
             SafeNetworkLabel(networkDisplayName),
-            string.Empty
+            "MODULE LOAD ABORTED"
         );
     }
 
@@ -98,6 +121,8 @@ public class LaptopScreenUI : MonoBehaviour
     )
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Error,
+            "> module.load --ui",
             minigameDisplayName,
             $"{difficulty.ToString().ToUpperInvariant()} MODULE READY",
             SafeNetworkLabel(networkDisplayName),
@@ -108,36 +133,44 @@ public class LaptopScreenUI : MonoBehaviour
     public void ShowCompletedElsewhere(string networkDisplayName)
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Completed,
+            "> node.status --completed",
             "ACCESS POINT COMPLETE",
             "THIS NETWORK HAS ALREADY BEEN HACKED",
             SafeNetworkLabel(networkDisplayName),
-            string.Empty
+            "NO FURTHER ACTION REQUIRED"
         );
     }
 
     public void ShowVerifying(string networkDisplayName)
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Verifying,
+            "> breach.verify --server",
             "VERIFYING BREACH",
             "WAITING FOR SERVER CONFIRMATION",
             SafeNetworkLabel(networkDisplayName),
-            string.Empty
+            "DO NOT CLOSE THE SESSION"
         );
     }
 
     public void ShowSuccess(string networkDisplayName)
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Success,
+            "> breach.commit --complete",
             "ACCESS GRANTED",
             "NETWORK BREACH COMPLETE",
             SafeNetworkLabel(networkDisplayName),
-            string.Empty
+            "CREDENTIALS SYNCHRONIZED"
         );
     }
 
     public void ShowCompletionRejected(string networkDisplayName, string reason)
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Warning,
+            "> breach.commit --retry",
             "BREACH REJECTED",
             string.IsNullOrWhiteSpace(reason) ? "SERVER VALIDATION FAILED" : reason,
             SafeNetworkLabel(networkDisplayName),
@@ -148,10 +181,12 @@ public class LaptopScreenUI : MonoBehaviour
     public void ShowFailure(string networkDisplayName)
     {
         ShowMessage(
+            LaptopTerminalMessageKind.Error,
+            "> trace.alert --security",
             "TRACE DETECTED",
             "SECURITY ALARM TRIGGERED",
             SafeNetworkLabel(networkDisplayName),
-            string.Empty
+            "SESSION ROUTE INVALIDATED"
         );
     }
 
@@ -190,10 +225,12 @@ public class LaptopScreenUI : MonoBehaviour
             );
 
             ShowMessage(
+                LaptopTerminalMessageKind.Error,
+                "> ui.mount --minigame-root",
                 "LAPTOP UI ERROR",
                 "MINIGAME ROOT IS NOT ASSIGNED",
                 SafeNetworkLabel(context.NetworkDisplayName),
-                string.Empty
+                "CHECK LAPTOP PREFAB CONFIGURATION"
             );
             return false;
         }
@@ -225,10 +262,12 @@ public class LaptopScreenUI : MonoBehaviour
             minigameRoot.gameObject.SetActive(false);
 
             ShowMessage(
+                LaptopTerminalMessageKind.Error,
+                "> module.load --component",
                 "MINIGAME PREFAB ERROR",
                 "LAPTOPMINIGAMEBASE COMPONENT MISSING",
                 SafeNetworkLabel(context.NetworkDisplayName),
-                string.Empty
+                "MODULE LOAD ABORTED"
             );
             return false;
         }
@@ -344,6 +383,8 @@ public class LaptopScreenUI : MonoBehaviour
     }
 
     private void ShowMessage(
+        LaptopTerminalMessageKind kind,
+        string command,
         string title,
         string status,
         string target,
@@ -353,6 +394,12 @@ public class LaptopScreenUI : MonoBehaviour
         AbortActiveMinigame();
         SetMessageObjectsVisible(true);
 
+        if (_messageShell != null)
+        {
+            _messageShell.Show(kind, command, title, status, target, prompt);
+            return;
+        }
+
         SetText(titleText, title);
         SetText(statusText, status);
         SetText(targetText, target);
@@ -361,10 +408,45 @@ public class LaptopScreenUI : MonoBehaviour
 
     private void SetMessageObjectsVisible(bool visible)
     {
-        SetTextObjectVisible(titleText, visible);
-        SetTextObjectVisible(statusText, visible);
-        SetTextObjectVisible(targetText, visible);
-        SetTextObjectVisible(promptText, visible);
+        bool useLegacyText = _messageShell == null;
+
+        SetTextObjectVisible(titleText, visible && useLegacyText);
+        SetTextObjectVisible(statusText, visible && useLegacyText);
+        SetTextObjectVisible(targetText, visible && useLegacyText);
+        SetTextObjectVisible(promptText, visible && useLegacyText);
+
+        _messageShell?.SetVisible(visible);
+    }
+
+    private void BuildMessageShell()
+    {
+        RectTransform root = transform as RectTransform;
+        if (root == null)
+            return;
+
+        try
+        {
+            _messageShell = LaptopTerminalMessageShell.Build(
+                root,
+                terminalFont,
+                shellName
+            );
+
+            if (minigameRoot != null)
+            {
+                int minigameIndex = minigameRoot.GetSiblingIndex();
+                _messageShell.Root.SetSiblingIndex(minigameIndex);
+                minigameRoot.SetAsLastSibling();
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError(
+                $"[LaptopScreenUI] Failed to build terminal message shell: {exception}",
+                this
+            );
+            _messageShell = null;
+        }
     }
 
     private static void FitMinigameToHost(GameObject minigameObject)

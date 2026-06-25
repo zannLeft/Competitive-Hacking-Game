@@ -10,7 +10,7 @@ using UnityEngine.UI;
 [RequireComponent(typeof(RectTransform))]
 public sealed class TraceEscapeMinigame : LaptopMinigameBase
 {
-    private const int CurrentTuningVersion = 20;
+    private const int CurrentTuningVersion = 32;
 
     [SerializeField, HideInInspector]
     private int tuningVersion;
@@ -54,6 +54,7 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
 
     private enum GameState
     {
+        AwaitingStart,
         Playing,
         FailureHold,
         RoundTransition,
@@ -123,33 +124,33 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     [SerializeField]
     private TraceSettings easy = new()
     {
-        mazeWidth = 25,
-        mazeHeight = 17,
+        mazeWidth = 23,
+        mazeHeight = 15,
         accessKeyCount = 2,
-        traceStartDelay = 2.45f,
-        traceStepSeconds = 0.165f,
+        traceStartDelay = 3.0f,
+        traceStepSeconds = 0.185f,
         movementRepeatSeconds = 0.105f,
         movementInitialRepeatDelay = 0.18f,
         visibleTraceTrailLength = 3,
-        loopOpenings = 7,
-        maximumKeyDetour = 12,
-        minimumKeySpacing = 5,
+        loopOpenings = 10,
+        maximumKeyDetour = 10,
+        minimumKeySpacing = 4,
     };
 
     [SerializeField]
     private TraceSettings hard = new()
     {
-        mazeWidth = 31,
-        mazeHeight = 19,
-        accessKeyCount = 3,
-        traceStartDelay = 2.05f,
-        traceStepSeconds = 0.145f,
+        mazeWidth = 29,
+        mazeHeight = 17,
+        accessKeyCount = 2,
+        traceStartDelay = 2.65f,
+        traceStepSeconds = 0.17f,
         movementRepeatSeconds = 0.09f,
         movementInitialRepeatDelay = 0.15f,
         visibleTraceTrailLength = 4,
-        loopOpenings = 7,
-        maximumKeyDetour = 16,
-        minimumKeySpacing = 5,
+        loopOpenings = 9,
+        maximumKeyDetour = 13,
+        minimumKeySpacing = 4,
     };
 
     [Header("Input")]
@@ -168,28 +169,46 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     [SerializeField, Min(0f)]
     private float failureHoldSeconds = 0.9f;
 
-    [Header("ASCII Terminal Visuals")]
+    [Header("Hacker OS Visuals")]
     [Tooltip("Assign the same monospace TMP font used by Firewall Runner.")]
     [SerializeField]
     private TMP_FontAsset terminalFont;
 
     [SerializeField]
-    private Color backgroundColor = new(0.018f, 0.032f, 0.065f, 1f);
+    private string shellName = "ZannOS";
 
     [SerializeField]
-    private Color accentColor = new(0.43f, 0.84f, 1f, 1f);
+    private Color backgroundColor = new(0.004f, 0.022f, 0.018f, 1f);
 
     [SerializeField]
-    private Color textColor = new(0.91f, 0.97f, 1f, 1f);
+    private Color surfaceColor = new(0.009f, 0.035f, 0.029f, 1f);
 
     [SerializeField]
-    private Color mutedTextColor = new(0.47f, 0.63f, 0.72f, 1f);
+    private Color raisedSurfaceColor = new(0.013f, 0.046f, 0.038f, 1f);
 
     [SerializeField]
-    private Color dangerColor = new(1f, 0.24f, 0.38f, 1f);
+    private Color structureColor = new(0.190f, 0.770f, 0.660f, 1f);
 
     [SerializeField]
-    private string playerGlyph = "@";
+    private Color accentColor = new(0.740f, 1.000f, 0.920f, 1f);
+
+    [SerializeField]
+    private Color objectiveColor = new(0.540f, 0.965f, 0.885f, 1f);
+
+    [SerializeField]
+    private Color textColor = new(0.910f, 0.995f, 0.960f, 1f);
+
+    [SerializeField]
+    private Color mutedTextColor = new(0.230f, 0.530f, 0.470f, 1f);
+
+    [SerializeField]
+    private Color dangerColor = new(1.000f, 0.400f, 0.450f, 1f);
+
+    [SerializeField]
+    private string playerGlyph = "■";
+
+    [SerializeField, Min(-0.5f)]
+    private float playerGlyphVerticalOffsetEm = 0.08f;
 
     [SerializeField]
     private string wallGlyph = "□";
@@ -210,14 +229,14 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     private string traceTrailGlyph = ":";
 
     [Header("Layout")]
-    [SerializeField, Range(2f, 20f)]
+    [SerializeField, HideInInspector]
     private float separatorThickness = 8f;
 
     [SerializeField, Range(20f, 72f)]
-    private float mazeMinimumFontSize = 28f;
+    private float mazeMinimumFontSize = 30f;
 
     [SerializeField, Range(24f, 96f)]
-    private float mazeMaximumFontSize = 60f;
+    private float mazeMaximumFontSize = 64f;
 
     [SerializeField, Range(-30f, 30f)]
     private float mazeLineSpacing = 0f;
@@ -253,13 +272,8 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     private readonly Dictionary<Vector2Int, Vector2Int> _traceParents = new();
 
     private RectTransform _root;
-    private RectTransform _resultOverlayRect;
-    private Image _resultOverlayImage;
-    private TMP_Text _networkText;
-    private TMP_Text _difficultyText;
-    private TMP_Text _statusText;
     private TMP_Text _mazeText;
-    private TMP_Text _resultText;
+    private LaptopMinigameVisualShell _shell;
 
     private LaptopMinigameContext _context;
     private TraceSettings _settings;
@@ -277,6 +291,7 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     private float _roundTransitionTimer;
     private int _currentRoundIndex;
     private bool _traceVisible;
+    private bool _traceActivatedByPlayerMove;
     private bool _suppressMovementUntilNeutral;
     private GameState _state;
 
@@ -302,6 +317,20 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         SanitizeSettings(_settings);
         _currentRoundIndex = 0;
         StartCurrentRound(requireNavigationRelease: false);
+        _state = GameState.AwaitingStart;
+        _shell?.SetBriefingVisible(true);
+        _shell?.SetProgress(0f);
+        _shell?.SetStatus("READY", textColor);
+    }
+
+    protected override void OnJumpPressed()
+    {
+        if (_state != GameState.AwaitingStart)
+            return;
+
+        TriggerActionPerformed();
+        ResetRun(requireNavigationRelease: true);
+        _shell?.SetBriefingVisible(false);
     }
 
     protected override void OnNavigationChanged(Vector2 input)
@@ -348,6 +377,11 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         if (!IsRunning)
             return;
 
+        _shell?.Tick(Time.unscaledTime);
+
+        if (_state == GameState.AwaitingStart)
+            return;
+
         float deltaTime = Mathf.Min(Time.deltaTime, 0.1f);
 
         if (_state == GameState.FailureHold)
@@ -391,6 +425,9 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
 
     private void UpdateTrace(float deltaTime)
     {
+        if (!_traceActivatedByPlayerMove)
+            return;
+
         if (_elapsed < _settings.traceStartDelay)
             return;
 
@@ -508,6 +545,16 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
 
         _playerPosition = destination;
 
+        if (!_traceActivatedByPlayerMove)
+        {
+            // The security trace stays completely dormant until the player makes
+            // their first successful grid step. Its normal start delay begins at
+            // that moment, so waiting on the opening cell cannot consume the grace period.
+            _traceActivatedByPlayerMove = true;
+            _elapsed = 0f;
+            _traceStepTimer = Mathf.Max(0.03f, _settings.traceStepSeconds);
+        }
+
         // Each accepted grid step is a physical laptop keypress. The existing
         // PlayerLaptopHacker audio path plays it instantly for the owner and
         // relays it positionally to the other clients.
@@ -542,7 +589,7 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         _movementRepeatTimer = 0f;
         TriggerAlarm();
         ShowResultOverlay(
-            "!!! TRACE CAPTURED !!!\nRESTARTING LINK...",
+            "TRACE COLLISION\nIDENTITY ROUTE EXPOSED\n\nREBUILDING SESSION...",
             dangerColor
         );
     }
@@ -556,6 +603,7 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
 
         if (completedRoundNumber >= roundsRequired)
         {
+            _shell?.SetProgress(1f);
             CompleteMinigame();
             return;
         }
@@ -567,8 +615,9 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         _movementRepeatTimer = 0f;
         _suppressMovementUntilNeutral = true;
 
+        _shell?.SetProgress(completedRoundNumber / (float)roundsRequired);
         ShowResultOverlay(
-            $"LINK {completedRoundNumber}/{roundsRequired} CLEARED\nROUTING NEXT NODE...",
+            $"ACCESS LAYER {completedRoundNumber}/{roundsRequired} CLEARED\n\nMAPPING NEXT LAYER...",
             accentColor
         );
     }
@@ -603,6 +652,7 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         _playerPosition = _startPosition;
         _tracePosition = _startPosition;
         _traceVisible = false;
+        _traceActivatedByPlayerMove = false;
         _elapsed = 0f;
         _traceStepTimer = Mathf.Max(0.03f, _settings.traceStepSeconds);
         _movementRepeatTimer = 0f;
@@ -620,17 +670,10 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         for (int i = 0; i < _keyPositions.Count; i++)
             _remainingKeys.Add(_keyPositions[i]);
 
-        if (_networkText != null)
-            _networkText.text = $"target={_context.NetworkDisplayName}";
-
-        if (_difficultyText != null)
-        {
-            _difficultyText.text = $"[{_context.Difficulty.ToString().ToUpperInvariant()}]";
-            _difficultyText.color = accentColor;
-        }
-
-        if (_resultOverlayRect != null)
-            _resultOverlayRect.gameObject.SetActive(false);
+        string difficulty = _context.Difficulty.ToString().ToUpperInvariant();
+        _shell?.SetContext(_context.NetworkDisplayName, difficulty);
+        _shell?.HideResult();
+        _shell?.SetFooterLeft("COLLECT KEYS  ·  REACH THE EXIT");
 
         UpdateStatusText();
         RefreshMazeText();
@@ -1203,14 +1246,26 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
 
     private void UpdateStatusText()
     {
-        if (_statusText == null)
-            return;
-
         int total = _keyPositions.Count;
         int collected = total - _remainingKeys.Count;
-        _statusText.text =
-            $"[ROUND {_currentRoundIndex + 1}/{roundsRequired}] [KEYS {collected}/{total}]";
-        _statusText.color = _remainingKeys.Count == 0 ? accentColor : textColor;
+        bool exitOpen = _remainingKeys.Count == 0;
+
+        _shell?.SetStatus(
+            $"R{_currentRoundIndex + 1}/{roundsRequired}  KEYS {collected}/{total}",
+            exitOpen ? accentColor : textColor
+        );
+        _shell?.SetFooterLeft(
+            exitOpen
+                ? "EXIT OPEN  ·  REACH THE GATE"
+                : "COLLECT KEYS  ·  REACH THE EXIT"
+        );
+
+        float keyProgress = total > 0 ? collected / (float)total : 0f;
+        float roundProgress = exitOpen ? 0.88f : keyProgress * 0.82f;
+        float totalProgress =
+            (_currentRoundIndex + roundProgress)
+            / Mathf.Max(1f, roundsRequired);
+        _shell?.SetProgress(totalProgress);
     }
 
     private void RefreshMazeText()
@@ -1290,7 +1345,7 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     {
         if (cell == _playerPosition)
         {
-            glyph = playerGlyph;
+            glyph = WrapGlyphWithVerticalOffset(playerGlyph, playerGlyphVerticalOffsetEm);
             kind = CellVisualKind.Player;
             return;
         }
@@ -1361,6 +1416,23 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         return false;
     }
 
+    private static string WrapGlyphWithVerticalOffset(string glyph, float offsetEm)
+    {
+        if (string.IsNullOrEmpty(glyph))
+            return string.Empty;
+
+        if (Mathf.Abs(offsetEm) <= 0.0001f)
+            return glyph;
+
+        return string.Concat(
+            "<voffset=",
+            offsetEm.ToString("0.###", CultureInfo.InvariantCulture),
+            "em>",
+            glyph,
+            "</voffset>"
+        );
+    }
+
     private string GetColorTag(CellVisualKind kind)
     {
         return kind switch
@@ -1377,12 +1449,12 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
 
     private void CacheColorTags()
     {
-        _wallColorTag = BuildColorTag(mutedTextColor);
+        _wallColorTag = BuildColorTag(structureColor);
         _playerColorTag = BuildColorTag(accentColor);
         _traceColorTag = BuildColorTag(dangerColor);
         _traceTrailColorTag = BuildColorTag(WithAlpha(dangerColor, 0.58f));
-        _keyColorTag = BuildColorTag(textColor);
-        _lockedExitColorTag = BuildColorTag(WithAlpha(mutedTextColor, 0.72f));
+        _keyColorTag = BuildColorTag(objectiveColor);
+        _lockedExitColorTag = BuildColorTag(WithAlpha(mutedTextColor, 0.70f));
         _openExitColorTag = BuildColorTag(accentColor);
     }
 
@@ -1399,93 +1471,45 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         _root = (RectTransform)transform;
         StretchToParent(_root);
 
-        Image background = CreateImage("Background", _root, backgroundColor);
-        Stretch(background.rectTransform, Vector2.zero, Vector2.one);
-
-        TMP_Text title = CreateText(
-            "Title",
-            _root,
-            "> TRACE_ESCAPE",
-            58f,
-            TextAlignmentOptions.MidlineLeft,
-            textColor,
-            FontStyles.Bold
-        );
-        Stretch(
-            title.rectTransform,
-            new Vector2(0.050f, 0.920f),
-            new Vector2(0.66f, 0.975f)
-        );
-        title.overflowMode = TextOverflowModes.Overflow;
-
-        _difficultyText = CreateText(
-            "Difficulty",
-            _root,
-            "[EASY]",
-            38f,
-            TextAlignmentOptions.MidlineRight,
+        var palette = new LaptopMinigameShellPalette(
+            backgroundColor,
+            surfaceColor,
+            raisedSurfaceColor,
+            structureColor,
             accentColor,
-            FontStyles.Bold
-        );
-        Stretch(
-            _difficultyText.rectTransform,
-            new Vector2(0.69f, 0.920f),
-            new Vector2(0.950f, 0.975f)
-        );
-        _difficultyText.overflowMode = TextOverflowModes.Overflow;
-
-        _networkText = CreateText(
-            "Network",
-            _root,
-            "target=unknown",
-            36f,
-            TextAlignmentOptions.MidlineLeft,
-            mutedTextColor,
-            FontStyles.Normal
-        );
-        Stretch(
-            _networkText.rectTransform,
-            new Vector2(0.050f, 0.865f),
-            new Vector2(0.62f, 0.920f)
-        );
-
-        _statusText = CreateText(
-            "Status",
-            _root,
-            "[KEYS 0/0]",
-            35f,
-            TextAlignmentOptions.MidlineRight,
+            objectiveColor,
             textColor,
-            FontStyles.Bold
-        );
-        Stretch(
-            _statusText.rectTransform,
-            new Vector2(0.54f, 0.865f),
-            new Vector2(0.950f, 0.920f)
+            mutedTextColor,
+            dangerColor
         );
 
-        CreateDashSeparator("HeaderDivider", 0.847f);
-
-        RectTransform gameArea = CreateRect("GameArea", _root);
-        Stretch(
-            gameArea,
-            new Vector2(0.020f, 0.118f),
-            new Vector2(0.980f, 0.835f)
+        _shell = LaptopMinigameVisualShell.Build(
+            _root,
+            terminalFont,
+            palette,
+            shellName,
+            "intrusion-suite",
+            "TRACE ESCAPE",
+            "Map a route before corporate security closes in on the session.",
+            "COLLECT K KEYS. X BECOMES >. REACH THE EXIT.",
+            "WASD  /  MOVE",
+            "COLLECT K KEYS  ·  REACH THE EXIT"
         );
+
 
         _mazeText = CreateText(
             "Maze",
-            gameArea,
+            _shell.GameArea,
             string.Empty,
             mazeMaximumFontSize,
             TextAlignmentOptions.Center,
-            mutedTextColor,
+            structureColor,
             FontStyles.Normal
         );
         Stretch(
             _mazeText.rectTransform,
-            new Vector2(0.015f, 0.015f),
-            new Vector2(0.985f, 0.985f)
+            new Vector2(0.008f, 0.008f),
+            new Vector2(0.992f, 0.992f)
         );
         _mazeText.enableAutoSizing = true;
         _mazeText.fontSizeMin = mazeMinimumFontSize;
@@ -1495,67 +1519,11 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         _mazeText.overflowMode = TextOverflowModes.Masking;
         _mazeText.textWrappingMode = TextWrappingModes.NoWrap;
         _mazeText.richText = true;
-
-        CreateDashSeparator("FooterDivider", 0.103f);
-
-        TMP_Text instruction = CreateText(
-            "Instruction",
-            _root,
-            "[WASD] MOVE          COLLECT K -> X          [Q] DISCONNECT",
-            35f,
-            TextAlignmentOptions.Center,
-            mutedTextColor,
-            FontStyles.Bold
-        );
-        Stretch(
-            instruction.rectTransform,
-            new Vector2(0.025f, 0.018f),
-            new Vector2(0.975f, 0.086f)
-        );
-
-        _resultOverlayImage = CreateImage(
-            "ResultOverlay",
-            _root,
-            new Color(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.96f)
-        );
-        _resultOverlayRect = _resultOverlayImage.rectTransform;
-        Stretch(_resultOverlayRect, Vector2.zero, Vector2.one);
-
-        _resultText = CreateText(
-            "ResultText",
-            _resultOverlayRect,
-            string.Empty,
-            78f,
-            TextAlignmentOptions.Center,
-            dangerColor,
-            FontStyles.Bold
-        );
-        Stretch(_resultText.rectTransform, Vector2.zero, Vector2.one);
-        _resultOverlayRect.gameObject.SetActive(false);
     }
 
     private void ShowResultOverlay(string message, Color color)
     {
-        if (_resultOverlayRect == null)
-            return;
-
-        _resultOverlayRect.gameObject.SetActive(true);
-
-        if (_resultOverlayImage != null)
-        {
-            _resultOverlayImage.color = new Color(
-                backgroundColor.r,
-                backgroundColor.g,
-                backgroundColor.b,
-                0.96f
-            );
-        }
-
-        if (_resultText != null)
-        {
-            _resultText.text = message;
-            _resultText.color = color;
-        }
+        _shell?.ShowResult(message, color);
     }
 
     private RectTransform CreateRect(string objectName, Transform parent)
@@ -1738,32 +1706,32 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     {
         easy ??= new TraceSettings
         {
-            mazeWidth = 25,
-            mazeHeight = 17,
+            mazeWidth = 23,
+            mazeHeight = 15,
             accessKeyCount = 2,
-            traceStartDelay = 2.45f,
-            traceStepSeconds = 0.165f,
+            traceStartDelay = 3.0f,
+            traceStepSeconds = 0.185f,
             movementRepeatSeconds = 0.105f,
             movementInitialRepeatDelay = 0.18f,
             visibleTraceTrailLength = 3,
-            loopOpenings = 7,
-            maximumKeyDetour = 12,
-            minimumKeySpacing = 5,
+            loopOpenings = 10,
+            maximumKeyDetour = 10,
+            minimumKeySpacing = 4,
         };
 
         hard ??= new TraceSettings
         {
-            mazeWidth = 31,
-            mazeHeight = 19,
-            accessKeyCount = 3,
-            traceStartDelay = 2.05f,
-            traceStepSeconds = 0.145f,
+            mazeWidth = 29,
+            mazeHeight = 17,
+            accessKeyCount = 2,
+            traceStartDelay = 2.65f,
+            traceStepSeconds = 0.17f,
             movementRepeatSeconds = 0.09f,
             movementInitialRepeatDelay = 0.15f,
             visibleTraceTrailLength = 4,
-            loopOpenings = 7,
-            maximumKeyDetour = 16,
-            minimumKeySpacing = 5,
+            loopOpenings = 9,
+            maximumKeyDetour = 13,
+            minimumKeySpacing = 4,
         };
     }
 
@@ -2014,6 +1982,256 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
                 mazeLineHeightPercent = 75f;
         }
 
+        if (tuningVersion < 21)
+        {
+            // V21 introduces the shared hacker-owned SABLE shell, the compact
+            // game-first layout, and the purple/orange faction palette.
+            backgroundColor = new Color(0.071f, 0.043f, 0.094f, 1f);
+            surfaceColor = new Color(0.129f, 0.075f, 0.161f, 1f);
+            raisedSurfaceColor = new Color(0.161f, 0.090f, 0.192f, 1f);
+            structureColor = new Color(0.541f, 0.365f, 0.659f, 1f);
+            accentColor = new Color(0.929f, 0.569f, 0.259f, 1f);
+            objectiveColor = new Color(0.949f, 0.737f, 0.400f, 1f);
+            textColor = new Color(0.933f, 0.910f, 0.894f, 1f);
+            mutedTextColor = new Color(0.663f, 0.608f, 0.686f, 1f);
+            dangerColor = new Color(0.875f, 0.251f, 0.361f, 1f);
+
+            if (string.IsNullOrWhiteSpace(shellName))
+                shellName = "SABLE";
+
+            if (string.IsNullOrWhiteSpace(playerGlyph) || playerGlyph == "@" || playerGlyph == "◆")
+                playerGlyph = "■";
+        }
+
+        if (tuningVersion < 22)
+        {
+            // V22 refines the shell for readability on the in-world laptop,
+            // removes the heavy purple cast, and switches to a cooler slate + warm
+            // amber palette that complements the blue environment better.
+            backgroundColor = new Color(0.043f, 0.059f, 0.090f, 1f);
+            surfaceColor = new Color(0.067f, 0.090f, 0.129f, 1f);
+            raisedSurfaceColor = new Color(0.094f, 0.125f, 0.180f, 1f);
+            structureColor = new Color(0.255f, 0.333f, 0.439f, 1f);
+            accentColor = new Color(0.941f, 0.604f, 0.290f, 1f);
+            objectiveColor = new Color(0.949f, 0.792f, 0.486f, 1f);
+            textColor = new Color(0.949f, 0.945f, 0.925f, 1f);
+            mutedTextColor = new Color(0.576f, 0.631f, 0.694f, 1f);
+            dangerColor = new Color(0.890f, 0.325f, 0.431f, 1f);
+
+            if (string.IsNullOrWhiteSpace(shellName))
+                shellName = "SABLE";
+        }
+
+        if (tuningVersion < 23)
+        {
+            // V23 increases shell readability again, renames the OS to ZannOS,
+            // updates the Trace Escape briefing copy, and refreshes its palette
+            // so it matches the newer cyan-leaning slate look.
+            backgroundColor = new Color(0.030f, 0.053f, 0.082f, 1f);
+            surfaceColor = new Color(0.050f, 0.082f, 0.118f, 1f);
+            raisedSurfaceColor = new Color(0.073f, 0.112f, 0.157f, 1f);
+            structureColor = new Color(0.290f, 0.443f, 0.565f, 1f);
+            accentColor = new Color(0.965f, 0.620f, 0.302f, 1f);
+            objectiveColor = new Color(0.980f, 0.824f, 0.518f, 1f);
+            textColor = new Color(0.960f, 0.954f, 0.935f, 1f);
+            mutedTextColor = new Color(0.615f, 0.702f, 0.765f, 1f);
+            dangerColor = new Color(0.920f, 0.341f, 0.439f, 1f);
+            shellName = "ZannOS";
+
+            if (Mathf.Approximately(mazeMinimumFontSize, 28f))
+                mazeMinimumFontSize = 30f;
+
+            if (Mathf.Approximately(mazeMaximumFontSize, 60f))
+                mazeMaximumFontSize = 64f;
+        }
+
+
+        if (tuningVersion < 24)
+        {
+            // V24 deepens the blue-cyan shell background, raises the contrast of the
+            // maze presentation, and shortens the briefing objective so it fits cleanly.
+            backgroundColor = new Color(0.017f, 0.045f, 0.072f, 1f);
+            surfaceColor = new Color(0.026f, 0.065f, 0.098f, 1f);
+            raisedSurfaceColor = new Color(0.041f, 0.087f, 0.128f, 1f);
+            structureColor = new Color(0.430f, 0.655f, 0.812f, 1f);
+            accentColor = new Color(0.992f, 0.663f, 0.286f, 1f);
+            objectiveColor = new Color(1.000f, 0.839f, 0.486f, 1f);
+            textColor = new Color(0.972f, 0.968f, 0.949f, 1f);
+            mutedTextColor = new Color(0.635f, 0.745f, 0.820f, 1f);
+            dangerColor = new Color(0.949f, 0.365f, 0.455f, 1f);
+            shellName = "ZannOS";
+
+            if (Mathf.Approximately(mazeMinimumFontSize, 30f))
+                mazeMinimumFontSize = 32f;
+
+            if (Mathf.Approximately(mazeMaximumFontSize, 64f))
+                mazeMaximumFontSize = 68f;
+        }
+
+
+        if (tuningVersion < 25)
+        {
+            // V25 shifts the shell slightly further toward cyan, strengthens contrast,
+            // and switches the Trace Escape player marker to a solid square.
+            backgroundColor = new Color(0.010f, 0.048f, 0.076f, 1f);
+            surfaceColor = new Color(0.018f, 0.066f, 0.102f, 1f);
+            raisedSurfaceColor = new Color(0.030f, 0.088f, 0.133f, 1f);
+            structureColor = new Color(0.420f, 0.760f, 0.900f, 1f);
+            accentColor = new Color(0.996f, 0.675f, 0.290f, 1f);
+            objectiveColor = new Color(1.000f, 0.850f, 0.505f, 1f);
+            textColor = new Color(0.975f, 0.972f, 0.955f, 1f);
+            mutedTextColor = new Color(0.675f, 0.790f, 0.860f, 1f);
+            dangerColor = new Color(0.955f, 0.388f, 0.470f, 1f);
+            shellName = "ZannOS";
+            playerGlyph = "■";
+        }
+
+
+        if (tuningVersion < 26)
+        {
+            // V26 shifts Trace Escape to a monochrome terminal-style shell with
+            // phosphor-green UI, deeper black-green backgrounds, and higher ASCII-console contrast.
+            backgroundColor = new Color(0.012f, 0.030f, 0.020f, 1f);
+            surfaceColor = new Color(0.022f, 0.050f, 0.034f, 1f);
+            raisedSurfaceColor = new Color(0.032f, 0.072f, 0.048f, 1f);
+            structureColor = new Color(0.360f, 0.910f, 0.650f, 1f);
+            accentColor = new Color(0.520f, 1.000f, 0.760f, 1f);
+            objectiveColor = new Color(0.760f, 1.000f, 0.700f, 1f);
+            textColor = new Color(0.900f, 1.000f, 0.920f, 1f);
+            mutedTextColor = new Color(0.470f, 0.720f, 0.560f, 1f);
+            dangerColor = new Color(1.000f, 0.360f, 0.420f, 1f);
+            shellName = "ZannOS";
+            playerGlyph = "■";
+        }
+
+        if (tuningVersion < 27)
+        {
+            // V27 nudges the player square upward slightly so it sits visually centered
+            // inside the ASCII cell instead of touching the bottom wall.
+            if (Mathf.Abs(playerGlyphVerticalOffsetEm) <= 0.0001f)
+                playerGlyphVerticalOffsetEm = 0.08f;
+        }
+
+
+        if (tuningVersion < 28)
+        {
+            // V28 refines the terminal hierarchy: darker green-black surfaces,
+            // slightly dimmer maze topology, a brighter mint player marker, and
+            // a separate lime objective color for access keys.
+            backgroundColor = new Color(0.007f, 0.022f, 0.014f, 1f);
+            surfaceColor = new Color(0.014f, 0.040f, 0.026f, 1f);
+            raisedSurfaceColor = new Color(0.022f, 0.055f, 0.036f, 1f);
+            structureColor = new Color(0.250f, 0.780f, 0.540f, 1f);
+            accentColor = new Color(0.680f, 1.000f, 0.820f, 1f);
+            objectiveColor = new Color(0.920f, 0.940f, 0.520f, 1f);
+            textColor = new Color(0.900f, 0.990f, 0.920f, 1f);
+            mutedTextColor = new Color(0.340f, 0.580f, 0.440f, 1f);
+            dangerColor = new Color(1.000f, 0.360f, 0.420f, 1f);
+            shellName = "ZannOS";
+            playerGlyph = "■";
+        }
+
+
+
+        if (tuningVersion < 29)
+        {
+            // V29 keeps the green terminal identity while replacing the warm lime
+            // accents with cooler teal-mint values and improving the visual hierarchy
+            // between shell, maze walls, player marker, keys, exits, and trace hazards.
+            backgroundColor = new Color(0.006f, 0.022f, 0.015f, 1f);
+            surfaceColor = new Color(0.012f, 0.038f, 0.029f, 1f);
+            raisedSurfaceColor = new Color(0.018f, 0.052f, 0.040f, 1f);
+            structureColor = new Color(0.220f, 0.720f, 0.560f, 1f);
+            accentColor = new Color(0.660f, 1.000f, 0.840f, 1f);
+            objectiveColor = new Color(0.460f, 0.940f, 0.780f, 1f);
+            textColor = new Color(0.900f, 0.990f, 0.950f, 1f);
+            mutedTextColor = new Color(0.340f, 0.600f, 0.500f, 1f);
+            dangerColor = new Color(1.000f, 0.400f, 0.450f, 1f);
+            shellName = "ZannOS";
+            playerGlyph = "■";
+        }
+
+
+        if (tuningVersion < 30)
+        {
+            // V30 finalizes the terminal hierarchy: darker and more neutral
+            // green-black surfaces, dimmer passive structure, brighter active
+            // mint highlights, and cooler seafoam objective accents. This keeps
+            // the look clean while preserving readability from the in-world camera.
+            backgroundColor = new Color(0.005f, 0.020f, 0.014f, 1f);
+            surfaceColor = new Color(0.010f, 0.032f, 0.024f, 1f);
+            raisedSurfaceColor = new Color(0.014f, 0.042f, 0.033f, 1f);
+            structureColor = new Color(0.185f, 0.710f, 0.590f, 1f);
+            accentColor = new Color(0.760f, 1.000f, 0.900f, 1f);
+            objectiveColor = new Color(0.580f, 0.970f, 0.880f, 1f);
+            textColor = new Color(0.910f, 0.995f, 0.960f, 1f);
+            mutedTextColor = new Color(0.250f, 0.520f, 0.430f, 1f);
+            dangerColor = new Color(1.000f, 0.400f, 0.450f, 1f);
+            playerGlyph = "■";
+            shellName = "ZannOS";
+        }
+
+        if (tuningVersion < 31)
+        {
+            // V31 makes both difficulty profiles more forgiving while preserving
+            // the core chase pressure. The trace waits longer and moves more slowly,
+            // mazes are slightly smaller and more open, and hard uses two keys instead
+            // of three so it remains challenging without becoming overwhelming.
+            if (easy != null)
+            {
+                if (easy.mazeWidth == 25)
+                    easy.mazeWidth = 23;
+                if (easy.mazeHeight == 17)
+                    easy.mazeHeight = 15;
+                if (Mathf.Approximately(easy.traceStartDelay, 2.45f))
+                    easy.traceStartDelay = 3.0f;
+                if (Mathf.Approximately(easy.traceStepSeconds, 0.165f))
+                    easy.traceStepSeconds = 0.185f;
+                if (easy.loopOpenings == 7)
+                    easy.loopOpenings = 10;
+                if (easy.maximumKeyDetour == 12)
+                    easy.maximumKeyDetour = 10;
+                if (easy.minimumKeySpacing == 5)
+                    easy.minimumKeySpacing = 4;
+            }
+
+            if (hard != null)
+            {
+                if (hard.mazeWidth == 31)
+                    hard.mazeWidth = 29;
+                if (hard.mazeHeight == 19)
+                    hard.mazeHeight = 17;
+                if (hard.accessKeyCount == 3)
+                    hard.accessKeyCount = 2;
+                if (Mathf.Approximately(hard.traceStartDelay, 2.05f))
+                    hard.traceStartDelay = 2.65f;
+                if (Mathf.Approximately(hard.traceStepSeconds, 0.145f))
+                    hard.traceStepSeconds = 0.17f;
+                if (hard.loopOpenings == 7)
+                    hard.loopOpenings = 9;
+                if (hard.maximumKeyDetour == 16)
+                    hard.maximumKeyDetour = 13;
+                if (hard.minimumKeySpacing == 5)
+                    hard.minimumKeySpacing = 4;
+            }
+        }
+
+
+        if (tuningVersion < 32)
+        {
+            // V32 nudges the terminal backgrounds slightly further toward cyan-green
+            // while keeping the current dark value range and clean readability.
+            backgroundColor = new Color(0.004f, 0.022f, 0.018f, 1f);
+            surfaceColor = new Color(0.009f, 0.035f, 0.029f, 1f);
+            raisedSurfaceColor = new Color(0.013f, 0.046f, 0.038f, 1f);
+            structureColor = new Color(0.190f, 0.770f, 0.660f, 1f);
+            accentColor = new Color(0.740f, 1.000f, 0.920f, 1f);
+            objectiveColor = new Color(0.540f, 0.965f, 0.885f, 1f);
+            textColor = new Color(0.910f, 0.995f, 0.960f, 1f);
+            mutedTextColor = new Color(0.230f, 0.530f, 0.470f, 1f);
+            dangerColor = new Color(1.000f, 0.400f, 0.450f, 1f);
+        }
+
         tuningVersion = CurrentTuningVersion;
     }
 
@@ -2036,7 +2254,8 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         wallGlyphScalePercent = Mathf.Clamp(wallGlyphScalePercent, 100f, 175f);
 
         if (string.IsNullOrEmpty(playerGlyph))
-            playerGlyph = "@";
+            playerGlyph = "■";
+        playerGlyphVerticalOffsetEm = Mathf.Clamp(playerGlyphVerticalOffsetEm, -0.5f, 0.5f);
         if (string.IsNullOrEmpty(wallGlyph))
             wallGlyph = "□";
         if (string.IsNullOrEmpty(keyGlyph))

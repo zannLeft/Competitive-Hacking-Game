@@ -8,7 +8,7 @@ using UnityEngine.UI;
 [RequireComponent(typeof(RectTransform))]
 public sealed class FirewallRunnerMinigame : LaptopMinigameBase
 {
-    private const int CurrentTuningVersion = 21;
+    private const int CurrentTuningVersion = 32;
 
     [SerializeField, HideInInspector]
     private int tuningVersion;
@@ -109,6 +109,7 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
 
     private enum RunState
     {
+        AwaitingStart,
         Playing,
         FailureHold,
     }
@@ -279,25 +280,40 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
     [SerializeField, Min(0f)]
     private float failureHoldSeconds = 0.90f;
 
-    [Header("ASCII Terminal Visuals")]
-    [Tooltip("Optional monospace TMP font. Falls back to the TMP default font when left empty.")]
+    [Header("Hacker OS Visuals")]
+    [Tooltip("Optional monospace TMP font. Iosevka Term Mono is a good fit.")]
     [SerializeField]
     private TMP_FontAsset terminalFont;
 
     [SerializeField]
-    private Color backgroundColor = new(0.018f, 0.032f, 0.065f, 1f);
+    private string shellName = "ZannOS";
 
     [SerializeField]
-    private Color accentColor = new(0.43f, 0.84f, 1f, 1f);
+    private Color backgroundColor = new(0.004f, 0.022f, 0.018f, 1f);
 
     [SerializeField]
-    private Color textColor = new(0.91f, 0.97f, 1f, 1f);
+    private Color surfaceColor = new(0.009f, 0.035f, 0.029f, 1f);
 
     [SerializeField]
-    private Color mutedTextColor = new(0.47f, 0.63f, 0.72f, 1f);
+    private Color raisedSurfaceColor = new(0.013f, 0.046f, 0.038f, 1f);
 
     [SerializeField]
-    private Color obstacleColor = new(1f, 0.24f, 0.38f, 1f);
+    private Color structureColor = new(0.190f, 0.770f, 0.660f, 1f);
+
+    [SerializeField]
+    private Color accentColor = new(0.740f, 1.000f, 0.920f, 1f);
+
+    [SerializeField]
+    private Color objectiveColor = new(0.540f, 0.965f, 0.885f, 1f);
+
+    [SerializeField]
+    private Color textColor = new(0.910f, 0.995f, 0.960f, 1f);
+
+    [SerializeField]
+    private Color mutedTextColor = new(0.230f, 0.530f, 0.470f, 1f);
+
+    [SerializeField]
+    private Color obstacleColor = new(1.000f, 0.400f, 0.450f, 1f);
 
     [SerializeField, HideInInspector]
     private string packetGlyph = "□";
@@ -349,8 +365,7 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
     [SerializeField, Min(0f)]
     private float jumpTiltSmoothing = 18f;
 
-    [Header("Separators")]
-    [SerializeField, Range(2f, 20f)]
+    [SerializeField, HideInInspector]
     private float separatorThickness = 8f;
 
     private readonly List<ObstacleRuntime> _obstacles = new();
@@ -364,14 +379,9 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
     private RectTransform _platformLayer;
     private RectTransform _obstacleLayer;
     private RectTransform _packetRect;
-    private RectTransform _resultOverlayRect;
     private RawImage _packetImage;
     private Texture2D _hollowSquareTexture;
-    private Image _resultOverlayImage;
-    private TMP_Text _networkText;
-    private TMP_Text _difficultyText;
-    private TMP_Text _statusText;
-    private TMP_Text _resultText;
+    private LaptopMinigameVisualShell _shell;
 
     private LaptopMinigameContext _context;
     private CourseSettings _settings;
@@ -388,7 +398,6 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
 
     private const float MaxFrameSimulationSeconds = 0.10f;
     private const float SimulationStepSeconds = 1f / 120f;
-    private const int ProgressCharacterCount = 32;
     private const float GroundVisualHeight = 86f;
     private const int HollowTextureResolution = 64;
     private const int HollowTextureBorderPixels = 5;
@@ -408,11 +417,18 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         SanitizeSettings(_settings);
         Canvas.ForceUpdateCanvases();
         GenerateCourse(context.Seed);
-        ResetRun(context);
+        ResetRun(context, waitForLaunch: true);
     }
 
     protected override void OnJumpPressed()
     {
+        if (_state == RunState.AwaitingStart)
+        {
+            TriggerActionPerformed();
+            BeginRunFromBriefing();
+            return;
+        }
+
         if (_state != RunState.Playing)
             return;
 
@@ -458,6 +474,11 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         if (!IsRunning)
             return;
 
+        _shell?.Tick(Time.unscaledTime);
+
+        if (_state == RunState.AwaitingStart)
+            return;
+
         float frameDelta = Mathf.Min(Time.deltaTime, MaxFrameSimulationSeconds);
 
         if (_state == RunState.Playing)
@@ -480,7 +501,7 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         if (_resultRemaining > 0f)
             return;
 
-        ResetRun(_context);
+        ResetRun(_context, waitForLaunch: false);
     }
 
     private void SimulatePlayingStep(float deltaTime)
@@ -782,16 +803,22 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         _state = RunState.FailureHold;
         _resultRemaining = failureHoldSeconds;
         TriggerAlarm();
-        ShowResultOverlay("!!! TRACE DETECTED !!!\nRESTARTING LINK...", obstacleColor);
-        SetStatusText("LINK COMPROMISED");
+        ShowResultOverlay(
+            "TRACE DETECTED\nROUTE INVALIDATED\n\nREBUILDING SESSION...",
+            obstacleColor
+        );
+        SetStatusText("SECURITY TRIGGERED");
         SetPacketColor(obstacleColor);
     }
 
-    private void ResetRun(LaptopMinigameContext context)
+    private void ResetRun(
+        LaptopMinigameContext context,
+        bool waitForLaunch
+    )
     {
         Canvas.ForceUpdateCanvases();
 
-        _state = RunState.Playing;
+        _state = waitForLaunch ? RunState.AwaitingStart : RunState.Playing;
         _elapsed = 0f;
         _verticalPosition = 0f;
         _verticalVelocity = 0f;
@@ -802,20 +829,36 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         _grounded = true;
         _lastShownPercent = -1;
 
-        if (_networkText != null)
-            _networkText.text = $"target={context.NetworkDisplayName}";
-
-        if (_difficultyText != null)
-        {
-            _difficultyText.text = $"[{context.Difficulty.ToString().ToUpperInvariant()}]";
-            _difficultyText.color = accentColor;
-        }
-
-        if (_resultOverlayRect != null)
-            _resultOverlayRect.gameObject.SetActive(false);
+        string difficulty = context.Difficulty.ToString().ToUpperInvariant();
+        _shell?.SetContext(context.NetworkDisplayName, difficulty);
+        _shell?.HideResult();
+        _shell?.SetBriefingVisible(waitForLaunch);
+        _shell?.SetFooterLeft("SURVIVE UNTIL ROUTE COMPLETION");
+        _shell?.SetProgress(0f);
 
         SetPacketColor(accentColor);
-        SetStatusText(BuildProgressText(0));
+        SetStatusText("ROUTE 00%");
+        UpdatePlayingVisuals();
+    }
+
+    private void BeginRunFromBriefing()
+    {
+        if (_state != RunState.AwaitingStart)
+            return;
+
+        _state = RunState.Playing;
+        _elapsed = 0f;
+        _verticalPosition = 0f;
+        _verticalVelocity = 0f;
+        _jumpBufferRemaining = 0f;
+        _coyoteRemaining = coyoteSeconds;
+        _supportHeight = 0f;
+        _grounded = true;
+        _lastShownPercent = -1;
+
+        _shell?.SetBriefingVisible(false);
+        _shell?.SetProgress(0f);
+        SetStatusText("ROUTE 00%");
         UpdatePlayingVisuals();
     }
 
@@ -1603,18 +1646,14 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         {
             _lastShownPercent = percent;
             SetStatusText(BuildProgressText(percent));
+            _shell?.SetProgress(progress);
         }
     }
 
     private static string BuildProgressText(int percent)
     {
         int clamped = Mathf.Clamp(percent, 0, 100);
-        int filled = Mathf.RoundToInt(
-            clamped / 100f * ProgressCharacterCount
-        );
-        filled = Mathf.Clamp(filled, 0, ProgressCharacterCount);
-
-        return $"[{new string('#', filled)}{new string('.', ProgressCharacterCount - filled)}] {clamped:00}%";
+        return $"ROUTE {clamped:00}%";
     }
 
     private float GetPlayerX()
@@ -1645,84 +1684,33 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         _root = (RectTransform)transform;
         StretchToParent(_root);
 
-        Image background = CreateImage("Background", _root, backgroundColor);
-        Stretch(background.rectTransform, Vector2.zero, Vector2.one);
-
-        TMP_Text title = CreateText(
-            "Title",
-            _root,
-            "> FIREWALL_RUNNER",
-            58f,
-            TextAlignmentOptions.MidlineLeft,
+        var palette = new LaptopMinigameShellPalette(
+            backgroundColor,
+            surfaceColor,
+            raisedSurfaceColor,
+            structureColor,
+            accentColor,
+            objectiveColor,
             textColor,
-            FontStyles.Bold
-        );
-        Stretch(
-            title.rectTransform,
-            new Vector2(0.050f, 0.920f),
-            new Vector2(0.66f, 0.975f)
-        );
-        title.overflowMode = TextOverflowModes.Overflow;
-
-        _difficultyText = CreateText(
-            "Difficulty",
-            _root,
-            "[EASY]",
-            38f,
-            TextAlignmentOptions.MidlineRight,
-            accentColor,
-            FontStyles.Bold
-        );
-        Stretch(
-            _difficultyText.rectTransform,
-            new Vector2(0.69f, 0.920f),
-            new Vector2(0.950f, 0.975f)
-        );
-        _difficultyText.overflowMode = TextOverflowModes.Overflow;
-
-        _networkText = CreateText(
-            "Network",
-            _root,
-            "target=unknown",
-            36f,
-            TextAlignmentOptions.MidlineLeft,
             mutedTextColor,
-            FontStyles.Normal
-        );
-        Stretch(
-            _networkText.rectTransform,
-            new Vector2(0.050f, 0.865f),
-            new Vector2(0.62f, 0.920f)
+            obstacleColor
         );
 
-        _statusText = CreateText(
-            "Status",
+        _shell = LaptopMinigameVisualShell.Build(
             _root,
-            BuildProgressText(0),
-            34f,
-            TextAlignmentOptions.MidlineRight,
-            accentColor,
-            FontStyles.Normal
-        );
-        Stretch(
-            _statusText.rectTransform,
-            new Vector2(0.45f, 0.865f),
-            new Vector2(0.950f, 0.920f)
-        );
-
-        CreateDashSeparator("HeaderDivider", 0.847f);
-
-        _gameArea = CreateRect("GameArea", _root);
-        Stretch(
-            _gameArea,
-            new Vector2(0.018f, 0.118f),
-            new Vector2(0.982f, 0.835f)
+            terminalFont,
+            palette,
+            shellName,
+            "intrusion-suite",
+            "FIREWALL RUNNER",
+            "Route an intrusion packet through active corporate security barriers.",
+            "SURVIVE UNTIL THE ROUTE REACHES 100%",
+            "SPACE  /  JUMP",
+            "SURVIVE UNTIL ROUTE COMPLETION"
         );
 
-        // The floor is built from real moving track segments. A hole is now
-        // genuinely empty UI space between two segments instead of a dark mask
-        // drawn over one continuous strip. This removes gap seams and makes the
-        // floor behave like the platforms: finite sets of blocks moving left.
+        _gameArea = _shell.GameArea;
+
         _groundLayer = CreateRect("GroundLayer", _gameArea);
         Stretch(_groundLayer, Vector2.zero, Vector2.one);
 
@@ -1737,43 +1725,6 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         float packetSize = GetPacketVisualSize();
         SetCenteredRect(_packetRect, new Vector2(packetSize, packetSize));
         _packetImage.uvRect = new Rect(0f, 0f, 1f, 1f);
-
-        CreateDashSeparator("FooterDivider", 0.103f);
-
-        TMP_Text instruction = CreateText(
-            "Instruction",
-            _root,
-            "[SPACE] JUMP                 [Q] DISCONNECT",
-            35f,
-            TextAlignmentOptions.Center,
-            mutedTextColor,
-            FontStyles.Bold
-        );
-        Stretch(
-            instruction.rectTransform,
-            new Vector2(0.035f, 0.018f),
-            new Vector2(0.965f, 0.086f)
-        );
-
-        _resultOverlayImage = CreateImage(
-            "ResultOverlay",
-            _root,
-            new Color(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.96f)
-        );
-        _resultOverlayRect = _resultOverlayImage.rectTransform;
-        Stretch(_resultOverlayRect, Vector2.zero, Vector2.one);
-
-        _resultText = CreateText(
-            "ResultText",
-            _resultOverlayRect,
-            string.Empty,
-            78f,
-            TextAlignmentOptions.Center,
-            obstacleColor,
-            FontStyles.Bold
-        );
-        Stretch(_resultText.rectTransform, Vector2.zero, Vector2.one);
-        _resultOverlayRect.gameObject.SetActive(false);
     }
 
     private RectTransform CreateObstacleView(int index, int stackCount)
@@ -1820,7 +1771,7 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
             $"GroundSegment_{index:00}",
             _groundLayer
         );
-        track.color = mutedTextColor;
+        track.color = structureColor;
         RectTransform rect = track.rectTransform;
         SetCenteredRect(rect, new Vector2(width, GetTrackTileSize()));
         UpdateHollowStrip(track, width);
@@ -1838,7 +1789,7 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
             $"SafePlatform_{index:00}",
             _platformLayer
         );
-        platformTrack.color = mutedTextColor;
+        platformTrack.color = structureColor;
         RectTransform rect = platformTrack.rectTransform;
         SetCenteredRect(rect, new Vector2(width, GetTrackTileSize()));
         UpdateHollowStrip(platformTrack, width);
@@ -2011,32 +1962,12 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
 
     private void ShowResultOverlay(string message, Color color)
     {
-        if (_resultOverlayRect == null)
-            return;
-
-        _resultOverlayRect.gameObject.SetActive(true);
-
-        if (_resultOverlayImage != null)
-        {
-            _resultOverlayImage.color = new Color(
-                backgroundColor.r,
-                backgroundColor.g,
-                backgroundColor.b,
-                0.96f
-            );
-        }
-
-        if (_resultText != null)
-        {
-            _resultText.text = message;
-            _resultText.color = color;
-        }
+        _shell?.ShowResult(message, color);
     }
 
     private void SetStatusText(string value)
     {
-        if (_statusText != null)
-            _statusText.text = value;
+        _shell?.SetStatus(value, textColor);
     }
 
     private void SetPacketColor(Color color)
@@ -2848,6 +2779,184 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
 
             if (Mathf.Approximately(platformLandingHorizontalGrace, 10f))
                 platformLandingHorizontalGrace = 18f;
+        }
+
+        if (tuningVersion < 22)
+        {
+            // V22 introduces the hacker-owned SABLE desktop shell, a compact
+            // game-first layout, and the original purple/orange faction palette.
+            backgroundColor = new Color(0.071f, 0.043f, 0.094f, 1f);
+            surfaceColor = new Color(0.129f, 0.075f, 0.161f, 1f);
+            raisedSurfaceColor = new Color(0.161f, 0.090f, 0.192f, 1f);
+            structureColor = new Color(0.541f, 0.365f, 0.659f, 1f);
+            accentColor = new Color(0.929f, 0.569f, 0.259f, 1f);
+            objectiveColor = new Color(0.949f, 0.737f, 0.400f, 1f);
+            textColor = new Color(0.933f, 0.910f, 0.894f, 1f);
+            mutedTextColor = new Color(0.663f, 0.608f, 0.686f, 1f);
+            obstacleColor = new Color(0.875f, 0.251f, 0.361f, 1f);
+
+            if (string.IsNullOrWhiteSpace(shellName))
+                shellName = "SABLE";
+        }
+
+        if (tuningVersion < 23)
+        {
+            // V23 refines the shell for readability on the in-world laptop,
+            // removes the heavy purple cast, and switches to a cooler slate + warm
+            // amber palette that complements the blue environment better.
+            backgroundColor = new Color(0.043f, 0.059f, 0.090f, 1f);
+            surfaceColor = new Color(0.067f, 0.090f, 0.129f, 1f);
+            raisedSurfaceColor = new Color(0.094f, 0.125f, 0.180f, 1f);
+            structureColor = new Color(0.255f, 0.333f, 0.439f, 1f);
+            accentColor = new Color(0.941f, 0.604f, 0.290f, 1f);
+            objectiveColor = new Color(0.949f, 0.792f, 0.486f, 1f);
+            textColor = new Color(0.949f, 0.945f, 0.925f, 1f);
+            mutedTextColor = new Color(0.576f, 0.631f, 0.694f, 1f);
+            obstacleColor = new Color(0.890f, 0.325f, 0.431f, 1f);
+
+            if (string.IsNullOrWhiteSpace(shellName))
+                shellName = "SABLE";
+        }
+
+        if (tuningVersion < 24)
+        {
+            // V24 increases shell readability again, renames the OS to ZannOS,
+            // shifts the palette a bit more toward cyan-blue, and refreshes the
+            // Firewall Runner visuals so the laptop sits better inside the scene.
+            backgroundColor = new Color(0.030f, 0.053f, 0.082f, 1f);
+            surfaceColor = new Color(0.050f, 0.082f, 0.118f, 1f);
+            raisedSurfaceColor = new Color(0.073f, 0.112f, 0.157f, 1f);
+            structureColor = new Color(0.290f, 0.443f, 0.565f, 1f);
+            accentColor = new Color(0.965f, 0.620f, 0.302f, 1f);
+            objectiveColor = new Color(0.980f, 0.824f, 0.518f, 1f);
+            textColor = new Color(0.960f, 0.954f, 0.935f, 1f);
+            mutedTextColor = new Color(0.615f, 0.702f, 0.765f, 1f);
+            obstacleColor = new Color(0.920f, 0.341f, 0.439f, 1f);
+            shellName = "ZannOS";
+        }
+
+
+        if (tuningVersion < 25)
+        {
+            // V25 deepens the blue-cyan shell background and raises the contrast of
+            // gameplay elements so the in-world laptop screen reads more clearly.
+            backgroundColor = new Color(0.017f, 0.045f, 0.072f, 1f);
+            surfaceColor = new Color(0.026f, 0.065f, 0.098f, 1f);
+            raisedSurfaceColor = new Color(0.041f, 0.087f, 0.128f, 1f);
+            structureColor = new Color(0.430f, 0.655f, 0.812f, 1f);
+            accentColor = new Color(0.992f, 0.663f, 0.286f, 1f);
+            objectiveColor = new Color(1.000f, 0.839f, 0.486f, 1f);
+            textColor = new Color(0.972f, 0.968f, 0.949f, 1f);
+            mutedTextColor = new Color(0.635f, 0.745f, 0.820f, 1f);
+            obstacleColor = new Color(0.949f, 0.365f, 0.455f, 1f);
+            shellName = "ZannOS";
+        }
+
+
+        if (tuningVersion < 26)
+        {
+            // V26 shifts the shell slightly further toward cyan and strengthens gameplay
+            // contrast so Firewall Runner reads more clearly on the in-world laptop.
+            backgroundColor = new Color(0.010f, 0.048f, 0.076f, 1f);
+            surfaceColor = new Color(0.018f, 0.066f, 0.102f, 1f);
+            raisedSurfaceColor = new Color(0.030f, 0.088f, 0.133f, 1f);
+            structureColor = new Color(0.420f, 0.760f, 0.900f, 1f);
+            accentColor = new Color(0.996f, 0.675f, 0.290f, 1f);
+            objectiveColor = new Color(1.000f, 0.850f, 0.505f, 1f);
+            textColor = new Color(0.975f, 0.972f, 0.955f, 1f);
+            mutedTextColor = new Color(0.675f, 0.790f, 0.860f, 1f);
+            obstacleColor = new Color(0.955f, 0.388f, 0.470f, 1f);
+            shellName = "ZannOS";
+        }
+
+
+        if (tuningVersion < 27)
+        {
+            // V27 shifts Firewall Runner to a monochrome terminal-style shell with
+            // phosphor-green UI, deeper black-green backgrounds, and stronger gameplay contrast.
+            backgroundColor = new Color(0.012f, 0.030f, 0.020f, 1f);
+            surfaceColor = new Color(0.022f, 0.050f, 0.034f, 1f);
+            raisedSurfaceColor = new Color(0.032f, 0.072f, 0.048f, 1f);
+            structureColor = new Color(0.360f, 0.910f, 0.650f, 1f);
+            accentColor = new Color(0.520f, 1.000f, 0.760f, 1f);
+            objectiveColor = new Color(0.760f, 1.000f, 0.700f, 1f);
+            textColor = new Color(0.900f, 1.000f, 0.920f, 1f);
+            mutedTextColor = new Color(0.470f, 0.720f, 0.560f, 1f);
+            obstacleColor = new Color(1.000f, 0.360f, 0.420f, 1f);
+            shellName = "ZannOS";
+        }
+
+
+        if (tuningVersion < 28)
+        {
+            // V28 refines the terminal hierarchy: darker green-black surfaces,
+            // slightly dimmer topology, a brighter mint player accent, and a
+            // separate lime objective color for keys and important data.
+            backgroundColor = new Color(0.007f, 0.022f, 0.014f, 1f);
+            surfaceColor = new Color(0.014f, 0.040f, 0.026f, 1f);
+            raisedSurfaceColor = new Color(0.022f, 0.055f, 0.036f, 1f);
+            structureColor = new Color(0.250f, 0.780f, 0.540f, 1f);
+            accentColor = new Color(0.680f, 1.000f, 0.820f, 1f);
+            objectiveColor = new Color(0.920f, 0.940f, 0.520f, 1f);
+            textColor = new Color(0.900f, 0.990f, 0.920f, 1f);
+            mutedTextColor = new Color(0.340f, 0.580f, 0.440f, 1f);
+            obstacleColor = new Color(1.000f, 0.360f, 0.420f, 1f);
+            shellName = "ZannOS";
+        }
+
+
+
+        if (tuningVersion < 29)
+        {
+            // V29 keeps the green terminal identity while replacing the warm lime
+            // accents with cooler teal-mint values and improving the visual hierarchy
+            // between shell, passive structure, player packet, objective data, and hazards.
+            backgroundColor = new Color(0.006f, 0.022f, 0.015f, 1f);
+            surfaceColor = new Color(0.012f, 0.038f, 0.029f, 1f);
+            raisedSurfaceColor = new Color(0.018f, 0.052f, 0.040f, 1f);
+            structureColor = new Color(0.220f, 0.720f, 0.560f, 1f);
+            accentColor = new Color(0.660f, 1.000f, 0.840f, 1f);
+            objectiveColor = new Color(0.460f, 0.940f, 0.780f, 1f);
+            textColor = new Color(0.900f, 0.990f, 0.950f, 1f);
+            mutedTextColor = new Color(0.340f, 0.600f, 0.500f, 1f);
+            obstacleColor = new Color(1.000f, 0.400f, 0.450f, 1f);
+            shellName = "ZannOS";
+        }
+
+
+        if (tuningVersion < 30)
+        {
+            // V30 finalizes the terminal hierarchy: darker and more neutral
+            // green-black surfaces, dimmer passive structure, brighter active
+            // mint highlights, and cooler seafoam objective accents. This keeps
+            // the look clean while preserving readability from the in-world camera.
+            backgroundColor = new Color(0.005f, 0.020f, 0.014f, 1f);
+            surfaceColor = new Color(0.010f, 0.032f, 0.024f, 1f);
+            raisedSurfaceColor = new Color(0.014f, 0.042f, 0.033f, 1f);
+            structureColor = new Color(0.185f, 0.710f, 0.590f, 1f);
+            accentColor = new Color(0.760f, 1.000f, 0.900f, 1f);
+            objectiveColor = new Color(0.580f, 0.970f, 0.880f, 1f);
+            textColor = new Color(0.910f, 0.995f, 0.960f, 1f);
+            mutedTextColor = new Color(0.250f, 0.520f, 0.430f, 1f);
+            obstacleColor = new Color(1.000f, 0.400f, 0.450f, 1f);
+            platformThicknessMultiplier = 1.08f;
+            shellName = "ZannOS";
+        }
+
+
+        if (tuningVersion < 32)
+        {
+            // V32 nudges the terminal backgrounds slightly further toward cyan-green
+            // while keeping the current dark value range and clean readability.
+            backgroundColor = new Color(0.004f, 0.022f, 0.018f, 1f);
+            surfaceColor = new Color(0.009f, 0.035f, 0.029f, 1f);
+            raisedSurfaceColor = new Color(0.013f, 0.046f, 0.038f, 1f);
+            structureColor = new Color(0.190f, 0.770f, 0.660f, 1f);
+            accentColor = new Color(0.740f, 1.000f, 0.920f, 1f);
+            objectiveColor = new Color(0.540f, 0.965f, 0.885f, 1f);
+            textColor = new Color(0.910f, 0.995f, 0.960f, 1f);
+            mutedTextColor = new Color(0.230f, 0.530f, 0.470f, 1f);
+            obstacleColor = new Color(1.000f, 0.400f, 0.450f, 1f);
         }
 
         tuningVersion = CurrentTuningVersion;

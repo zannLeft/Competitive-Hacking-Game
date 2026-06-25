@@ -57,44 +57,58 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2cf4adae720424548a295571f75f696a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TraceEscapeMinigame
+  tuningVersion: 30
   easy:
     mazeWidth: 25
-    mazeHeight: 13
+    mazeHeight: 17
     accessKeyCount: 2
-    traceStartDelay: 2.8
-    traceStepSeconds: 0.18
+    traceStartDelay: 2.45
+    traceStepSeconds: 0.165
     movementRepeatSeconds: 0.105
     movementInitialRepeatDelay: 0.18
     visibleTraceTrailLength: 3
+    loopOpenings: 7
+    maximumKeyDetour: 12
+    minimumKeySpacing: 5
   hard:
     mazeWidth: 31
-    mazeHeight: 15
+    mazeHeight: 19
     accessKeyCount: 3
-    traceStartDelay: 1.9
-    traceStepSeconds: 0.135
+    traceStartDelay: 2.05
+    traceStepSeconds: 0.145
     movementRepeatSeconds: 0.09
     movementInitialRepeatDelay: 0.15
     visibleTraceTrailLength: 4
+    loopOpenings: 7
+    maximumKeyDetour: 16
+    minimumKeySpacing: 5
   navigationDeadzone: 0.35
+  roundsRequired: 3
+  roundTransitionSeconds: 0.75
   failureHoldSeconds: 0.9
-  terminalFont: {fileID: 11400000, guid: 8d914078d7321844790934c1ea6f9fa5, type: 2}
-  backgroundColor: {r: 0.018, g: 0.032, b: 0.065, a: 1}
-  accentColor: {r: 0.43, g: 0.84, b: 1, a: 1}
-  textColor: {r: 0.91, g: 0.97, b: 1, a: 1}
-  mutedTextColor: {r: 0.47, g: 0.63, b: 0.72, a: 1}
-  dangerColor: {r: 1, g: 0.24, b: 0.38, a: 1}
-  playerGlyph: '@'
-  wallGlyph: '#'
+  terminalFont: {fileID: 0}
+  shellName: ZannOS
+  backgroundColor: {r: 0.005, g: 0.02, b: 0.014, a: 1}
+  surfaceColor: {r: 0.01, g: 0.032, b: 0.024, a: 1}
+  raisedSurfaceColor: {r: 0.014, g: 0.042, b: 0.033, a: 1}
+  structureColor: {r: 0.185, g: 0.71, b: 0.59, a: 1}
+  accentColor: {r: 0.76, g: 1, b: 0.9, a: 1}
+  objectiveColor: {r: 0.58, g: 0.97, b: 0.88, a: 1}
+  textColor: {r: 0.91, g: 0.995, b: 0.96, a: 1}
+  mutedTextColor: {r: 0.25, g: 0.52, b: 0.43, a: 1}
+  dangerColor: {r: 1, g: 0.4, b: 0.45, a: 1}
+  playerGlyph: "\u25A0"
+  playerGlyphVerticalOffsetEm: 0.08
+  wallGlyph: "\u25A1"
   keyGlyph: K
   lockedExitGlyph: X
   openExitGlyph: '>'
-  traceGlyph: '!'
+  traceGlyph: '#'
   traceTrailGlyph: ':'
-  enableTextGlow: 1
-  textGlowAlpha: 0.58
-  textGlowOuter: 0.18
-  textGlowPower: 0.82
   separatorThickness: 8
-  mazeMinimumFontSize: 28
-  mazeMaximumFontSize: 60
-  mazeLineSpacing: -8
+  mazeMinimumFontSize: 32
+  mazeMaximumFontSize: 68
+  mazeLineSpacing: 0
+  mazeCellWidthEm: 0.82
+  mazeLineHeightPercent: 75
+  wallGlyphScalePercent: 150
