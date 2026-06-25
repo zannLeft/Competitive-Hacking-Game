@@ -40,6 +40,12 @@ public class DownedReviveHUD : MonoBehaviour
     private string downedMessage = "Call for help! Wait for another survivor to revive you.";
 
     [SerializeField]
+    private string bleedOutCountdownPrefix = "BLEEDING OUT IN";
+
+    [SerializeField]
+    private bool showTenthsBelowTenSeconds = true;
+
+    [SerializeField]
     private string revivePrompt = "HOLD E TO REVIVE";
 
     [SerializeField]
@@ -134,7 +140,27 @@ public class DownedReviveHUD : MonoBehaviour
             downedTitleText.text = downedTitle;
 
         if (downedMessageText != null)
-            downedMessageText.text = downedMessage;
+            downedMessageText.text = BuildDownedMessage();
+    }
+
+    private string BuildDownedMessage()
+    {
+        if (localLifeState == null)
+            return downedMessage;
+
+        float secondsRemaining = Mathf.Max(
+            0f,
+            (float)localLifeState.SecondsUntilBleedOut
+        );
+
+        string countdown;
+
+        if (showTenthsBelowTenSeconds && secondsRemaining < 10f)
+            countdown = $"{secondsRemaining:0.0}";
+        else
+            countdown = Mathf.CeilToInt(secondsRemaining).ToString();
+
+        return $"{downedMessage}\n\n{bleedOutCountdownPrefix} {countdown}s";
     }
 
     private void RefreshReviveUI(bool show)

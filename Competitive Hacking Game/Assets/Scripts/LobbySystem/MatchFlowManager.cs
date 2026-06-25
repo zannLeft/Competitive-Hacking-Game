@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -18,13 +19,29 @@ public class MatchFlowManager : MonoBehaviour
 {
     public bool IsMatchInProgress { get; set; }
 
+    private const string MatchResultMessageName = "MF_MatchResult";
+
+    [Header("Match Result")]
+    [Tooltip("How long the result screen remains visible before the host returns everyone to the lobby.")]
+    [Min(0.5f)]
+    [SerializeField]
+    private float matchResultDisplaySeconds = 5f;
+
     public MatchResultType CurrentMatchResult { get; private set; } = MatchResultType.None;
     public bool HasCommittedMatchResult => CurrentMatchResult != MatchResultType.None;
+    public double MatchResultEndsServerTime { get; private set; }
+    public float MatchResultDisplaySeconds => matchResultDisplaySeconds;
 
     /// <summary>
-    /// Server-side only in Stage 1. A later stage can mirror this result to clients and UI.
+    /// Raised on the server when a result is committed exactly once.
     /// </summary>
     public event Action<MatchResultType> ServerMatchResultCommitted;
+
+    /// <summary>
+    /// Raised locally on every connected peer when the authoritative result changes.
+    /// The double is the synchronized server time at which the result presentation ends.
+    /// </summary>
+    public event Action<MatchResultType, double> LocalMatchResultChanged;
 
     private string _interiorSceneName = "Interior_01";
     private string _lobbySpawnTag = "LobbySpawn";
@@ -35,6 +52,11 @@ public class MatchFlowManager : MonoBehaviour
     private RoundRoleManager _roles;
     private RoundResetManager _roundReset;
     private Coroutine _interiorInitializationRoutine;
+    private Coroutine _serverMatchResultRoutine;
+
+    private bool _matchResultHandlerRegistered;
+    private NetworkManager _registeredResultNetworkManager;
+    private bool _isEndingMatch;
 
     // Only clients present when the round starts are allowed to participate in that round.
     // This prevents a late joiner from being counted as a survivor or attacked mid-match.
@@ -51,6 +73,75 @@ public class MatchFlowManager : MonoBehaviour
         _interiorSpawnTag = interiorSpawnTag;
     }
 
+    public void RegisterNetworkHandlersIfNeeded()
+    {
+        NetworkManager nm = NetworkManager.Singleton;
+
+        if (nm == null || nm.CustomMessagingManager == null)
+        {
+            ResetNetworkHandlerRegistrationState();
+            return;
+        }
+
+        if (_matchResultHandlerRegistered && _registeredResultNetworkManager == nm)
+            return;
+
+        UnregisterNetworkHandlersIfNeeded();
+
+        nm.CustomMessagingManager.RegisterNamedMessageHandler(
+            MatchResultMessageName,
+            OnMatchResultMessage
+        );
+
+        _matchResultHandlerRegistered = true;
+        _registeredResultNetworkManager = nm;
+
+        Debug.Log("[MatchFlow] Registered match-result message handler.");
+    }
+
+    public void UnregisterNetworkHandlersIfNeeded()
+    {
+        NetworkManager registeredManager = _registeredResultNetworkManager;
+
+        if (registeredManager != null && registeredManager.CustomMessagingManager != null)
+        {
+            try
+            {
+                registeredManager.CustomMessagingManager.UnregisterNamedMessageHandler(
+                    MatchResultMessageName
+                );
+            }
+            catch
+            {
+                // Safe during NetworkManager shutdown or session replacement.
+            }
+        }
+        else if (
+            NetworkManager.Singleton != null
+            && NetworkManager.Singleton.CustomMessagingManager != null
+        )
+        {
+            try
+            {
+                NetworkManager.Singleton.CustomMessagingManager.UnregisterNamedMessageHandler(
+                    MatchResultMessageName
+                );
+            }
+            catch
+            {
+                // Safe during NetworkManager shutdown.
+            }
+        }
+
+        ResetNetworkHandlerRegistrationState();
+    }
+
+    private void ResetNetworkHandlerRegistrationState()
+    {
+        _matchResultHandlerRegistered = false;
+        _registeredResultNetworkManager = null;
+    }
+
     private void Awake()
     {
         _teleport = GetComponent<TeleportService>();
@@ -65,13 +156,21 @@ public class MatchFlowManager : MonoBehaviour
             _roundReset = gameObject.AddComponent<RoundResetManager>();
 
         if (_session != null)
+        {
+            _session.ServerClientConnected += OnServerClientConnected;
             _session.ServerClientDisconnected += OnServerClientDisconnected;
+        }
     }
 
     private void OnDestroy()
     {
         if (_session != null)
+        {
+            _session.ServerClientConnected -= OnServerClientConnected;
             _session.ServerClientDisconnected -= OnServerClientDisconnected;
+        }
+
+        UnregisterNetworkHandlersIfNeeded();
     }
 
     private void Update()
@@ -130,6 +229,9 @@ public class MatchFlowManager : MonoBehaviour
 
         ResetServerMatchAuthorityForNewRound();
         IsMatchInProgress = true;
+
+        RegisterNetworkHandlersIfNeeded();
+        ServerBroadcastMatchResult(MatchResultType.None, 0d);
 
         _roundReset?.ResetAllPlayersForMatchStart();
         _roles?.ResetRoles();
@@ -395,7 +497,9 @@ public class MatchFlowManager : MonoBehaviour
 
     public bool ServerCommitMatchResult(MatchResultType result)
     {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+        NetworkManager nm = NetworkManager.Singleton;
+
+        if (nm == null || !nm.IsServer)
             return false;
 
         if (!IsMatchInProgress || result == MatchResultType.None)
@@ -405,10 +509,204 @@ public class MatchFlowManager : MonoBehaviour
             return false;
 
         CurrentMatchResult = result;
+        MatchResultEndsServerTime =
+            nm.ServerTime.Time + Math.Max(0.5d, matchResultDisplaySeconds);
 
         Debug.Log($"[MatchFlow] Match result committed exactly once: {result}.");
+
+        ServerBroadcastMatchResult(result, MatchResultEndsServerTime);
         ServerMatchResultCommitted?.Invoke(result);
+
+        if (_serverMatchResultRoutine != null)
+            StopCoroutine(_serverMatchResultRoutine);
+
+        _serverMatchResultRoutine = StartCoroutine(
+            ServerFinishMatchAfterResult(result, MatchResultEndsServerTime)
+        );
+
         return true;
+    }
+
+    private IEnumerator ServerFinishMatchAfterResult(
+        MatchResultType committedResult,
+        double presentationEndsServerTime
+    )
+    {
+        while (true)
+        {
+            NetworkManager nm = NetworkManager.Singleton;
+
+            if (
+                nm == null
+                || !nm.IsServer
+                || !IsMatchInProgress
+                || CurrentMatchResult != committedResult
+            )
+            {
+                _serverMatchResultRoutine = null;
+                yield break;
+            }
+
+            if (nm.ServerTime.Time >= presentationEndsServerTime)
+                break;
+
+            yield return null;
+        }
+
+        _serverMatchResultRoutine = null;
+
+        LobbyManager lobbyManager = LobbyManager.Instance;
+
+        if (lobbyManager != null)
+            lobbyManager.EndMatchAfterCommittedResult();
+        else
+            EndMatchAsHost();
+    }
+
+    private void ServerBroadcastMatchResult(
+        MatchResultType result,
+        double presentationEndsServerTime
+    )
+    {
+        NetworkManager nm = NetworkManager.Singleton;
+
+        if (nm == null || !nm.IsServer)
+            return;
+
+        // The host does not need to receive its own named message.
+        if (nm.IsClient)
+            ApplyLocalMatchResult(result, presentationEndsServerTime);
+
+        if (nm.ConnectedClientsList == null)
+            return;
+
+        foreach (NetworkClient client in nm.ConnectedClientsList)
+        {
+            if (client == null)
+                continue;
+
+            if (nm.IsClient && client.ClientId == nm.LocalClientId)
+                continue;
+
+            ServerSendMatchResultToClient(
+                client.ClientId,
+                result,
+                presentationEndsServerTime
+            );
+        }
+    }
+
+    private void ServerSendMatchResultToClient(
+        ulong clientId,
+        MatchResultType result,
+        double presentationEndsServerTime
+    )
+    {
+        NetworkManager nm = NetworkManager.Singleton;
+
+        if (
+            nm == null
+            || !nm.IsServer
+            || nm.CustomMessagingManager == null
+            || nm.ConnectedClients == null
+            || !nm.ConnectedClients.ContainsKey(clientId)
+        )
+            return;
+
+        using FastBufferWriter writer = new FastBufferWriter(
+            sizeof(byte) + sizeof(double),
+            Allocator.Temp
+        );
+
+        writer.WriteValueSafe((byte)result);
+        writer.WriteValueSafe(presentationEndsServerTime);
+
+        nm.CustomMessagingManager.SendNamedMessage(
+            MatchResultMessageName,
+            clientId,
+            writer
+        );
+    }
+
+    private void OnMatchResultMessage(ulong senderClientId, FastBufferReader reader)
+    {
+        NetworkManager nm = NetworkManager.Singleton;
+
+        if (nm == null || senderClientId != NetworkManager.ServerClientId)
+            return;
+
+        reader.ReadValueSafe(out byte rawResult);
+        reader.ReadValueSafe(out double presentationEndsServerTime);
+
+        MatchResultType result = Enum.IsDefined(typeof(MatchResultType), rawResult)
+            ? (MatchResultType)rawResult
+            : MatchResultType.None;
+
+        ApplyLocalMatchResult(result, presentationEndsServerTime);
+    }
+
+    private void ApplyLocalMatchResult(
+        MatchResultType result,
+        double presentationEndsServerTime
+    )
+    {
+        CurrentMatchResult = result;
+        MatchResultEndsServerTime =
+            result == MatchResultType.None ? 0d : presentationEndsServerTime;
+
+        if (result != MatchResultType.None)
+            FreezeLocalGameplayForMatchResult();
+
+        LocalMatchResultChanged?.Invoke(result, MatchResultEndsServerTime);
+    }
+
+    private void FreezeLocalGameplayForMatchResult()
+    {
+        NetworkManager nm = NetworkManager.Singleton;
+        NetworkObject localPlayerObject = nm != null ? nm.LocalClient?.PlayerObject : null;
+
+        if (localPlayerObject != null)
+        {
+            InputManager input = localPlayerObject.GetComponent<InputManager>();
+            input?.SetGameplaySuppressed(true);
+            input?.SetSpectatorInputEnabled(false);
+            input?.SetDownedInputEnabled(false);
+
+            localPlayerObject.GetComponent<PlayerReviver>()?.ForceResetLocalForRound();
+            localPlayerObject.GetComponent<PlayerPhone>()?.ForceResetPhoneLocal();
+            localPlayerObject.GetComponent<PlayerLaptopHacker>()?.ForceResetLocalForRound();
+            localPlayerObject.GetComponent<PlayerSitAction>()?.ForceResetLocalForRound();
+            localPlayerObject.GetComponent<PlayerLaptopVisual>()?.ForceResetLocalForRound();
+
+            PlayerLook look = localPlayerObject.GetComponent<PlayerLook>();
+            look?.SetPhoneAim(false);
+            look?.SetAimHeld(false);
+        }
+
+        PauseMenuUI.Instance?.ForceCloseForMatchResult();
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    private void OnServerClientConnected(ulong clientId)
+    {
+        NetworkManager nm = NetworkManager.Singleton;
+
+        if (nm == null || !nm.IsServer)
+            return;
+
+        if (nm.IsClient && clientId == nm.LocalClientId)
+        {
+            ApplyLocalMatchResult(CurrentMatchResult, MatchResultEndsServerTime);
+            return;
+        }
+
+        ServerSendMatchResultToClient(
+            clientId,
+            CurrentMatchResult,
+            MatchResultEndsServerTime
+        );
     }
 
     private void OnServerClientDisconnected(ulong clientId)
@@ -554,7 +852,15 @@ public class MatchFlowManager : MonoBehaviour
 
     private void ResetServerMatchAuthorityForNewRound()
     {
+        if (_serverMatchResultRoutine != null)
+        {
+            StopCoroutine(_serverMatchResultRoutine);
+            _serverMatchResultRoutine = null;
+        }
+
         CurrentMatchResult = MatchResultType.None;
+        MatchResultEndsServerTime = 0d;
+        _isEndingMatch = false;
         _activeMatchParticipantClientIds.Clear();
         _survivorBuffer.Clear();
         _isEvaluatingSurvivors = false;
@@ -566,6 +872,17 @@ public class MatchFlowManager : MonoBehaviour
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost)
             return;
 
+        if (_isEndingMatch)
+            return;
+
+        _isEndingMatch = true;
+
+        if (_serverMatchResultRoutine != null)
+        {
+            StopCoroutine(_serverMatchResultRoutine);
+            _serverMatchResultRoutine = null;
+        }
+
         IsMatchInProgress = false;
         _activeMatchParticipantClientIds.Clear();
 
@@ -574,6 +891,7 @@ public class MatchFlowManager : MonoBehaviour
 
         if (!IsInteriorLoaded())
         {
+            ServerClearMatchResultPresentation();
             TeleportAllClients(_lobbySpawnTag);
             return;
         }
@@ -590,6 +908,7 @@ public class MatchFlowManager : MonoBehaviour
         {
             nsm.OnUnloadEventCompleted -= OnInteriorUnloadCompleted;
             Debug.LogWarning("[MatchFlow] Interior scene not found/loaded when trying to unload.");
+            ServerClearMatchResultPresentation();
             TeleportAllClients(_lobbySpawnTag);
         }
     }
@@ -606,7 +925,18 @@ public class MatchFlowManager : MonoBehaviour
 
         NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted -= OnInteriorUnloadCompleted;
 
+        ServerClearMatchResultPresentation();
         TeleportAllClients(_lobbySpawnTag);
+    }
+
+    private void ServerClearMatchResultPresentation()
+    {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+            return;
+
+        ServerBroadcastMatchResult(MatchResultType.None, 0d);
+        CurrentMatchResult = MatchResultType.None;
+        MatchResultEndsServerTime = 0d;
     }
 
     public void EndGameToLobbyForEveryone()
@@ -614,7 +944,14 @@ public class MatchFlowManager : MonoBehaviour
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost)
             return;
 
+        if (_serverMatchResultRoutine != null)
+        {
+            StopCoroutine(_serverMatchResultRoutine);
+            _serverMatchResultRoutine = null;
+        }
+
         IsMatchInProgress = false;
+        ServerClearMatchResultPresentation();
         _activeMatchParticipantClientIds.Clear();
 
         _roundReset?.ResetAllPlayersForMatchEnd();

@@ -40,6 +40,16 @@ public class PauseMenuUI : MonoBehaviour
 
     public void Toggle()
     {
+        MatchFlowManager matchFlow = LobbyManager.Instance != null
+            ? LobbyManager.Instance.MatchFlow
+            : null;
+
+        if (matchFlow != null && matchFlow.HasCommittedMatchResult)
+        {
+            ForceCloseForMatchResult();
+            return;
+        }
+
         if (isOpen)
             Resume();
         else
@@ -94,6 +104,17 @@ public class PauseMenuUI : MonoBehaviour
 
         // End Match button should appear only for host during match
         endMatchButton.gameObject.SetActive(isHost && inMatch);
+    }
+
+    public void ForceCloseForMatchResult()
+    {
+        isOpen = false;
+
+        if (root != null)
+            root.SetActive(false);
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
     public void Resume()

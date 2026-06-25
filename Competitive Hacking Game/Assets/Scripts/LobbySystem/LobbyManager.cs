@@ -168,6 +168,7 @@ public class LobbyManager : MonoBehaviour
             Session.StartHost();
 
             Teleport.RegisterHandlersIfNeeded();
+            MatchFlow.RegisterNetworkHandlersIfNeeded();
 
             // City_Base is no longer loaded on the main menu.
             // The host loads it only after the lobby session starts, and Netcode syncs
@@ -263,6 +264,7 @@ public class LobbyManager : MonoBehaviour
         Session.StartClient();
 
         Teleport.RegisterHandlersIfNeeded();
+        MatchFlow.RegisterNetworkHandlersIfNeeded();
 
         SceneUI.HideMenuUI();
         SceneUI.ShowPregameUI();
@@ -346,6 +348,33 @@ public class LobbyManager : MonoBehaviour
         Cursor.visible = false;
     }
 
+    public void EndMatchAfterCommittedResult()
+    {
+        if (!Session.IsHost)
+            return;
+
+        // Do not hold the result sequence open while waiting on the Lobby service.
+        // Scene unload/reset starts immediately; the service state update completes independently.
+        _ = SetLobbyWaitingStateAfterMatchAsync();
+
+        MatchFlow.EndMatchAsHost();
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    private async Task SetLobbyWaitingStateAfterMatchAsync()
+    {
+        try
+        {
+            await Services.SetLobbyStateAsync(isLocked: false, state: "waiting");
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[LobbyManager] Failed to unlock/set state after result: {e}");
+        }
+    }
+
     public void EndGameToLobbyForEveryone()
     {
         if (!Session.IsHost)
@@ -363,6 +392,7 @@ public class LobbyManager : MonoBehaviour
 
     private void CleanupLocalSessionState(bool clearLobby, bool shutdownNetwork)
     {
+        MatchFlow?.UnregisterNetworkHandlersIfNeeded();
         Teleport?.UnregisterHandlersIfNeeded();
         Session?.UnregisterConnectionCallbacks();
 
