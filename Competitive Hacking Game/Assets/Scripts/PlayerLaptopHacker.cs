@@ -59,6 +59,15 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     [SerializeField]
     private bool requireLaptopFocus = true;
 
+    [Header("Laptop Minigame Performance")]
+    [Tooltip("Prepare and pool the catalog minigames in the background before the laptop is opened.")]
+    [SerializeField]
+    private bool prewarmMinigames = true;
+
+    [Tooltip("How many heavy UI cells a minigame may build before yielding to the next frame.")]
+    [SerializeField, Range(1, 32)]
+    private int prewarmOperationsPerFrame = 9;
+
     [Header("Target Refresh")]
     [SerializeField, Min(0.02f)]
     private float targetRefreshInterval = 0.10f;
@@ -148,6 +157,8 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     private Coroutine _rejectedMessageCoroutine;
     private bool _gameUIHiddenByLaptop;
     private bool _gameUIWasActiveBeforeLaptop;
+    private Coroutine _minigamePrewarmRoutine;
+    private LaptopMinigameCatalog _prewarmedCatalog;
 
     // Server-only attempt state. This lives on the player's existing NetworkObject.
     private bool _serverAttemptActive;
@@ -159,6 +170,16 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
     private double _serverLastKeypressAt = double.NegativeInfinity;
     private double _serverLastAlarmAt = double.NegativeInfinity;
     private float _serverAttemptValidationTimer;
+
+    // Preserves the server-side elapsed-time validation when a resumable minigame is
+    // paused by closing the laptop. Without this, reopening on round 2 or 3 could make
+    // a legitimate completion look impossibly fast to the server.
+    private bool _serverResumeTimeCached;
+    private FixedString128Bytes _serverResumeNetworkId;
+    private ushort _serverResumeMinigameId;
+    private LaptopMinigameDifficulty _serverResumeDifficulty;
+    private int _serverResumeSeed;
+    private double _serverResumeElapsedSeconds;
 
     public event Action HackAlarmEmitted;
 
@@ -219,8 +240,10 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         if (IsOwner)
             RestoreGameUIAfterLaptop();
 
+        StopMinigamePrewarm();
         DetachCoordinator();
         AbortLocalMinigame(clearTarget: true, notifyServer: false);
+        screenUI?.DiscardAllMinigameProgress();
         ClearServerAttempt();
         StopLaptopAudio();
         base.OnNetworkDespawn();
@@ -237,9 +260,22 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         AttachCoordinatorIfNeeded();
         UpdateOwnerGameUIVisibility();
 
-        if (!CanUseSurvivorTools() || !IsLaptopUsable)
+        bool canUseSurvivorTools = CanUseSurvivorTools();
+        bool laptopUsable = IsLaptopUsable;
+
+        if (!canUseSurvivorTools || !laptopUsable)
         {
-            AbortLocalMinigame(clearTarget: true);
+            bool preserveProgress =
+                canUseSurvivorTools
+                && !laptopUsable
+                && screenUI != null
+                && screenUI.ActiveMinigame != null
+                && screenUI.ActiveMinigame.SupportsSessionResume;
+
+            AbortLocalMinigame(
+                clearTarget: true,
+                preserveProgress: preserveProgress
+            );
             _showingTerminalResult = false;
             _lastPresentationKey = string.Empty;
             return;
@@ -286,6 +322,7 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             RestoreGameUIAfterLaptop();
 
         AbortLocalMinigame(clearTarget: true);
+        screenUI?.DiscardAllMinigameProgress();
         ClearServerAttempt();
         StopLaptopAudio();
         StopRejectedMessageCoroutine();
@@ -713,7 +750,11 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         );
     }
 
-    private void AbortLocalMinigame(bool clearTarget, bool notifyServer = true)
+    private void AbortLocalMinigame(
+        bool clearTarget,
+        bool notifyServer = true,
+        bool preserveProgress = false
+    )
     {
         bool shouldNotifyServer =
             notifyServer
@@ -722,7 +763,7 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             && CanSendRpc();
 
         ClearLocalInputState();
-        screenUI?.AbortActiveMinigame();
+        screenUI?.AbortActiveMinigame(preserveProgress);
         _targetLockedByMinigame = false;
         _clientAttemptOpen = false;
         _completionPending = false;
@@ -732,7 +773,7 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         _pendingCompletionDisplayName = string.Empty;
 
         if (shouldNotifyServer)
-            RequestAbortAttemptServerRpc();
+            RequestAbortAttemptServerRpc(preserveProgress);
 
         if (clearTarget)
             ClearCurrentTarget();
@@ -747,7 +788,7 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         _activeContext = default;
 
         if (shouldNotify)
-            RequestAbortAttemptServerRpc();
+            RequestAbortAttemptServerRpc(preserveProgress: false);
     }
 
     private void ClearCurrentTarget()
@@ -762,7 +803,10 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         RouterHackCoordinator instance = RouterHackCoordinator.Instance;
 
         if (_coordinator == instance)
+        {
+            TryStartMinigamePrewarm();
             return;
+        }
 
         DetachCoordinator();
         _coordinator = instance;
@@ -772,6 +816,44 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
 
         _targetRefreshTimer = 0f;
         _lastPresentationKey = string.Empty;
+        TryStartMinigamePrewarm();
+    }
+
+    private void TryStartMinigamePrewarm()
+    {
+        if (!IsOwner || !prewarmMinigames || screenUI == null || _coordinator == null)
+            return;
+
+        LaptopMinigameCatalog catalog = _coordinator.MinigameCatalog;
+
+        if (catalog == null || _prewarmedCatalog == catalog)
+            return;
+
+        StopMinigamePrewarm();
+        _prewarmedCatalog = catalog;
+        _minigamePrewarmRoutine = StartCoroutine(PrewarmMinigamesRoutine(catalog));
+    }
+
+    private IEnumerator PrewarmMinigamesRoutine(LaptopMinigameCatalog catalog)
+    {
+        IEnumerator routine = screenUI.PrewarmCatalog(
+            catalog,
+            Mathf.Max(1, prewarmOperationsPerFrame)
+        );
+
+        while (routine.MoveNext())
+            yield return routine.Current;
+
+        _minigamePrewarmRoutine = null;
+    }
+
+    private void StopMinigamePrewarm()
+    {
+        if (_minigamePrewarmRoutine == null)
+            return;
+
+        StopCoroutine(_minigamePrewarmRoutine);
+        _minigamePrewarmRoutine = null;
     }
 
     private void DetachCoordinator()
@@ -851,24 +933,50 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
             return;
         }
 
+        bool resumeSameAttempt = ServerResumeContextMatches(
+            networkId,
+            minigameId,
+            difficulty,
+            seed
+        );
+
+        if (!resumeSameAttempt)
+            ClearServerResumeTime();
+
+        double now = GetServerTime();
+        double resumedElapsed = resumeSameAttempt
+            ? Math.Max(0d, _serverResumeElapsedSeconds)
+            : 0d;
+
         _serverAttemptActive = true;
         _serverAttemptNetworkId = networkId;
         _serverAttemptMinigameId = minigameId;
         _serverAttemptDifficulty = difficulty;
         _serverAttemptSeed = seed;
-        _serverAttemptStartedAt = GetServerTime();
+        _serverAttemptStartedAt = now - resumedElapsed;
         _serverLastKeypressAt = double.NegativeInfinity;
         _serverLastAlarmAt = double.NegativeInfinity;
         _serverAttemptValidationTimer = Mathf.Max(0.02f, serverAttemptValidationInterval);
     }
 
     [ServerRpc]
-    private void RequestAbortAttemptServerRpc(ServerRpcParams rpcParams = default)
+    private void RequestAbortAttemptServerRpc(
+        bool preserveProgress,
+        ServerRpcParams rpcParams = default
+    )
     {
         if (rpcParams.Receive.SenderClientId != OwnerClientId)
             return;
 
-        ClearServerAttempt();
+        if (preserveProgress)
+        {
+            CacheServerAttemptTimeForResume();
+            ClearServerAttempt(clearResumeTime: false);
+        }
+        else
+        {
+            ClearServerAttempt();
+        }
     }
 
     [ServerRpc]
@@ -1177,10 +1285,67 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         );
 
         if (reason != AttemptRejectReason.None)
-            ClearServerAttempt();
+        {
+            // Laptop close/stand-up can reach the periodic validator before the
+            // owner's abort RPC. Preserve elapsed validation time for that same
+            // assignment; explicit non-resume aborts clear it afterward.
+            if (reason == AttemptRejectReason.NotSitting)
+            {
+                CacheServerAttemptTimeForResume();
+                ClearServerAttempt(clearResumeTime: false);
+            }
+            else
+            {
+                ClearServerAttempt();
+            }
+        }
     }
 
-    private void ClearServerAttempt()
+    private void CacheServerAttemptTimeForResume()
+    {
+        if (!_serverAttemptActive)
+            return;
+
+        _serverResumeTimeCached = true;
+        _serverResumeNetworkId = _serverAttemptNetworkId;
+        _serverResumeMinigameId = _serverAttemptMinigameId;
+        _serverResumeDifficulty = _serverAttemptDifficulty;
+        _serverResumeSeed = _serverAttemptSeed;
+        _serverResumeElapsedSeconds = Math.Max(
+            0d,
+            GetServerTime() - _serverAttemptStartedAt
+        );
+    }
+
+    private bool ServerResumeContextMatches(
+        FixedString128Bytes networkId,
+        ushort minigameId,
+        LaptopMinigameDifficulty difficulty,
+        int seed
+    )
+    {
+        return _serverResumeTimeCached
+            && _serverResumeMinigameId == minigameId
+            && _serverResumeDifficulty == difficulty
+            && _serverResumeSeed == seed
+            && string.Equals(
+                _serverResumeNetworkId.ToString(),
+                networkId.ToString(),
+                StringComparison.Ordinal
+            );
+    }
+
+    private void ClearServerResumeTime()
+    {
+        _serverResumeTimeCached = false;
+        _serverResumeNetworkId = default;
+        _serverResumeMinigameId = 0;
+        _serverResumeDifficulty = LaptopMinigameDifficulty.Easy;
+        _serverResumeSeed = 0;
+        _serverResumeElapsedSeconds = 0d;
+    }
+
+    private void ClearServerAttempt(bool clearResumeTime = true)
     {
         _serverAttemptActive = false;
         _serverAttemptNetworkId = default;
@@ -1191,6 +1356,9 @@ public class PlayerLaptopHacker : NetworkBehaviour, IPlayerRoundResettable
         _serverLastKeypressAt = double.NegativeInfinity;
         _serverLastAlarmAt = double.NegativeInfinity;
         _serverAttemptValidationTimer = 0f;
+
+        if (clearResumeTime)
+            ClearServerResumeTime();
     }
 
     private void SendBeginRejectedToOwner(

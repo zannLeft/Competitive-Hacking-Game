@@ -31,3 +31,12 @@ MonoBehaviour:
     hardChance: 0.35
     minimumEasyCompletionSeconds: 3
     minimumHardCompletionSeconds: 5
+  - minigameId: 3
+    displayName: Relay Matrix
+    uiPrefab: {fileID: 7285255006841872057, guid: 1e1eb99a934136245af3262f45442ddf, type: 3}
+    selectionWeight: 1
+    allowEasy: 1
+    allowHard: 1
+    hardChance: 0.35
+    minimumEasyCompletionSeconds: 12
+    minimumHardCompletionSeconds: 16

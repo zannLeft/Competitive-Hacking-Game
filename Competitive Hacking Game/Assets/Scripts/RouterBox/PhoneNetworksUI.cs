@@ -249,7 +249,7 @@ public class PhoneNetworksUI : MonoBehaviour
                 ? router.NetworkName ?? string.Empty
                 : networkId.Trim();
             if (string.IsNullOrWhiteSpace(normalizedId))
-                normalizedId = $"router-{router.GetInstanceID()}";
+                normalizedId = $"router-{router.GetEntityId()}";
 
             string displayName = string.IsNullOrWhiteSpace(router.NetworkName)
                 ? "UNNAMED NETWORK"

@@ -1,10 +1,18 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
 [DisallowMultipleComponent]
 public class LaptopScreenUI : MonoBehaviour
 {
+    private sealed class PooledMinigame
+    {
+        public GameObject Instance;
+        public LaptopMinigameBase Minigame;
+    }
+
     [Header("Fallback / OS Message UI")]
     [SerializeField]
     private TMP_Text titleText;
@@ -38,6 +46,8 @@ public class LaptopScreenUI : MonoBehaviour
     private Action _alarmTriggeredCallback;
     private Action _actionPerformedCallback;
     private LaptopTerminalMessageShell _messageShell;
+    private readonly Dictionary<GameObject, PooledMinigame> _minigamePool = new();
+    private bool _initialized;
 
     public bool HasActiveMinigame =>
         _activeMinigame != null && _activeMinigame.IsRunning;
@@ -46,11 +56,7 @@ public class LaptopScreenUI : MonoBehaviour
 
     protected virtual void Awake()
     {
-        BuildMessageShell();
-        SetMessageObjectsVisible(true);
-
-        if (minigameRoot != null)
-            minigameRoot.gameObject.SetActive(false);
+        EnsureInitialized();
     }
 
     protected virtual void Update()
@@ -60,7 +66,70 @@ public class LaptopScreenUI : MonoBehaviour
 
     protected virtual void OnDestroy()
     {
-        AbortActiveMinigame();
+        DiscardAllMinigameProgress();
+        _minigamePool.Clear();
+    }
+
+    /// <summary>
+    /// Instantiates and prepares every catalog minigame while the laptop is still
+    /// closed. The coroutine is deliberately run by PlayerLaptopHacker because this
+    /// component normally lives below an inactive laptop root.
+    /// </summary>
+    public IEnumerator PrewarmCatalog(
+        LaptopMinigameCatalog catalog,
+        int operationsPerFrame
+    )
+    {
+        EnsureInitialized();
+
+        if (catalog == null || minigameRoot == null)
+            yield break;
+
+        IReadOnlyList<LaptopMinigameDefinition> definitions = catalog.Minigames;
+
+        for (int i = 0; i < definitions.Count; i++)
+        {
+            LaptopMinigameDefinition definition = definitions[i];
+            GameObject prefab = definition != null ? definition.UiPrefab : null;
+
+            if (prefab == null || _minigamePool.ContainsKey(prefab))
+                continue;
+
+            PooledMinigame pooled = CreatePooledMinigame(prefab);
+
+            if (pooled == null)
+                continue;
+
+            // Register immediately so an unusually fast laptop open reuses this same
+            // instance instead of creating a second copy while prewarming is in flight.
+            _minigamePool[prefab] = pooled;
+
+            IEnumerator prepareRoutine = pooled.Minigame.PrepareIncrementally(
+                Mathf.Max(1, operationsPerFrame)
+            );
+
+            while (prepareRoutine.MoveNext())
+                yield return prepareRoutine.Current;
+
+            if (_activeMinigameObject != pooled.Instance)
+                pooled.Instance.SetActive(false);
+
+            // Give the Canvas/TMP systems a frame between different modules.
+            yield return null;
+        }
+    }
+
+    private void EnsureInitialized()
+    {
+        if (_initialized)
+            return;
+
+        _initialized = true;
+        BuildMessageShell();
+        SetMessageObjectsVisible(true);
+
+        if (minigameRoot != null)
+            minigameRoot.gameObject.SetActive(false);
     }
 
     public void ShowWaitingForAssignments()
@@ -199,6 +268,7 @@ public class LaptopScreenUI : MonoBehaviour
         Action actionPerformedCallback
     )
     {
+        EnsureInitialized();
         AbortActiveMinigame();
 
         if (definition == null)
@@ -235,30 +305,30 @@ public class LaptopScreenUI : MonoBehaviour
             return false;
         }
 
-        minigameRoot.gameObject.SetActive(true);
-
-        _activeMinigameObject = Instantiate(
-            definition.UiPrefab,
-            minigameRoot,
-            worldPositionStays: false
-        );
-
-        FitMinigameToHost(_activeMinigameObject);
-
-        _activeMinigame =
-            _activeMinigameObject.GetComponent<LaptopMinigameBase>()
-            ?? _activeMinigameObject.GetComponentInChildren<LaptopMinigameBase>(true);
-
-        if (_activeMinigame == null)
+        if (
+            !_minigamePool.TryGetValue(
+                definition.UiPrefab,
+                out PooledMinigame pooled
+            )
+            || pooled == null
+            || pooled.Instance == null
+            || pooled.Minigame == null
+        )
         {
-            Debug.LogError(
-                $"[LaptopScreenUI] Minigame prefab '{definition.UiPrefab.name}' "
-                    + "does not contain a LaptopMinigameBase component.",
-                definition.UiPrefab
-            );
+            pooled = CreatePooledMinigame(definition.UiPrefab);
 
-            Destroy(_activeMinigameObject);
-            _activeMinigameObject = null;
+            if (pooled != null)
+            {
+                // This is only a fallback when the owner opens the laptop before the
+                // background prewarm finishes. Normal starts reuse a prepared instance.
+                pooled.Minigame.Prepare();
+                pooled.Instance.SetActive(false);
+                _minigamePool[definition.UiPrefab] = pooled;
+            }
+        }
+
+        if (pooled == null || pooled.Instance == null || pooled.Minigame == null)
+        {
             minigameRoot.gameObject.SetActive(false);
 
             ShowMessage(
@@ -271,6 +341,12 @@ public class LaptopScreenUI : MonoBehaviour
             );
             return false;
         }
+
+        minigameRoot.gameObject.SetActive(true);
+        _activeMinigameObject = pooled.Instance;
+        _activeMinigame = pooled.Minigame;
+        FitMinigameToHost(_activeMinigameObject);
+        _activeMinigameObject.SetActive(true);
 
         _completedCallback = completedCallback;
         _failedCallback = failedCallback;
@@ -316,7 +392,7 @@ public class LaptopScreenUI : MonoBehaviour
     public void PrimaryPressed() => InteractPressed();
     public void PrimaryReleased() => InteractReleased();
 
-    public void AbortActiveMinigame()
+    public void AbortActiveMinigame(bool preserveProgress = false)
     {
         if (_activeMinigame != null)
         {
@@ -324,7 +400,11 @@ public class LaptopScreenUI : MonoBehaviour
             _activeMinigame.Failed -= OnActiveMinigameFailed;
             _activeMinigame.AlarmTriggered -= OnActiveMinigameAlarmTriggered;
             _activeMinigame.ActionPerformed -= OnActiveMinigameActionPerformed;
-            _activeMinigame.Abort();
+
+            if (preserveProgress && _activeMinigame.SupportsSessionResume)
+                _activeMinigame.Suspend();
+            else
+                _activeMinigame.Abort();
         }
 
         _activeMinigame = null;
@@ -334,12 +414,27 @@ public class LaptopScreenUI : MonoBehaviour
         _actionPerformedCallback = null;
 
         if (_activeMinigameObject != null)
-            Destroy(_activeMinigameObject);
+            _activeMinigameObject.SetActive(false);
 
         _activeMinigameObject = null;
 
         if (minigameRoot != null)
             minigameRoot.gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// Clears suspended progress kept inside pooled minigames. Use this for a real
+    /// round reset, despawn, or assignment invalidation rather than a normal laptop close.
+    /// </summary>
+    public void DiscardAllMinigameProgress()
+    {
+        AbortActiveMinigame(preserveProgress: false);
+
+        foreach (PooledMinigame pooled in _minigamePool.Values)
+        {
+            if (pooled?.Minigame != null && pooled.Minigame.IsSuspended)
+                pooled.Minigame.Abort();
+        }
     }
 
     private void OnActiveMinigameCompleted()
@@ -447,6 +542,41 @@ public class LaptopScreenUI : MonoBehaviour
             );
             _messageShell = null;
         }
+    }
+
+    private PooledMinigame CreatePooledMinigame(GameObject prefab)
+    {
+        if (prefab == null || minigameRoot == null)
+            return null;
+
+        GameObject instance = Instantiate(
+            prefab,
+            minigameRoot,
+            worldPositionStays: false
+        );
+
+        FitMinigameToHost(instance);
+
+        LaptopMinigameBase minigame =
+            instance.GetComponent<LaptopMinigameBase>()
+            ?? instance.GetComponentInChildren<LaptopMinigameBase>(true);
+
+        if (minigame == null)
+        {
+            Debug.LogError(
+                $"[LaptopScreenUI] Minigame prefab '{prefab.name}' "
+                    + "does not contain a LaptopMinigameBase component.",
+                prefab
+            );
+            Destroy(instance);
+            return null;
+        }
+
+        return new PooledMinigame
+        {
+            Instance = instance,
+            Minigame = minigame,
+        };
     }
 
     private static void FitMinigameToHost(GameObject minigameObject)

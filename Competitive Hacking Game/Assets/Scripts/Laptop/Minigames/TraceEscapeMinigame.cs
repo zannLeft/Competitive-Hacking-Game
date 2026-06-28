@@ -169,6 +169,11 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     [SerializeField, Min(0f)]
     private float failureHoldSeconds = 0.9f;
 
+    [Header("Resume")]
+    [Tooltip("Brief reorientation pause when reopening during an active trace chase. The maze, player, trace and timers remain unchanged.")]
+    [SerializeField, Min(0f)]
+    private float resumeGraceSeconds = 0.75f;
+
     [Header("Hacker OS Visuals")]
     [Tooltip("Assign the same monospace TMP font used by Firewall Runner.")]
     [SerializeField]
@@ -289,6 +294,8 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     private float _movementRepeatTimer;
     private float _failureTimer;
     private float _roundTransitionTimer;
+    private float _resumeGraceRemaining;
+    private int _resumeCountdownStep = -1;
     private int _currentRoundIndex;
     private bool _traceVisible;
     private bool _traceActivatedByPlayerMove;
@@ -302,6 +309,15 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
     private string _keyColorTag;
     private string _lockedExitColorTag;
     private string _openExitColorTag;
+
+    public override bool SupportsSessionResume => true;
+
+    protected override void OnPrepare()
+    {
+        EnsureDifficultySettingsExist();
+        ApplyVersionedTuning();
+        BuildUiIfNeeded();
+    }
 
     protected override void OnBegin(LaptopMinigameContext context)
     {
@@ -321,6 +337,53 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         _shell?.SetBriefingVisible(true);
         _shell?.SetProgress(0f);
         _shell?.SetStatus("READY", textColor);
+    }
+
+    protected override void OnResume(LaptopMinigameContext context)
+    {
+        EnsureDifficultySettingsExist();
+        ApplyVersionedTuning();
+        BuildUiIfNeeded();
+
+        _context = context;
+        _settings = context.Difficulty == LaptopMinigameDifficulty.Hard
+            ? hard
+            : easy;
+        SanitizeSettings(_settings);
+
+        _navigationInput = Vector2.zero;
+        _heldDirection = Vector2Int.zero;
+        _movementRepeatTimer = 0f;
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
+        _suppressMovementUntilNeutral = false;
+
+        string difficulty = context.Difficulty.ToString().ToUpperInvariant();
+        _shell?.SetContext(context.NetworkDisplayName, difficulty);
+
+        if (_state == GameState.AwaitingStart)
+        {
+            _shell?.SetBriefingVisible(true);
+            _shell?.SetProgress(0f);
+            _shell?.SetStatus("READY", textColor);
+            RefreshMazeText();
+            return;
+        }
+
+        _shell?.SetBriefingVisible(false);
+
+        if (_state == GameState.Playing)
+        {
+            _shell?.HideResult();
+            _resumeGraceRemaining = Mathf.Max(0f, resumeGraceSeconds);
+            _suppressMovementUntilNeutral = _resumeGraceRemaining > 0f;
+        }
+
+        UpdateStatusText();
+        RefreshMazeText();
+
+        if (_resumeGraceRemaining > 0f)
+            UpdateResumePresentation();
     }
 
     protected override void OnJumpPressed()
@@ -347,8 +410,14 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
             return;
         }
 
-        if (_state != GameState.Playing || _suppressMovementUntilNeutral)
+        if (
+            _resumeGraceRemaining > 0f
+            || _state != GameState.Playing
+            || _suppressMovementUntilNeutral
+        )
+        {
             return;
+        }
 
         if (direction == _heldDirection)
             return;
@@ -358,11 +427,19 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         TryMovePlayer(direction);
     }
 
-    protected override void OnAbort()
+    protected override void OnSuspend()
     {
         _navigationInput = Vector2.zero;
         _heldDirection = Vector2Int.zero;
         _movementRepeatTimer = 0f;
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
+        _suppressMovementUntilNeutral = false;
+    }
+
+    protected override void OnAbort()
+    {
+        OnSuspend();
         _roundTransitionTimer = 0f;
     }
 
@@ -383,6 +460,29 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
             return;
 
         float deltaTime = Mathf.Min(Time.deltaTime, 0.1f);
+
+        if (_resumeGraceRemaining > 0f && _state == GameState.Playing)
+        {
+            _resumeGraceRemaining = Mathf.Max(
+                0f,
+                _resumeGraceRemaining - deltaTime
+            );
+
+            if (_resumeGraceRemaining > 0f)
+            {
+                UpdateResumePresentation();
+            }
+            else
+            {
+                _resumeCountdownStep = -1;
+                _suppressMovementUntilNeutral =
+                    _navigationInput.sqrMagnitude
+                    >= navigationDeadzone * navigationDeadzone;
+                UpdateStatusText();
+            }
+
+            return;
+        }
 
         if (_state == GameState.FailureHold)
         {
@@ -658,6 +758,8 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
         _movementRepeatTimer = 0f;
         _failureTimer = 0f;
         _roundTransitionTimer = 0f;
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
         _heldDirection = Vector2Int.zero;
         _suppressMovementUntilNeutral =
             requireNavigationRelease
@@ -1242,6 +1344,25 @@ public sealed class TraceEscapeMinigame : LaptopMinigameBase
             && position.x < width
             && position.y < height
             && !_walls[position.x, position.y];
+    }
+
+    private void UpdateResumePresentation()
+    {
+        float segmentSeconds = Mathf.Max(0.05f, resumeGraceSeconds / 3f);
+        int step = Mathf.Clamp(
+            Mathf.CeilToInt(_resumeGraceRemaining / segmentSeconds),
+            1,
+            3
+        );
+
+        if (step == _resumeCountdownStep)
+            return;
+
+        _resumeCountdownStep = step;
+        _shell?.SetStatus(
+            $"LINK RESTORED  ·  RESUMING {step}",
+            accentColor
+        );
     }
 
     private void UpdateStatusText()

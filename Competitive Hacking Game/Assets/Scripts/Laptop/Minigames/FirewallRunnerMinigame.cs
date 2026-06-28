@@ -280,6 +280,11 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
     [SerializeField, Min(0f)]
     private float failureHoldSeconds = 0.90f;
 
+    [Header("Resume")]
+    [Tooltip("Brief local reorientation pause when reopening the laptop during an active run. Gameplay state is preserved exactly.")]
+    [SerializeField, Min(0f)]
+    private float resumeGraceSeconds = 0.90f;
+
     [Header("Hacker OS Visuals")]
     [Tooltip("Optional monospace TMP font. Iosevka Term Mono is a good fit.")]
     [SerializeField]
@@ -393,6 +398,8 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
     private float _coyoteRemaining;
     private float _resultRemaining;
     private float _supportHeight;
+    private float _resumeGraceRemaining;
+    private int _resumeCountdownStep = -1;
     private bool _grounded;
     private int _lastShownPercent = -1;
 
@@ -401,6 +408,16 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
     private const float GroundVisualHeight = 86f;
     private const int HollowTextureResolution = 64;
     private const int HollowTextureBorderPixels = 5;
+
+    public override bool SupportsSessionResume => true;
+
+    protected override void OnPrepare()
+    {
+        EnsureDifficultySettingsExist();
+        ApplyAsciiVisualMigration();
+        ApplyVersionedTuning();
+        BuildUiIfNeeded();
+    }
 
     protected override void OnBegin(LaptopMinigameContext context)
     {
@@ -420,8 +437,75 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         ResetRun(context, waitForLaunch: true);
     }
 
+    protected override void OnResume(LaptopMinigameContext context)
+    {
+        EnsureDifficultySettingsExist();
+        ApplyAsciiVisualMigration();
+        ApplyVersionedTuning();
+        BuildUiIfNeeded();
+
+        _context = context;
+        _settings = context.Difficulty == LaptopMinigameDifficulty.Hard
+            ? hard
+            : easy;
+        SanitizeSettings(_settings);
+
+        string difficulty = context.Difficulty.ToString().ToUpperInvariant();
+        _shell?.SetContext(context.NetworkDisplayName, difficulty);
+        _shell?.SetFooterLeft("SURVIVE UNTIL ROUTE COMPLETION");
+
+        _jumpBufferRemaining = 0f;
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
+
+        if (_state == RunState.AwaitingStart)
+        {
+            _shell?.HideResult();
+            _shell?.SetBriefingVisible(true);
+            _shell?.SetProgress(0f);
+            SetPacketColor(accentColor);
+            SetStatusText("ROUTE 00%");
+            UpdatePlayingVisuals();
+            return;
+        }
+
+        _shell?.SetBriefingVisible(false);
+
+        if (_state == RunState.FailureHold)
+        {
+            ShowResultOverlay(
+                "TRACE DETECTED\nROUTE INVALIDATED\n\nREBUILDING SESSION...",
+                obstacleColor
+            );
+            SetPacketColor(obstacleColor);
+            UpdatePlayingVisuals();
+            SetStatusText("SECURITY TRIGGERED");
+            return;
+        }
+
+        _shell?.HideResult();
+        SetPacketColor(accentColor);
+        UpdatePlayingVisuals();
+
+        _resumeGraceRemaining = Mathf.Max(0f, resumeGraceSeconds);
+        if (_resumeGraceRemaining > 0f)
+            UpdateResumePresentation();
+        else
+            RestoreProgressPresentation();
+    }
+
     protected override void OnJumpPressed()
     {
+        if (_resumeGraceRemaining > 0f && _state == RunState.Playing)
+        {
+            TriggerActionPerformed();
+            _jumpBufferRemaining = Mathf.Max(
+                _jumpBufferRemaining,
+                jumpBufferSeconds
+            );
+            return;
+        }
+
         if (_state == RunState.AwaitingStart)
         {
             TriggerActionPerformed();
@@ -441,17 +525,27 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
 
     protected override void OnJumpReleased()
     {
-        if (_state != RunState.Playing)
+        if (_resumeGraceRemaining > 0f || _state != RunState.Playing)
             return;
 
         if (_verticalVelocity > 0f)
             _verticalVelocity *= releasedJumpVelocityMultiplier;
     }
 
+    protected override void OnSuspend()
+    {
+        // Preserve the exact course and physics state. Only clear transient input
+        // so reopening cannot fire a stale jump command.
+        _jumpBufferRemaining = 0f;
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
+    }
+
     protected override void OnAbort()
     {
-        _jumpBufferRemaining = 0f;
+        OnSuspend();
         _verticalVelocity = 0f;
+        _resultRemaining = 0f;
     }
 
     private void OnDisable()
@@ -480,6 +574,21 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
             return;
 
         float frameDelta = Mathf.Min(Time.deltaTime, MaxFrameSimulationSeconds);
+
+        if (_resumeGraceRemaining > 0f && _state == RunState.Playing)
+        {
+            _resumeGraceRemaining = Mathf.Max(
+                0f,
+                _resumeGraceRemaining - frameDelta
+            );
+
+            if (_resumeGraceRemaining > 0f)
+                UpdateResumePresentation();
+            else
+                RestoreProgressPresentation();
+
+            return;
+        }
 
         if (_state == RunState.Playing)
         {
@@ -826,6 +935,8 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         _coyoteRemaining = coyoteSeconds;
         _resultRemaining = 0f;
         _supportHeight = 0f;
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
         _grounded = true;
         _lastShownPercent = -1;
 
@@ -853,12 +964,38 @@ public sealed class FirewallRunnerMinigame : LaptopMinigameBase
         _jumpBufferRemaining = 0f;
         _coyoteRemaining = coyoteSeconds;
         _supportHeight = 0f;
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
         _grounded = true;
         _lastShownPercent = -1;
 
         _shell?.SetBriefingVisible(false);
         _shell?.SetProgress(0f);
         SetStatusText("ROUTE 00%");
+        UpdatePlayingVisuals();
+    }
+
+    private void UpdateResumePresentation()
+    {
+        float segmentSeconds = Mathf.Max(0.05f, resumeGraceSeconds / 3f);
+        int step = Mathf.Clamp(
+            Mathf.CeilToInt(_resumeGraceRemaining / segmentSeconds),
+            1,
+            3
+        );
+
+        if (step == _resumeCountdownStep)
+            return;
+
+        _resumeCountdownStep = step;
+        SetStatusText($"LINK RESTORED  ·  RESUMING {step}");
+    }
+
+    private void RestoreProgressPresentation()
+    {
+        _resumeGraceRemaining = 0f;
+        _resumeCountdownStep = -1;
+        _lastShownPercent = -1;
         UpdatePlayingVisuals();
     }
 
