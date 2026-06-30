@@ -3,7 +3,42 @@ guid: bbf096f5127eef04ba622abce90bd186
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Floor
+    second: {fileID: 2100000, guid: 7bc4a20a45303244c945e10405af94af, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Office1_floor
+    second: {fileID: 2100000, guid: 67e0f9248bafceb4fa5ebae448a8d463, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Office1_roof
+    second: {fileID: 2100000, guid: 2279495e111b1a44897e324fcd49bca6, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Office1_wall
+    second: {fileID: 2100000, guid: 59644f2a4f4eb0f4e97f0f2f82e71a36, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Office1_window
+    second: {fileID: 2100000, guid: 1cf94cfe317e00d48be543df1d7994c8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Roof
+    second: {fileID: 2100000, guid: dfe35d99712d08443b582b40d8f06413, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Wall
+    second: {fileID: 2100000, guid: 57390875abf69b243a7a74b35baaa8fa, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
